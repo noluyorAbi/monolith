@@ -11,6 +11,8 @@ export interface Finish {
   metalness: number;
   /** How much light the contribution blocks carry on their own. */
   glow: number;
+  /** Strength of the silhouette edge. Dark finishes need more of it. */
+  rim: number;
   /** Contributions needed before this finish unlocks. */
   unlockAt?: number;
   note?: string;
@@ -20,21 +22,23 @@ export const FINISHES: Finish[] = [
   {
     id: "signal",
     name: "Signal",
-    base: "#0d1013",
+    base: "#101418",
     ramp: ["#1b2126", "#12603a", "#12894a", "#2fc45f", "#4dee7c"],
     roughness: 0.62,
     metalness: 0.05,
     glow: 0.55,
+    rim: 0.5,
     note: "The colours you already know",
   },
   {
     id: "obsidian",
     name: "Obsidian",
-    base: "#08090a",
+    base: "#0f1114",
     ramp: ["#141618", "#22262a", "#363c42", "#535b64", "#7d8894"],
     roughness: 0.85,
     metalness: 0.02,
     glow: 0.22,
+    rim: 0.62,
     note: "Matte black on black",
   },
   {
@@ -45,6 +49,7 @@ export const FINISHES: Finish[] = [
     roughness: 0.72,
     metalness: 0.0,
     glow: 0.1,
+    rim: 0.16,
     note: "Cast resin, museum white",
   },
   {
@@ -55,26 +60,29 @@ export const FINISHES: Finish[] = [
     roughness: 0.28,
     metalness: 0.92,
     glow: 0.12,
+    rim: 0.3,
     note: "Brushed, cold to the touch",
   },
   {
     id: "solar",
     name: "Solar",
-    base: "#0e0f0a",
+    base: "#141610",
     ramp: ["#1f2118", "#55671d", "#8bab22", "#b4dc2a", "#dcff52"],
     roughness: 0.4,
     metalness: 0.18,
     glow: 0.7,
+    rim: 0.5,
     note: "House colour",
   },
   {
     id: "aurum",
     name: "Aurum",
-    base: "#1c1407",
+    base: "#251b0a",
     ramp: ["#33270e", "#6b4e14", "#a2761c", "#d0a12c", "#f5cf5c"],
     roughness: 0.22,
     metalness: 1.0,
     glow: 0.3,
+    rim: 0.34,
     unlockAt: 2000,
     note: "Unlocked past 2,000 contributions",
   },
@@ -93,6 +101,7 @@ export const GHOST_FINISH: Finish = {
   roughness: 0.94,
   metalness: 0.04,
   glow: 0.04,
+  rim: 0.34,
 };
 
 export function finishById(id: string): Finish {

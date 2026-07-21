@@ -35,7 +35,9 @@ function Pill({
       type="button"
       title={title}
       onClick={onClick}
-      className="relative rounded-[5px] px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97]"
+      className={`relative rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] ${
+        active ? "border-transparent" : "border-line hover:border-edge"
+      }`}
     >
       {active && (
         <motion.span
@@ -89,7 +91,7 @@ export function Dock(props: DockProps) {
     <AnimatePresence>
       {props.visible && (
         <motion.div
-          className="absolute inset-x-0 bottom-0 z-30 border-t border-line bg-void/72 backdrop-blur-xl"
+          className="absolute inset-x-0 bottom-0 z-30 border-t border-edge bg-ink/94 backdrop-blur-xl"
           initial={{ y: "100%" }}
           animate={{ y: 0 }}
           exit={{ y: "100%" }}
@@ -101,7 +103,7 @@ export function Dock(props: DockProps) {
                 type="button"
                 onClick={() => stepYear(1)}
                 aria-label="Previous year"
-                className="px-1.5 py-1 text-mute transition-colors duration-150 hover:text-fog active:scale-[0.97] disabled:opacity-25"
+                className="rounded-[4px] border border-line px-1.5 py-1 text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40"
                 disabled={yearIndex >= props.years.length - 1}
               >
                 ‹
@@ -113,7 +115,7 @@ export function Dock(props: DockProps) {
                 type="button"
                 onClick={() => stepYear(-1)}
                 aria-label="Next year"
-                className="px-1.5 py-1 text-mute transition-colors duration-150 hover:text-fog active:scale-[0.97] disabled:opacity-25"
+                className="rounded-[4px] border border-line px-1.5 py-1 text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40"
                 disabled={yearIndex <= 0}
               >
                 ›
@@ -151,10 +153,10 @@ export function Dock(props: DockProps) {
                       play("step");
                       props.onFinish(f.id);
                     }}
-                    className="relative grid h-7 w-7 place-items-center rounded-full transition-transform duration-150 active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-30"
+                    className="relative grid h-7 w-7 place-items-center rounded-full border border-line transition-all duration-150 hover:border-edge active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <span
-                      className="h-4 w-4 rounded-full"
+                      className="h-3.5 w-3.5 rounded-full"
                       style={{
                         background: `linear-gradient(135deg, ${f.ramp[4]} 0%, ${f.ramp[2]} 55%, ${f.base} 100%)`,
                       }}
@@ -162,7 +164,7 @@ export function Dock(props: DockProps) {
                     {active && (
                       <motion.span
                         layoutId="dock-finish"
-                        className="absolute inset-0 rounded-full border border-fog"
+                        className="absolute inset-0 rounded-full border-2 border-fog"
                         transition={{ type: "spring", stiffness: 420, damping: 34 }}
                       />
                     )}
@@ -197,7 +199,7 @@ export function Dock(props: DockProps) {
                   props.onSpin(!props.spin);
                 }}
                 title={props.spin ? "Stop turntable" : "Start turntable"}
-                className={`h-8 w-8 rounded-[5px] text-[0.9rem] transition-colors duration-150 hover:text-fog ${props.spin ? "text-fog" : "text-dim"}`}
+                className={`h-8 w-8 rounded-[5px] border border-line text-[0.9rem] transition-colors duration-150 hover:border-edge hover:text-fog ${props.spin ? "text-fog" : "text-dim"}`}
               >
                 ⟳
               </button>
@@ -205,7 +207,7 @@ export function Dock(props: DockProps) {
                 type="button"
                 onClick={() => props.onSound(!props.sound)}
                 title={props.sound ? "Mute" : "Unmute"}
-                className={`h-8 w-8 rounded-[5px] text-[0.85rem] transition-colors duration-150 hover:text-fog ${props.sound ? "text-fog" : "text-dim"}`}
+                className={`h-8 w-8 rounded-[5px] border border-line text-[0.85rem] transition-colors duration-150 hover:border-edge hover:text-fog ${props.sound ? "text-fog" : "text-dim"}`}
               >
                 {props.sound ? "◉" : "◎"}
               </button>

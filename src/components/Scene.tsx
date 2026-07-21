@@ -10,6 +10,7 @@ import type { Finish } from "@/lib/products";
 interface Uniforms {
   uReveal: { value: number };
   uGlow: { value: number };
+  uRim: { value: number };
   uBase: { value: THREE.Color };
   uRamp: { value: THREE.Color[] };
 }
@@ -18,6 +19,7 @@ function useMonolithMaterial(finish: Finish) {
   const uniforms = useRef<Uniforms>({
     uReveal: { value: 0 },
     uGlow: { value: finish.glow },
+    uRim: { value: finish.rim },
     uBase: { value: new THREE.Color(finish.base) },
     uRamp: { value: finish.ramp.map((c) => new THREE.Color(c)) },
   });
@@ -27,6 +29,7 @@ function useMonolithMaterial(finish: Finish) {
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uReveal = uniforms.current.uReveal;
       shader.uniforms.uGlow = uniforms.current.uGlow;
+      shader.uniforms.uRim = uniforms.current.uRim;
       shader.uniforms.uBase = uniforms.current.uBase;
       shader.uniforms.uRamp = uniforms.current.uRamp;
 
@@ -52,6 +55,7 @@ function useMonolithMaterial(finish: Finish) {
         `uniform vec3 uBase;
          uniform vec3 uRamp[5];
          uniform float uGlow;
+         uniform float uRim;
          varying float vLevel;
          varying float vGrow;
         ` +
@@ -86,7 +90,14 @@ function useMonolithMaterial(finish: Finish) {
             `#include <emissivemap_fragment>
              // Busy days carry their own light. Without this the plinth wins the
              // frame and the data reads as texture instead of as the subject.
-             totalEmissiveRadiance += mono * uGlow * lit;`,
+             totalEmissiveRadiance += mono * uGlow * lit;
+
+             // A dark object on a dark page has no outline at all. This traces
+             // every silhouette and every block edge, weighted up on the plinth,
+             // which is the part that otherwise disappears into the background.
+             float facing = 1.0 - saturate( dot( normalize( vViewPosition ), normal ) );
+             float rim = pow( facing, 4.0 ) * mix( 1.4, 1.0, step( -0.5, vLevel ) );
+             totalEmissiveRadiance += vec3( 0.56, 0.64, 0.77 ) * rim * uRim;`,
           );
     };
     return mat;
@@ -96,6 +107,7 @@ function useMonolithMaterial(finish: Finish) {
     uniforms.current.uBase.value.set(finish.base);
     finish.ramp.forEach((c, i) => uniforms.current.uRamp.value[i].set(c));
     uniforms.current.uGlow.value = finish.glow;
+    uniforms.current.uRim.value = finish.rim;
     material.roughness = finish.roughness;
     material.metalness = finish.metalness;
     material.envMapIntensity = 0.34 + finish.metalness * 0.7;
@@ -159,6 +171,48 @@ function Monolith({
 }
 
 /**
+ * A pool of light on the ground. The object is nearly as dark as the page, so
+ * without something behind it there is no edge to read; this gives the
+ * silhouette a surface to sit against and the shadow something to darken.
+ */
+function StudioFloor({ radius, y }: { radius: number; y: number }) {
+  const texture = useMemo(() => {
+    const s = 512;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = s;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, s, s);
+    const pool = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    pool.addColorStop(0, "rgba(255,255,255,0.13)");
+    pool.addColorStop(0.4, "rgba(255,255,255,0.06)");
+    pool.addColorStop(0.75, "rgba(255,255,255,0.015)");
+    pool.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = pool;
+    ctx.fillRect(0, 0, s, s);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }, []);
+
+  useEffect(() => () => texture?.dispose(), [texture]);
+  if (!texture) return null;
+
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]} renderOrder={-3}>
+      <planeGeometry args={[radius * 2, radius * 2]} />
+      <meshBasicMaterial
+        map={texture}
+        transparent
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </mesh>
+  );
+}
+
+/**
  * A soft blob under the object. Cheaper and far more predictable than a real
  * shadow pass, and for a piece sitting on a plinth it is all the grounding the
  * eye asks for.
@@ -170,9 +224,9 @@ function SoftShadow({ width, depth, y }: { width: number; depth: number; y: numb
     canvas.width = canvas.height = s;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.filter = "blur(26px)";
+    ctx.filter = "blur(42px)";
     ctx.fillStyle = "#ffffff";
-    const inset = s * 0.2;
+    const inset = s * 0.26;
     ctx.beginPath();
     ctx.roundRect(inset, inset, s - inset * 2, s - inset * 2, s * 0.12);
     ctx.fill();
@@ -186,16 +240,30 @@ function SoftShadow({ width, depth, y }: { width: number; depth: number; y: numb
 
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]} renderOrder={-1}>
-      <planeGeometry args={[width * 1.9, depth * 3.4]} />
+      <planeGeometry args={[width * 1.55, depth * 2.6]} />
       <meshBasicMaterial
         color="#000000"
         alphaMap={texture}
         transparent
-        opacity={0.85}
+        opacity={0.8}
         depthWrite={false}
       />
     </mesh>
   );
+}
+
+/**
+ * A long flat object seen broadside wastes a portrait screen. Swinging the
+ * azimuth down its length lets it recede diagonally instead, which fills a
+ * tall frame with the same geometry.
+ */
+function viewDirection(aspect: number): THREE.Vector3 {
+  const portrait = THREE.MathUtils.clamp((1.15 - aspect) / 0.65, 0, 1);
+  return new THREE.Vector3(
+    THREE.MathUtils.lerp(0.2, 0.92, portrait),
+    THREE.MathUtils.lerp(0.62, 0.72, portrait),
+    THREE.MathUtils.lerp(1, 0.62, portrait),
+  ).normalize();
 }
 
 /**
@@ -205,7 +273,7 @@ function SoftShadow({ width, depth, y }: { width: number; depth: number; y: numb
  * away.
  */
 function fitDistance(mesh: BuiltMesh, offsetY: number, fovDeg: number, aspect: number): number {
-  const dir = new THREE.Vector3(0.2, 0.62, 1).normalize();
+  const dir = viewDirection(aspect);
   const up = new THREE.Vector3(0, 1, 0);
   const right = new THREE.Vector3().crossVectors(up, dir).normalize();
   const camUp = new THREE.Vector3().crossVectors(dir, right).normalize();
@@ -226,7 +294,7 @@ function fitDistance(mesh: BuiltMesh, offsetY: number, fovDeg: number, aspect: n
     const dy = Math.abs(p.dot(camUp));
     needed = Math.max(needed, along + dx / tanX, along + dy / tanY);
   }
-  return needed * 1.07;
+  return needed * 1.02;
 }
 
 function Framing({ mesh, offsetY }: { mesh: BuiltMesh; offsetY: number }) {
@@ -242,9 +310,7 @@ function Framing({ mesh, offsetY }: { mesh: BuiltMesh; offsetY: number }) {
     const dist = fitDistance(mesh, offsetY, perspective.fov, aspect);
     // Re-framing keeps whatever angle the user has orbited to and moves only
     // the distance, so switching forms never yanks the view back to default.
-    const dir = settled.current
-      ? camera.position.clone().normalize()
-      : new THREE.Vector3(0.2, 0.62, 1).normalize();
+    const dir = settled.current ? camera.position.clone().normalize() : viewDirection(aspect);
     goal.current.copy(dir).multiplyScalar(dist);
     if (!settled.current) {
       camera.position.copy(goal.current).multiplyScalar(1.9);
@@ -335,6 +401,8 @@ export default function Scene({
         intensity={0.55}
         color="#7fa4ff"
       />
+      {/* Kicker from behind, so the far edge separates from the background. */}
+      <directionalLight position={[0, span * 0.22, -span * 1.1]} intensity={0.75} color="#cfe0ff" />
 
       <Environment resolution={128}>
         <Lightformer intensity={2.4} position={[0, 6, -8]} scale={[14, 8, 1]} color="#ffffff" />
@@ -350,6 +418,8 @@ export default function Scene({
         onRevealed={onRevealed}
       />
 
+      <StudioFloor radius={span * 2.6} y={floorY + offsetY - span * 0.006} />
+
       <SoftShadow
         width={mesh.size.x}
         depth={mesh.size.z}
@@ -363,8 +433,8 @@ export default function Scene({
         cellThickness={0.5}
         sectionSize={span / 3}
         sectionThickness={0.85}
-        cellColor="#14171a"
-        sectionColor="#1d2126"
+        cellColor="#272c32"
+        sectionColor="#3a424b"
         fadeDistance={span * 8}
         fadeStrength={1.4}
       />

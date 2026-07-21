@@ -85,7 +85,7 @@ export function Prompt({
           />
         </div>
 
-        <div className="relative mt-3 h-px w-full bg-line">
+        <div className="relative mt-3 h-px w-full bg-edge">
           <motion.div
             className="absolute inset-0 origin-center bg-accent"
             initial={false}

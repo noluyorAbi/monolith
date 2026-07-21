@@ -45,17 +45,17 @@ export default async function Studio() {
         <section className="flex flex-col gap-3">
           <h2 className="text-[0.6rem] tracking-[0.22em] uppercase text-dim">Queue</h2>
           {orders.length === 0 ? (
-            <div className="flex flex-col items-start gap-2 border border-line p-6">
+            <div className="flex flex-col items-start gap-2 border border-edge p-6">
               <p className="text-[0.8rem] text-mute">Nothing in the queue yet.</p>
               <p className="text-[0.7rem] text-dim">
                 Orders land here the moment someone checks out, demo or paid.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto border border-line">
+            <div className="overflow-x-auto border border-edge">
               <table className="w-full min-w-[54rem] text-left text-[0.72rem]">
                 <thead className="text-[0.55rem] tracking-[0.2em] uppercase text-dim">
-                  <tr className="border-b border-line">
+                  <tr className="border-b border-edge">
                     {["Order", "Handle", "Year", "Form", "Finish", "Edition", "Size", "Total", "Status", ""].map(
                       (h) => (
                         <th key={h} className="px-3 py-2.5 font-normal">

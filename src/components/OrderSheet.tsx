@@ -65,7 +65,7 @@ function Card({
       type="button"
       onClick={onSelect}
       className={`relative flex w-full flex-col gap-3 rounded-lg border p-4 text-left transition-colors duration-200 active:scale-[0.99] ${
-        selected ? "border-accent bg-accent/[0.05]" : "border-line hover:border-mute"
+        selected ? "border-accent bg-accent/[0.06]" : "border-edge hover:border-mute"
       }`}
     >
       {product.featured && (
@@ -192,7 +192,7 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
             role="dialog"
             aria-modal="true"
             aria-label="Order your monolith"
-            className="absolute inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-line bg-ink"
+            className="absolute inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-edge bg-ink"
             style={{ maxHeight: "90svh" }}
             initial={{ y: "100%" }}
             animate={{ y: 0, height: wide ? "auto" : HEIGHTS[step] }}
@@ -206,7 +206,7 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
             transition={{ duration: 0.5, ease: EASE }}
           >
             <div className="flex items-center justify-between px-5 pt-4 sm:px-7">
-              <div className="mx-auto h-1 w-9 rounded-full bg-line sm:hidden" />
+              <div className="mx-auto h-1 w-9 rounded-full bg-edge sm:hidden" />
             </div>
 
             <div className="mx-auto flex w-full max-w-4xl items-start justify-between gap-4 px-5 pb-4 pt-3 sm:px-7">
@@ -286,7 +286,7 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="you@wherever.dev"
-                        className="w-full border-b border-line pb-2 text-[0.85rem] text-fog transition-colors duration-200 focus:border-accent"
+                        className="w-full border-b border-edge pb-2 text-[0.85rem] text-fog transition-colors duration-200 focus:border-accent"
                       />
                     </label>
 

@@ -65,6 +65,16 @@ If GitHub cannot be reached at all, the app falls back to a deterministic synthe
 
 Alongside the positions, the builder emits a contribution level, a chronological order, and a base height per vertex. The viewer's material reads all three: level picks the colour from the finish ramp, order and base height drive the reveal, so the object grows out of its plate in the order the commits happened without any per-bar scene objects.
 
+## Legibility
+
+A page this dark fails quietly, so the values are measured rather than eyeballed:
+
+- Every text colour clears WCAG AA against the page. `dim`, which carries the smallest uppercase labels, sits at 6.3:1; `mute` at 8.3:1. Anything that bounds a control uses `edge` at 3.4:1, above the 3:1 that WCAG 1.4.11 asks of component boundaries. Decorative rules keep the quieter `line`.
+- Readouts sit over a live 3D canvas, so they carry their own gradient scrim. Measured against a bright titanium tower directly behind them, the worst HUD row still reads at 7.2:1.
+- The object is nearly as dark as the page, so a Fresnel term traces its silhouette and every block edge, weighted up on the plinth. A pool of light on the floor gives the shape something to sit against, and the contact shadow lands on that pool rather than on nothing.
+- Portrait screens swing the camera down the object's long axis instead of showing it broadside, so a phone gets the same object at usable size.
+- Keyboard focus is always visible. Text inputs indicate focus with their own accent underline; everything else gets a ring.
+
 ## Tests
 
 ```bash

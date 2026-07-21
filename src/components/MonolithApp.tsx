@@ -204,8 +204,14 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
         />
       </div>
 
-      <div className="field pointer-events-none absolute inset-0 z-10 opacity-[0.55]" />
-      <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_38%,rgba(6,7,8,0.82)_100%)]" />
+      <div className="field pointer-events-none absolute inset-0 z-10 opacity-40" />
+      <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_58%,rgba(6,7,8,0.55)_100%)]" />
+
+      {/* The object is free to drift anywhere behind the readouts, so the
+          readouts carry their own darkness rather than trusting whatever
+          happens to be rendered under them. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[15] h-[34%] bg-gradient-to-b from-void via-void/55 to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-[15] w-[min(26rem,60vw)] bg-gradient-to-r from-void via-void/45 to-transparent" />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between p-5 sm:p-7">
         <button
@@ -232,7 +238,7 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
               >
                 {copied ? <span className="text-accent">link copied</span> : "share ↗"}
               </button>
-              <span className="text-line">/</span>
+              <span aria-hidden className="text-edge">/</span>
               <button
                 type="button"
                 onClick={reset}

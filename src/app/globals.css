@@ -4,12 +4,17 @@
   --color-void: #060708;
   --color-ink: #0b0c0e;
   --color-fog: #ecece9;
-  --color-mute: #70757c;
-  --color-dim: #43484e;
-  --color-line: #1a1d20;
-  --color-accent: #d7ff45;
+  /* Every value below is measured against --color-void. `dim` carries the
+     smallest uppercase labels in the product, so it clears 4.5:1 rather than
+     sitting at the 2.2:1 it used to. `line` is decorative structure only;
+     anything that bounds a control uses `edge`, which clears 3:1. */
+  --color-mute: #a3a7ad; /* 8.3:1  body copy, unselected controls */
+  --color-dim: #8b9096; /*  6.3:1  small uppercase labels */
+  --color-line: #2c3036; /* 1.5:1  decorative dividers only */
+  --color-edge: #5f656c; /*  3.4:1  component boundaries */
+  --color-accent: #d7ff45; /* 17.6:1 */
   --color-accent-dim: #8ba32c;
-  --color-danger: #ff6b4a;
+  --color-danger: #ff8367; /* 8.4:1 */
 
   --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
   --font-display: var(--font-grotesk), var(--font-jetbrains), sans-serif;
@@ -56,6 +61,15 @@
     color: var(--color-dim);
   }
 
+  /* Text inputs carry their own focus indicator: an accent underline that
+     animates in. Everything else gets a ring, because otherwise keyboard
+     users have nothing to follow. */
+  :where(a, button, select, summary, [tabindex], input[type="range"]):focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
   button {
     cursor: pointer;
     font: inherit;
@@ -72,8 +86,9 @@
   }
 }
 
+/* Boundaries that identify a control. Decorative rules use border-line. */
 @utility hairline {
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--color-edge);
 }
 
 /* A faint stippled field behind the whole product, so pure black never reads
