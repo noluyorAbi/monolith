@@ -2,15 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { buildMonolith } from "@/lib/build";
 import { splitByLevel } from "@/lib/parts";
-import { estimate, materialById, qualityById } from "@/lib/print";
+import { estimate, materialById, printerById, qualityById } from "@/lib/print";
 import { yearFromDays } from "@/lib/contributions";
 import type { ContributionYear, Day } from "@/lib/types";
 import fixture from "../data/contributions-2025.json";
 
 /**
  * Measured with Bambu Studio 02.00.03.54 slicing the frozen year below at
- * 180 mm in PLA, three times. These numbers are what SHELL_CALIBRATION,
- * LAYER_BULK, FLOW_INTERCEPT and FLOW_SLOPE in src/lib/print.ts were fitted to.
+ * 180 mm in PLA, three times, on the P1S profile. These numbers are what
+ * SHELL_CALIBRATION, LAYER_BULK, FLOW_INTERCEPT and FLOW_SLOPE in
+ * src/lib/print.ts were fitted to, so every assertion here has to ask for the
+ * machine they were measured on rather than whichever one the site quotes by
+ * default.
  */
 const GROUND_TRUTH = [
   { quality: "fine", filamentMm: 6988.48, seconds: 4 * 3600 + 35 * 60 + 20 },
@@ -62,13 +65,26 @@ test("the print time range contains what the slicer actually reported", () => {
   const parts = partsOf(frozenYear());
 
   for (const truth of GROUND_TRUTH) {
-    const est = estimate(parts, materialById("pla"), qualityById(truth.quality));
+    const est = estimate(parts, materialById("pla"), qualityById(truth.quality), printerById("p1s"));
     const realHours = truth.seconds / 3600;
     assert.ok(
       realHours >= est.hoursLow && realHours <= est.hoursHigh,
       `${truth.quality}: measured ${realHours.toFixed(2)} h outside the quoted ${est.hoursLow.toFixed(2)} to ${est.hoursHigh.toFixed(2)} h`,
     );
   }
+});
+
+test("a bed slinger is quoted more time than the core XY it was fitted on", () => {
+  const parts = partsOf(frozenYear());
+  const material = materialById("pla");
+  const quality = qualityById("standard");
+  const p1s = estimate(parts, material, quality, printerById("p1s"));
+  const a1 = estimate(parts, material, quality, printerById("a1"));
+
+  assert.ok(a1.hoursLow > p1s.hoursLow, "the A1 should not be quoted the P1S's time");
+  // Same object, same filament: only the time is machine dependent.
+  assert.equal(a1.grams, p1s.grams);
+  assert.equal(a1.materialCm3, p1s.materialCm3);
 });
 
 test("a denser year costs more filament and more time than a sparse one", () => {

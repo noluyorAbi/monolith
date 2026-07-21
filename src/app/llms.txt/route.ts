@@ -66,7 +66,7 @@ ${specs.map((s) => `- ${s.label}: ${s.value}. ${s.why}`).join("\n")}
 
 ## Printing it yourself
 
-Nothing overhangs; the whole object grows straight up off a flat plinth, so supports are never needed. On a 0.4 mm nozzle, 180 mm or larger keeps the engraved handle readable and the towers separated. A 180 mm skyline uses roughly 22 g of filament and about four hours on a Bambu P1S.
+Nothing overhangs; the whole object grows straight up off a flat plinth, so supports are never needed. On a 0.4 mm nozzle, 180 mm or larger keeps the engraved handle readable and the towers separated. A 180 mm skyline uses roughly 22 g of filament, about four hours on a Bambu P1S and about five on an A1.
 
 ## Licence
 

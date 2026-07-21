@@ -8,6 +8,7 @@ import {
   estimate,
   formatPrice,
   materialById,
+  DEFAULT_PRINTER_ID,
   printerById,
   qualityById,
 } from "../src/lib/print";
@@ -274,9 +275,10 @@ const PrintSheet: React.FC = () => {
     const mesh = MESH;
     const material = materialById("pla");
     const quality = qualityById("standard");
-    const est = estimate(printableParts(mesh), material, quality);
+    const printer = printerById(DEFAULT_PRINTER_ID);
+    const est = estimate(printableParts(mesh), material, quality, printer);
     return [
-      ["Printer", printerById("p1s").name],
+      ["Printer", printer.name],
       ["Filament", `${material.name} · ${formatPrice(material.pricePerKg)}/kg`],
       ["Layer", `${quality.name} · ${quality.layerHeightMm.toFixed(2)} mm`],
       ["Colours", "4 slots · one per intensity"],

@@ -91,7 +91,8 @@ export function kitStem(o: {
 
 export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): string {
   const { material, quality, printer, slots } = options;
-  const est = estimate(parts, material, quality);
+  // The card names a machine, so the time it quotes has to be that machine's.
+  const est = estimate(parts, material, quality, printer);
   const preset = presetName(printer, quality);
   const stem = kitStem(options);
   const pad = (s: string, n: number) => s.padEnd(n);

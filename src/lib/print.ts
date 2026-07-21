@@ -17,6 +17,15 @@ export interface Printer {
   presetSuffix: string;
   bedMm: [number, number];
   nozzleMm: number;
+  /**
+   * Throughput against the machine the time model was fitted on, which is the
+   * P1S. Taken from Bambu's own published acceleration figures rather than
+   * invented: the P1S and the X1C are core XY at 20 000 mm/s2, the A1 and the
+   * A1 mini move the bed at 10 000 mm/s2 and lose most of that difference on a
+   * part this full of short moves and direction changes. Only the time band is
+   * scaled by it. Filament is the same on every machine.
+   */
+  speed: number;
 }
 
 export const PRINTERS: Printer[] = [
@@ -27,6 +36,7 @@ export const PRINTERS: Printer[] = [
     presetSuffix: "X1C",
     bedMm: [256, 256],
     nozzleMm: 0.4,
+    speed: 1.05,
   },
   {
     id: "p1s",
@@ -35,6 +45,7 @@ export const PRINTERS: Printer[] = [
     presetSuffix: "X1C",
     bedMm: [256, 256],
     nozzleMm: 0.4,
+    speed: 1,
   },
   {
     id: "a1",
@@ -43,6 +54,7 @@ export const PRINTERS: Printer[] = [
     presetSuffix: "A1",
     bedMm: [256, 256],
     nozzleMm: 0.4,
+    speed: 0.8,
   },
   {
     id: "a1m",
@@ -51,10 +63,15 @@ export const PRINTERS: Printer[] = [
     presetSuffix: "A1M",
     bedMm: [180, 180],
     nozzleMm: 0.4,
+    speed: 0.8,
   },
 ];
 
-export const DEFAULT_PRINTER_ID = "p1s";
+/**
+ * The A1 is the machine most people buying their first printer for something
+ * like this actually own, so it is what the site quotes by default.
+ */
+export const DEFAULT_PRINTER_ID = "a1";
 
 export function printerById(id: string): Printer {
   return PRINTERS.find((p) => p.id === id) ?? PRINTERS.find((p) => p.id === DEFAULT_PRINTER_ID)!;
@@ -68,7 +85,10 @@ export interface Material {
   type: "PLA" | "PETG";
   /** g/cm3, from the vendor preset. */
   density: number;
-  /** EUR per kg, from the vendor preset. */
+  /**
+   * EUR per kg, at Bambu's own European price for a spooled roll rather than a
+   * refill. Somebody printing one of these is buying a roll, not decanting one.
+   */
   pricePerKg: number;
   /** A long, narrow footprint lifts at the ends in anything that shrinks. */
   brim: "no_brim" | "outer_only";
@@ -83,7 +103,7 @@ export const MATERIALS: Material[] = [
     presetBase: "Bambu PLA Basic",
     type: "PLA",
     density: 1.26,
-    pricePerKg: 24.99,
+    pricePerKg: 26.99,
     brim: "no_brim",
     brimWidthMm: 0,
     note: "The default. Crisp edges, no warping at this footprint.",
@@ -94,7 +114,7 @@ export const MATERIALS: Material[] = [
     presetBase: "Bambu PLA Matte",
     type: "PLA",
     density: 1.32,
-    pricePerKg: 24.99,
+    pricePerKg: 26.99,
     brim: "no_brim",
     brimWidthMm: 0,
     note: "Hides layer lines. Best photographs, slightly softer detail.",
@@ -105,7 +125,7 @@ export const MATERIALS: Material[] = [
     presetBase: "Bambu PLA Silk",
     type: "PLA",
     density: 1.32,
-    pricePerKg: 29.99,
+    pricePerKg: 32.99,
     brim: "no_brim",
     brimWidthMm: 0,
     note: "Metallic sheen. Shows every seam, so the seam is parked at the back.",
@@ -116,7 +136,7 @@ export const MATERIALS: Material[] = [
     presetBase: "Bambu PETG Basic",
     type: "PETG",
     density: 1.25,
-    pricePerKg: 24.99,
+    pricePerKg: 27.99,
     brim: "outer_only",
     brimWidthMm: 3,
     note: "Tougher and heat safe. Needs a brim on a plinth this long.",
@@ -356,7 +376,12 @@ const FLOW_SLOPE = 5.2887;
  * Fitted on the skyline. Other forms have a different surface to volume ratio,
  * so treat the numbers as a band, which is how they are presented.
  */
-export function estimate(parts: Part[], material: Material, quality: Quality): Estimate {
+export function estimate(
+  parts: Part[],
+  material: Material,
+  quality: Quality,
+  printer: Printer = printerById(DEFAULT_PRINTER_ID),
+): Estimate {
   const lineWidth = NOZZLE_LINE_MM;
   const wallThickness = WALL_LOOPS * lineWidth;
   let solid = 0;
@@ -371,7 +396,7 @@ export function estimate(parts: Part[], material: Material, quality: Quality): E
 
   used *= 1 + LAYER_BULK * (quality.layerHeightMm - 0.16);
   const grams = (used / 1000) * material.density;
-  const seconds = used / (FLOW_INTERCEPT + FLOW_SLOPE * quality.layerHeightMm);
+  const seconds = used / (FLOW_INTERCEPT + FLOW_SLOPE * quality.layerHeightMm) / printer.speed;
 
   return {
     solidCm3: solid / 1000,

@@ -138,8 +138,8 @@ export function PrintSheet(props: PrintSheetProps) {
     [open, props.mesh],
   );
   const est = useMemo(
-    () => (parts ? estimate(parts, material, quality) : null),
-    [parts, material, quality],
+    () => (parts ? estimate(parts, material, quality, printer) : null),
+    [parts, material, quality, printer],
   );
   const specs = useMemo(() => overrides(material, quality), [material, quality]);
 
