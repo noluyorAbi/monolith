@@ -9,6 +9,7 @@ import { bambuPreset, printCard } from "@/lib/kit";
 import { bambuOverrides, materialById, printerById, qualityById } from "@/lib/print";
 import { slotForLevel } from "@/lib/slots";
 import { syntheticYear } from "@/lib/contributions";
+import type { BuiltMesh } from "@/lib/types";
 
 const DATA = syntheticYear("octocat", 2025);
 const MESH = buildMonolith(DATA, { variant: "skyline", sizeMm: 180, label: true });
@@ -107,7 +108,42 @@ test("an object that will not split cleanly ships as one welded solid", () => {
     const volume = parts.reduce((a, p) => a + p.volumeMm3, 0);
     assert.ok(volume > 0, variant);
   }
+
+  // Punch one triangle out of a contribution level. That group is now an open
+  // shell, and the fallback has to hand the slicer the whole object instead of
+  // a set of parts it cannot fill. Without this the branch never runs.
+  const torn = tearOneTriangle(MESH);
+  assert.ok(splitByLevel(torn).some((p) => !p.closed), "the tear did not open a group");
+  const fallback = printableParts(torn);
+  assert.equal(fallback.length, 1, "an open group still shipped as separate parts");
+  assert.equal(fallback[0].name, "Monolith");
 });
+
+/** Drop the first triangle carrying a contribution level, leaving a hole. */
+function tearOneTriangle(mesh: BuiltMesh): BuiltMesh {
+  let victim = -1;
+  for (let t = 0; t < mesh.triangles && victim < 0; t++) {
+    if (Math.round(mesh.levels[t * 3]) >= 1) victim = t;
+  }
+  assert.ok(victim >= 0, "the fixture carries no contribution geometry");
+
+  const drop = <T extends Float32Array>(source: T, stride: number): T => {
+    const out = new Float32Array(source.length - 3 * stride);
+    const at = victim * 3 * stride;
+    out.set(source.subarray(0, at), 0);
+    out.set(source.subarray(at + 3 * stride), at);
+    return out as T;
+  };
+
+  return {
+    ...mesh,
+    positions: drop(mesh.positions, 3),
+    levels: drop(mesh.levels, 1),
+    order: drop(mesh.order, 1),
+    baseY: drop(mesh.baseY, 1),
+    triangles: mesh.triangles - 1,
+  };
+}
 
 test("the shipped preset inherits rather than restating the vendor profile", () => {
   const options = {

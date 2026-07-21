@@ -4,7 +4,8 @@ import { useEffect, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Environment, Grid, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
-import { Framing, Monolith, Rig } from "./SceneObject";
+import { Framing, Monolith } from "./SceneObject";
+import { Rig } from "./Rig";
 import type { BuiltMesh } from "@/lib/types";
 import type { Palette } from "@/lib/palettes";
 

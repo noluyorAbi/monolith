@@ -45,6 +45,7 @@ function Choice({
     <button
       type="button"
       title={title}
+      aria-pressed={active}
       onClick={onClick}
       className={`rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.08em] transition-colors duration-150 active:scale-[0.97] ${
         active ? "border-accent bg-accent/[0.08] text-fog" : "border-edge text-mute hover:text-fog"
@@ -132,9 +133,13 @@ export function PrintSheet(props: PrintSheetProps) {
   // Only while the sheet is open. This welds the whole object, and the dialog
   // stays mounted for the entire live phase, so ungated it would re-run on
   // every form and size change during the reveal animation.
+  const parts = useMemo(
+    () => (open ? printableParts(props.mesh) : null),
+    [open, props.mesh],
+  );
   const est = useMemo(
-    () => (open ? estimate(printableParts(props.mesh), material, quality) : null),
-    [open, props.mesh, material, quality],
+    () => (parts ? estimate(parts, material, quality) : null),
+    [parts, material, quality],
   );
   const specs = useMemo(() => overrides(material, quality), [material, quality]);
 

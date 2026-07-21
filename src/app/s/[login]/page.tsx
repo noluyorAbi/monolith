@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { MonolithApp } from "@/components/MonolithApp";
-import { LOGIN_RE, availableYears } from "@/lib/contributions";
+import { LOGIN_RE, clampSelectableYear } from "@/lib/contributions";
 import { notFound } from "next/navigation";
 
 interface Props {
@@ -11,9 +11,7 @@ interface Props {
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { login } = await params;
   const { year } = await searchParams;
-  const years = availableYears(7);
-  const parsed = Number(year);
-  const chosen = years.includes(parsed) ? parsed : years[0];
+  const chosen = clampSelectableYear(year);
   const description = `${login}'s ${chosen} GitHub contributions as a 3D printable object. Free 3MF, STL and a slicer preset.`;
   return {
     title: login,
@@ -40,8 +38,6 @@ export default async function SharePage({ params, searchParams }: Props) {
   const { login } = await params;
   const { year } = await searchParams;
   if (!LOGIN_RE.test(login)) notFound();
-  const years = availableYears(7);
-  const parsed = Number(year);
-  const chosen = years.includes(parsed) ? parsed : years[0];
+  const chosen = clampSelectableYear(year);
   return <MonolithApp initialLogin={login} initialYear={chosen} />;
 }

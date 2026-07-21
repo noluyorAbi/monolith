@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { fitDistance, viewDirection } from "./framing";
 import type { BuiltMesh } from "@/lib/types";
@@ -210,22 +209,4 @@ export function Framing({ mesh, offsetY }: { mesh: BuiltMesh; offsetY: number })
   });
 
   return null;
-}
-
-export function Rig({ spin, onInteract }: { spin: boolean; onInteract: () => void }) {
-  return (
-    <OrbitControls
-      makeDefault
-      enablePan={false}
-      enableDamping
-      dampingFactor={0.075}
-      rotateSpeed={0.55}
-      zoomSpeed={0.6}
-      autoRotate={spin}
-      autoRotateSpeed={0.55}
-      minPolarAngle={0.18}
-      maxPolarAngle={Math.PI / 2.06}
-      onStart={onInteract}
-    />
-  );
 }

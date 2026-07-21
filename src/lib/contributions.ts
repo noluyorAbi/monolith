@@ -39,6 +39,16 @@ export function parseYear(raw: string | null): number {
   return value;
 }
 
+/** How far back the interface lets someone go. */
+export const SELECTABLE_YEARS = 7;
+
+/** Resolve a requested year against the window the UI actually offers. */
+export function clampSelectableYear(raw: string | number | undefined | null): number {
+  const years = availableYears(SELECTABLE_YEARS);
+  const value = Number(raw);
+  return years.includes(value) ? value : years[0];
+}
+
 export function availableYears(count = 6): number[] {
   const now = new Date().getUTCFullYear();
   return Array.from({ length: count }, (_, i) => now - i);

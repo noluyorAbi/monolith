@@ -35,7 +35,7 @@ export function Forge({
             <div className="mb-3 flex flex-col gap-1.5">
               {history.map((s, i) => (
                 <motion.div
-                  key={`${s.label}-${i}`}
+                  key={s.label}
                   className="flex items-baseline gap-4 text-[0.72rem] tracking-[0.16em] uppercase text-dim"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 0.45 - (history.length - 1 - i) * 0.11 }}

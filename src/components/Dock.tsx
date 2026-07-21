@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { SIZES, VARIANTS, type SizeId } from "@/lib/build";
+import { SIZES, VARIANTS, sizeById, type SizeId } from "@/lib/build";
 import { PALETTES, type Palette } from "@/lib/palettes";
 import type { Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
@@ -32,6 +32,7 @@ function Pill({
     <button
       type="button"
       title={title}
+      aria-pressed={active}
       onClick={onClick}
       className={`relative rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] ${
         active ? "border-transparent" : "border-line hover:border-edge"
@@ -71,7 +72,7 @@ export interface DockProps {
 }
 
 export function Dock(props: DockProps) {
-  const size = SIZES.find((s) => s.id === props.sizeId) ?? SIZES[1];
+  const size = sizeById(props.sizeId);
   const yearIndex = props.years.indexOf(props.year);
 
   const stepYear = (delta: number) => {
@@ -144,6 +145,8 @@ export function Dock(props: DockProps) {
                   <button
                     key={f.id}
                     type="button"
+                    aria-pressed={active}
+                    aria-label={`${f.name} palette`}
                     title={locked ? `${f.name} · locked until ${f.unlockAt?.toLocaleString("en-GB")} contributions` : `${f.name} · ${f.note}`}
                     disabled={locked}
                     onClick={() => {

@@ -16,8 +16,8 @@ import { Hud } from "./Hud";
 import { Dock } from "./Dock";
 import { PrintSheet } from "./PrintSheet";
 import { PROJECT } from "@/lib/project";
-import { SIZES, VARIANTS, buildMonolith } from "@/lib/build";
-import { availableYears, syntheticYear } from "@/lib/contributions";
+import { VARIANTS, buildMonolith, sizeById } from "@/lib/build";
+import { SELECTABLE_YEARS, availableYears, syntheticYear } from "@/lib/contributions";
 import { DEFAULT_PALETTE_ID, GHOST_PALETTE, paletteById } from "@/lib/palettes";
 import {
   play,
@@ -43,7 +43,7 @@ export function MonolithApp({
   initialLogin?: string;
   initialYear?: number;
 }) {
-  const years = useMemo(() => availableYears(7), []);
+  const years = useMemo(() => availableYears(SELECTABLE_YEARS), []);
   const [phase, setPhase] = useState<Phase>("idle");
   const [login, setLogin] = useState(initialLogin ?? "");
   const [year, setYear] = useState(initialYear ?? years[0]);
@@ -77,7 +77,7 @@ export function MonolithApp({
   } | null>(null);
   const runId = useRef(0);
 
-  const sizeMm = SIZES.find((s) => s.id === sizeId)?.mm ?? 180;
+  const sizeMm = sizeById(sizeId).mm;
   const palette = paletteById(paletteId);
 
   // The idle backdrop is a real object, built from a fixed seed, so the landing

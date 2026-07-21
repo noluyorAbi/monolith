@@ -185,16 +185,24 @@ export function fitsBed(size: { x: number; z: number }, printer: Printer): boole
 }
 
 export interface PrintSpec {
+  /** The slicer key, as Bambu and Orca spell it. */
   key: string;
   label: string;
+  /** What the value means to a person. */
   value: string;
+  /** What to type into a slicer that is not Bambu or Orca. */
+  raw: string;
   why: string;
 }
 
 /**
- * The overrides we put in the file, each with the reason. This doubles as the
- * settings card in the UI, so anyone slicing by hand can reproduce it exactly
- * without downloading anything.
+ * One list, two audiences.
+ *
+ * The card and the settings panel read the labels; the preset file reads the
+ * keys. Writing them separately let them drift: detect_thin_wall reached the
+ * preset but never the list headed "set these by hand. That is the whole
+ * list", so anyone on another slicer silently lost it, and it is the setting
+ * that keeps the engraved handle.
  */
 export function overrides(material: Material, quality: Quality): PrintSpec[] {
   return [
@@ -202,80 +210,95 @@ export function overrides(material: Material, quality: Quality): PrintSpec[] {
       key: "layer_height",
       label: "Layer height",
       value: `${quality.layerHeightMm.toFixed(2)} mm`,
+      raw: quality.layerHeightMm.toFixed(2),
       why: "The top face of every tower is what people look at.",
     },
     {
       key: "wall_loops",
       label: "Walls",
       value: String(WALL_LOOPS),
+      raw: String(WALL_LOOPS),
       why: "A tower is 3.4 mm wide, so three walls make it effectively solid.",
     },
     {
       key: "top_shell_layers",
       label: "Top layers",
       value: String(TOP_SHELL_LAYERS),
+      raw: String(TOP_SHELL_LAYERS),
       why: "371 small top surfaces. Anything thinner pillows.",
     },
     {
       key: "bottom_shell_layers",
       label: "Bottom layers",
       value: String(BOTTOM_SHELL_LAYERS),
+      raw: String(BOTTOM_SHELL_LAYERS),
       why: "Flat plinth straight on the plate.",
     },
     {
       key: "sparse_infill_density",
       label: "Infill",
-      value: `${Math.round(INFILL_DENSITY * 100)}% ${INFILL_PATTERN}`,
+      value: `${Math.round(INFILL_DENSITY * 100)}%`,
+      raw: `${Math.round(INFILL_DENSITY * 100)}%`,
       why: "Only the plinth has any volume to fill.",
     },
     {
-      key: "enable_support",
-      label: "Supports",
-      value: "off",
-      why: "Every face grows straight up. There is not one overhang.",
+      key: "sparse_infill_pattern",
+      label: "Infill pattern",
+      value: INFILL_PATTERN,
+      raw: INFILL_PATTERN,
+      why: "Quiet under the towers and quick to print.",
     },
     {
       key: "wall_generator",
       label: "Wall generator",
       value: WALL_GENERATOR,
+      raw: WALL_GENERATOR,
       why: "Recovers about three times more of the engraved handle at small sizes.",
+    },
+    {
+      key: "detect_thin_wall",
+      label: "Thin walls",
+      value: "on",
+      raw: "1",
+      why: "Keeps features under one line width instead of dropping them.",
+    },
+    {
+      key: "enable_support",
+      label: "Supports",
+      value: "off",
+      raw: "0",
+      why: "Every face grows straight up. There is not one overhang.",
     },
     {
       key: "seam_position",
       label: "Seam",
       value: "back",
+      raw: "back",
       why: "Your handle is engraved on the front face. The seam is kept off it.",
     },
     {
       key: "brim_type",
       label: "Brim",
       value: material.brim === "no_brim" ? "none" : `${material.brimWidthMm} mm outer`,
+      raw: material.brim,
       why:
         material.brim === "no_brim"
           ? "PLA holds a 180 mm footprint without one."
           : "PETG shrinks, and this plinth is long and narrow.",
     },
+    {
+      key: "brim_width",
+      label: "Brim width",
+      value: `${material.brimWidthMm} mm`,
+      raw: String(material.brimWidthMm),
+      why: "Follows the brim setting above.",
+    },
   ];
 }
 
-/** The exact JSON that goes into a Bambu or Orca project, keys and all. */
+/** The same list, keyed the way a Bambu or Orca preset wants it. */
 export function bambuOverrides(material: Material, quality: Quality): Record<string, string> {
-  return {
-    layer_height: quality.layerHeightMm.toFixed(2),
-    wall_loops: String(WALL_LOOPS),
-    top_shell_layers: String(TOP_SHELL_LAYERS),
-    bottom_shell_layers: String(BOTTOM_SHELL_LAYERS),
-    sparse_infill_density: `${Math.round(INFILL_DENSITY * 100)}%`,
-    sparse_infill_pattern: INFILL_PATTERN,
-    wall_generator: WALL_GENERATOR,
-    // Belt and braces with arachne: keeps features under a line width instead
-    // of quietly dropping them.
-    detect_thin_wall: "1",
-    enable_support: "0",
-    seam_position: "back",
-    brim_type: material.brim,
-    brim_width: String(material.brimWidthMm),
-  };
+  return Object.fromEntries(overrides(material, quality).map((s) => [s.key, s.raw]));
 }
 
 export interface Estimate {

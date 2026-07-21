@@ -3,6 +3,7 @@ import { fetchContributionYear } from "@/lib/github";
 import { modelErrorResponse } from "@/lib/responses";
 import { buildMonolith } from "@/lib/build";
 import { toBinarySTL } from "@/lib/stl";
+import { kitStem } from "@/lib/kit";
 import { parseModelRequest } from "@/lib/request";
 
 export const runtime = "nodejs";
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
       `MONOLITH ${data.login} ${data.year} ${options.variant} ${options.sizeMm}mm` +
       (data.demo ? " SAMPLE-DATA" : "");
     const stl = toBinarySTL(mesh, header);
-    const name = `monolith-${data.login}-${data.year}-${options.variant}-${options.sizeMm}mm.stl`;
+    const name = `${kitStem({ ...options, login: data.login, year: data.year })}.stl`;
 
     return new NextResponse(stl, {
       headers: {

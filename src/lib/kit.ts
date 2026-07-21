@@ -75,9 +75,18 @@ export function presetName(printer: Printer, quality: Quality): string {
   return `MONOLITH ${quality.layerHeightMm.toFixed(2)}mm @BBL ${printer.presetSuffix}`;
 }
 
-/** The stem every file in the kit shares, so the card can name them exactly. */
-export function kitStem(options: KitOptions): string {
-  return `monolith-${options.login}-${options.year}-${options.variant}-${options.sizeMm}mm`;
+/**
+ * The stem every file in the kit shares. The download routes name their
+ * responses with it too, so the card can never list a file the browser did not
+ * receive under a different name.
+ */
+export function kitStem(o: {
+  login: string;
+  year: number;
+  variant: string;
+  sizeMm: number;
+}): string {
+  return `monolith-${o.login}-${o.year}-${o.variant}-${o.sizeMm}mm`;
 }
 
 export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): string {

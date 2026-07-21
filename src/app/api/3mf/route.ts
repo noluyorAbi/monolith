@@ -3,7 +3,7 @@ import { fetchContributionYear } from "@/lib/github";
 import { modelErrorResponse } from "@/lib/responses";
 import { buildMonolith } from "@/lib/build";
 import { printableParts } from "@/lib/parts";
-import { buildKitThreeMf } from "@/lib/kit";
+import { buildKitThreeMf, kitStem } from "@/lib/kit";
 import { parseModelRequest } from "@/lib/request";
 import { PROJECT } from "@/lib/project";
 
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       sampleData: data.demo,
     });
 
-    const name = `monolith-${data.login}-${data.year}-${options.variant}-${options.sizeMm}mm.3mf`;
+    const name = `${kitStem({ ...options, login: data.login, year: data.year })}.3mf`;
     return new NextResponse(new Uint8Array(file), {
       headers: {
         "Content-Type": "model/3mf",
