@@ -167,7 +167,7 @@ export function Monolith({
 
   return (
     <group position={[0, offsetY, 0]}>
-      <mesh geometry={geometry} material={material} />
+      <mesh castShadow receiveShadow geometry={geometry} material={material} />
     </group>
   );
 }
@@ -187,15 +187,24 @@ export function Monolith({
  * of a drag hands the object back to the drift without a step.
  */
 export function Presenter({
-  children,
+  object,
+  shadow,
+  /** Used to size the lift, so it is the same gesture at every object scale. */
+  span,
   spin,
   reduced,
+  onGrab,
 }: {
-  children: React.ReactNode;
+  object: React.ReactNode;
+  shadow: React.ReactNode;
+  span: number;
   spin: boolean;
   reduced: boolean;
+  onGrab?: () => void;
 }) {
   const group = useRef<THREE.Group>(null);
+  const lift = useRef<THREE.Group>(null);
+  const cast = useRef<THREE.Group>(null);
   const { gl } = useThree();
 
   /**
@@ -212,17 +221,35 @@ export function Presenter({
   /** Seconds of stillness owed before the sway resumes. */
   const rest = useRef(0);
   const clock = useRef(0);
+  /** How much of the drag is being shown, 0 to 1. Drives the lift. */
+  const held = useRef(0);
+  /** Radians per second still owed from the throw at the end of a drag. */
+  const fling = useRef(0);
 
   useEffect(() => {
     const el = gl.domElement;
     el.style.cursor = "grab";
+    // A touch drag has to earn the object: until it is clearly sideways the
+    // browser owns the gesture and scrolls the page, which is what the canvas
+    // pan-y touch action allows for.
+    const SLOP = 5;
+    let candidate = false;
+    let startX = 0;
+    let startY = 0;
 
     const down = (e: PointerEvent) => {
-      dragging.current = true;
-      rest.current = 1.1;
+      if (e.button !== 0 && e.pointerType === "mouse") return;
+      candidate = true;
+      dragging.current = e.pointerType !== "touch";
+      startX = e.clientX;
+      startY = e.clientY;
       last.current = { x: e.clientX, y: e.clientY };
-      el.style.cursor = "grabbing";
-      el.setPointerCapture(e.pointerId);
+      rest.current = 1.1;
+      fling.current = 0;
+      if (dragging.current) {
+        el.style.cursor = "grabbing";
+        onGrab?.();
+      }
     };
 
     const move = (e: PointerEvent) => {
@@ -231,32 +258,46 @@ export function Presenter({
         x: ((e.clientX - box.left) / box.width) * 2 - 1,
         y: ((e.clientY - box.top) / box.height) * 2 - 1,
       };
-      if (!dragging.current) return;
+      if (!candidate) return;
+
+      if (!dragging.current) {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (Math.abs(dx) < SLOP || Math.abs(dx) < Math.abs(dy)) return;
+        dragging.current = true;
+        onGrab?.();
+      }
+
       // Yaw only. A drag that also tilted would lift the object off the
       // shadow it turns above, and the shadow is what puts it on a surface.
-      yaw.current += (e.clientX - last.current.x) * 0.0072;
+      const step = (e.clientX - last.current.x) * 0.0072;
+      yaw.current += step;
+      // Kept so letting go mid sweep carries the turn on rather than stopping
+      // it dead, which is the difference between turning a solid and scrubbing
+      // a slider.
+      fling.current = step * 26;
       last.current = { x: e.clientX, y: e.clientY };
       rest.current = 1.1;
     };
 
-    const up = (e: PointerEvent) => {
+    const up = () => {
+      candidate = false;
       dragging.current = false;
       el.style.cursor = "grab";
-      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
     };
 
     el.addEventListener("pointerdown", down);
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
-    el.addEventListener("pointercancel", up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
     return () => {
       el.style.cursor = "";
       el.removeEventListener("pointerdown", down);
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
-      el.removeEventListener("pointercancel", up);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
     };
-  }, [gl]);
+  }, [gl, onGrab]);
 
   useFrame((_, delta) => {
     const g = group.current;
@@ -272,6 +313,13 @@ export function Presenter({
     }
     const sway = spin && !reduced ? Math.sin(clock.current * 0.26) * 0.15 : 0;
 
+    // The throw, spent over about a second.
+    if (!dragging.current && fling.current !== 0) {
+      yaw.current += fling.current * delta;
+      fling.current *= Math.pow(0.02, delta);
+      if (Math.abs(fling.current) < 0.01) fling.current = 0;
+    }
+
     // Frame-rate independent approach: the same fraction of the remaining
     // distance per second regardless of how often this runs.
     const k = 1 - Math.pow(0.0001, delta);
@@ -283,9 +331,27 @@ export function Presenter({
     g.rotation.y = yawShown.current + sway + point.current.x * 0.06 * drift;
     g.rotation.x = -point.current.y * 0.04 * drift;
     g.rotation.z = point.current.x * 0.012 * drift;
+
+    // Picked up, not just spun: the object rises a little out of its shadow
+    // while it is being held, and the shadow spreads and thins the way a real
+    // one does as the thing casting it leaves the surface.
+    const wanted = dragging.current ? 1 : 0;
+    held.current += (wanted - held.current) * (1 - Math.pow(0.02, delta));
+    const l = lift.current;
+    const c = cast.current;
+    if (l) l.position.y = held.current * span * 0.035;
+    if (c) {
+      const spread = 1 + held.current * 0.12;
+      c.scale.set(spread, 1, spread);
+    }
   });
 
-  return <group ref={group}>{children}</group>;
+  return (
+    <group ref={group}>
+      <group ref={lift}>{object}</group>
+      <group ref={cast}>{shadow}</group>
+    </group>
+  );
 }
 
 export function Framing({

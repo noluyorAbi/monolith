@@ -25,7 +25,13 @@ let hydrated = false;
 export function subscribeSound(listener: () => void): () => void {
   if (!hydrated && typeof window !== "undefined") {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored !== null) enabled = stored === "on";
+    // A stated preference wins. With nothing stored, a machine asking for
+    // reduced motion gets silence as its default, which is the polite reading
+    // of that setting for an interface that makes noise on every keystroke.
+    enabled =
+      stored !== null
+        ? stored === "on"
+        : !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     hydrated = true;
   }
   listeners.add(listener);
@@ -89,10 +95,10 @@ const CUES: Record<Cue, Voice[]> = {
 };
 
 export function play(cue: Cue): void {
+  // Reduced motion decides the default above, not this. Silencing here as well
+  // meant the sound toggle appeared to do nothing at all on those machines:
+  // the glyph changed, the preference was written, and no sound ever followed.
   if (!enabled) return;
-  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    return;
-  }
   const ac = audio();
   if (!ac || !master) return;
   const now = ac.currentTime;

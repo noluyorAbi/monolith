@@ -5,6 +5,7 @@ import { SIZES, VARIANTS, sizeById, type SizeId } from "@/lib/build";
 import { PALETTES, type Palette } from "@/lib/palettes";
 import type { Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
+import { Hint } from "./Hint";
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -28,10 +29,9 @@ function Pill({
   layoutGroup: string;
   title?: string;
 }) {
-  return (
+  const button = (
     <button
       type="button"
-      title={title}
       aria-pressed={active}
       onClick={onClick}
       className={`relative rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] ${
@@ -50,6 +50,8 @@ function Pill({
       </span>
     </button>
   );
+
+  return title ? <Hint label={title}>{button}</Hint> : button;
 }
 
 export interface DockProps {
@@ -97,6 +99,7 @@ export function Dock(props: DockProps) {
         >
           <div className="flex items-end gap-7 overflow-x-auto px-5 py-4 sm:px-7 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <Group label="Year">
+              <Hint label="Earlier year">
               <button
                 type="button"
                 onClick={() => stepYear(1)}
@@ -106,9 +109,11 @@ export function Dock(props: DockProps) {
               >
                 ‹
               </button>
+              </Hint>
               <span className="w-[4ch] text-center text-[0.78rem] tabular-nums text-fog">
                 {props.year}
               </span>
+              <Hint label="Later year">
               <button
                 type="button"
                 onClick={() => stepYear(-1)}
@@ -118,6 +123,7 @@ export function Dock(props: DockProps) {
               >
                 ›
               </button>
+              </Hint>
             </Group>
 
             <Group label="Form">
@@ -142,12 +148,18 @@ export function Dock(props: DockProps) {
                 const locked = f.unlockAt !== undefined && props.total < f.unlockAt;
                 const active = props.palette.id === f.id;
                 return (
-                  <button
+                  <Hint
                     key={f.id}
+                    label={
+                      locked
+                        ? `${f.name} · locked until ${f.unlockAt?.toLocaleString("en-GB")} contributions`
+                        : `${f.name} · ${f.note}`
+                    }
+                  >
+                  <button
                     type="button"
                     aria-pressed={active}
                     aria-label={`${f.name} palette`}
-                    title={locked ? `${f.name} · locked until ${f.unlockAt?.toLocaleString("en-GB")} contributions` : `${f.name} · ${f.note}`}
                     disabled={locked}
                     onClick={() => {
                       play("step");
@@ -170,6 +182,7 @@ export function Dock(props: DockProps) {
                     )}
                     {locked && <span className="absolute -bottom-0.5 text-[0.5rem] text-dim">·</span>}
                   </button>
+                  </Hint>
                 );
               })}
             </Group>
@@ -192,6 +205,13 @@ export function Dock(props: DockProps) {
             </Group>
 
             <div className="ml-auto flex shrink-0 items-center gap-2 pl-4">
+              <Hint
+                label={
+                  props.spin
+                    ? "Turntable on · click to hold it still"
+                    : "Turntable off · click to let it turn"
+                }
+              >
               <button
                 type="button"
                 onClick={() => {
@@ -200,21 +220,29 @@ export function Dock(props: DockProps) {
                 }}
                 aria-label="Turntable"
                 aria-pressed={props.spin}
-                title={props.spin ? "Stop turntable" : "Start turntable"}
                 className={`h-8 w-8 rounded-[5px] border border-line text-[0.9rem] transition-colors duration-150 hover:border-edge hover:text-fog ${props.spin ? "text-fog" : "text-dim"}`}
               >
                 <span aria-hidden>⟳</span>
               </button>
+              </Hint>
+              <Hint
+                label={
+                  props.sound
+                    ? "Interface sound on · click to mute"
+                    : "Interface sound off · click to unmute"
+                }
+              >
               <button
                 type="button"
                 onClick={() => props.onSound(!props.sound)}
                 aria-label="Sound"
                 aria-pressed={props.sound}
-                title={props.sound ? "Mute" : "Unmute"}
                 className={`h-8 w-8 rounded-[5px] border border-line text-[0.85rem] transition-colors duration-150 hover:border-edge hover:text-fog ${props.sound ? "text-fog" : "text-dim"}`}
               >
                 <span aria-hidden>{props.sound ? "◉" : "◎"}</span>
               </button>
+              </Hint>
+              <Hint label="3MF, STL and a slicer preset">
               <button
                 type="button"
                 onClick={() => {
@@ -225,6 +253,7 @@ export function Dock(props: DockProps) {
               >
                 Get the files
               </button>
+              </Hint>
             </div>
           </div>
         </motion.div>

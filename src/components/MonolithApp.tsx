@@ -15,10 +15,11 @@ import { Forge, type ForgeStep } from "./Forge";
 import { Hud } from "./Hud";
 import { Dock } from "./Dock";
 import { PrintSheet } from "./PrintSheet";
+import { CursorField } from "./CursorField";
 import { Story } from "./Story";
 import { PROJECT } from "@/lib/project";
 import { VARIANTS, buildMonolith, sizeById } from "@/lib/build";
-import { SELECTABLE_YEARS, availableYears, yearFromDays } from "@/lib/contributions";
+import { SELECTABLE_YEARS, availableYears, computeStats, yearFromDays } from "@/lib/contributions";
 import { AMBIENT_PALETTE, DEFAULT_PALETTE_ID, paletteById } from "@/lib/palettes";
 import {
   play,
@@ -73,6 +74,13 @@ export function MonolithApp({
   /** What the story has told the idle object to be. */
   const [storyVariant, setStoryVariant] = useState<Variant>("skyline");
   const [storyPaletteId, setStoryPaletteId] = useState(AMBIENT_PALETTE.id);
+  /**
+   * A form or a finish being held up to the object by a pointer, which the
+   * object wears until the pointer leaves. Kept apart from the scrolled state
+   * so letting go returns it to whatever the story last said, rather than to
+   * whatever happened to be previewed.
+   */
+  const [preview, setPreview] = useState<{ variant?: Variant; paletteId?: string } | null>(null);
   const promptInput = useRef<HTMLInputElement>(null);
   /**
    * The mesh the forge already built, kept so the render does not generate the
@@ -98,25 +106,29 @@ export function MonolithApp({
     () => yearFromDays(frozen.login, frozen.year, frozen.days as Day[]),
     [],
   );
+  const ghostStats = useMemo(() => computeStats(ghost), [ghost]);
+
+  const shownVariant = preview?.variant ?? storyVariant;
+  const shownPaletteId = preview?.paletteId ?? storyPaletteId;
+
   const ghostMesh = useMemo(
-    () =>
-      buildMonolith(ghost, { variant: storyVariant, sizeMm: 180, label: false }),
-    [ghost, storyVariant],
+    () => buildMonolith(ghost, { variant: shownVariant, sizeMm: 180, label: false }),
+    [ghost, shownVariant],
   );
 
   // The story's finish is a real palette worn at the landing's lower glow, so
   // stepping through the finishes changes the object's colour and nothing else.
   const ambientFinish = useMemo(
     () =>
-      storyPaletteId === AMBIENT_PALETTE.id
+      shownPaletteId === AMBIENT_PALETTE.id
         ? AMBIENT_PALETTE
-        : { ...paletteById(storyPaletteId), glow: AMBIENT_PALETTE.glow, rim: AMBIENT_PALETTE.rim },
-    [storyPaletteId],
+        : { ...paletteById(shownPaletteId), glow: AMBIENT_PALETTE.glow, rim: AMBIENT_PALETTE.rim },
+    [shownPaletteId],
   );
 
-  const onStoryState = useCallback((next: { variant: Variant; paletteId: string }) => {
-    setStoryVariant(next.variant);
-    setStoryPaletteId(next.paletteId);
+  const onStoryState = useCallback((next: { variant?: Variant; paletteId?: string }) => {
+    if (next.variant) setStoryVariant(next.variant);
+    if (next.paletteId) setStoryPaletteId(next.paletteId);
   }, []);
 
   const mesh = useMemo(() => {
@@ -266,6 +278,21 @@ export function MonolithApp({
     window.history.replaceState(null, "", "/");
   }, []);
 
+  // Slash puts the caret in the field from anywhere on the landing page, the
+  // shortcut every developer already has in their hands.
+  useEffect(() => {
+    if (phase !== "idle") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement) return;
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      promptInput.current?.focus({ preventScroll: true });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase]);
+
   useEffect(() => {
     // While a sheet is open it owns the keyboard. Otherwise Escape would close
     // the sheet AND reset the app, throwing away the object and the share URL,
@@ -336,9 +363,10 @@ export function MonolithApp({
             mesh={activeMesh}
             finish={isGhost ? ambientFinish : palette}
             ghost={isGhost}
-            revealToken={`${login}:${year}:${isGhost ? storyVariant : variant}`}
+            revealToken={`${login}:${year}:${isGhost ? shownVariant : variant}`}
             spin={spin && !reduceMotion}
             onInteract={() => setSpin(false)}
+            onGrab={() => setTurned(true)}
             shiftX={twoColumn ? 0.22 : 0}
             shiftY={twoColumn ? -0.02 : -0.19}
             pad={twoColumn ? 2.55 : 2.0}
@@ -346,7 +374,7 @@ export function MonolithApp({
           />
         </div>
 
-        <div className="field pointer-events-none fixed inset-0 z-10 opacity-40" />
+        <CursorField />
         <div className="pointer-events-none fixed inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_58%,rgba(6,7,8,0.55)_100%)]" />
 
         {/* The object is free to drift anywhere behind the readouts, so the
@@ -417,13 +445,33 @@ export function MonolithApp({
         {/* The hero owns exactly one screen. Everything in it is positioned
           against this section rather than against the page, so it leaves when
           the story arrives instead of following it down. */}
-        <section className="relative h-svh w-full snap-start">
+        <section className="pointer-events-none relative h-svh w-full snap-start">
           <Prompt
             onSubmit={(handle) => forge(handle, year)}
             error={error}
             hidden={phase !== "idle"}
             inputRef={promptInput}
           />
+
+          {/* Whose year this is. Without the caption the object reads as a
+            rendering of nothing in particular; with it, the landing is showing
+            a real 2025 that anyone can check against the handle beside it. */}
+          <AnimatePresence>
+            {phase === "idle" && (
+              <motion.figcaption
+                className="pointer-events-none absolute bottom-[20%] right-[max(3rem,6vw)] z-20 hidden text-right text-[0.58rem] leading-relaxed tracking-[0.2em] uppercase text-dim min-[900px]:block"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5, delay: 0.9, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <span className="normal-case tracking-[0.12em] text-mute">{ghost.login}</span> · {ghost.year}
+                <br />
+                {ghost.total.toLocaleString("en-GB")} contributions ·{" "}
+                {ghostStats.activeDays} active days
+              </motion.figcaption>
+            )}
+          </AnimatePresence>
 
         {/* The object turns under the pointer, which is worth nothing if nobody
           learns it. One line, under the object's own column, gone for good the
@@ -459,7 +507,7 @@ export function MonolithApp({
                     behavior: reduceMotion ? "auto" : "smooth",
                   })
                 }
-                className="absolute bottom-[3.4rem] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 text-[0.56rem] tracking-[0.24em] uppercase text-dim transition-colors duration-150 hover:text-fog"
+                className="pointer-events-auto absolute bottom-[3.4rem] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 text-[0.56rem] tracking-[0.24em] uppercase text-dim transition-colors duration-150 hover:text-fog"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: scrolled ? 0 : 1 }}
                 exit={{ opacity: 0 }}
@@ -510,6 +558,7 @@ export function MonolithApp({
             mesh={ghostMesh}
             state={{ variant: storyVariant, paletteId: storyPaletteId }}
             onState={onStoryState}
+            onPreview={setPreview}
             onTop={() => {
               window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
               promptInput.current?.focus({ preventScroll: true });

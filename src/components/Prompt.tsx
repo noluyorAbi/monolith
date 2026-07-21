@@ -251,7 +251,11 @@ export function Prompt({
                       setValue(name);
                       onSubmit(name);
                     }}
-                    className="normal-case tracking-normal text-mute underline decoration-edge underline-offset-4 transition-colors duration-150 hover:text-fog hover:decoration-mute"
+                    // The two accounts on the page that can be pressed. They
+                    // used to be underlined text that changed colour, which is
+                    // what a link does; these fill the field and build, so they
+                    // lift very slightly to say they are buttons.
+                    className="inline-block normal-case tracking-normal text-mute underline decoration-edge underline-offset-4 transition-all duration-150 hover:-translate-y-px hover:text-fog hover:decoration-accent active:translate-y-0"
                   >
                     {name}
                   </button>
@@ -289,12 +293,13 @@ export function Prompt({
             ))}
           </ul>
           {/* Bambu Studio's own numbers for the 180 mm skyline of a real year,
-            0.4 nozzle, 0.16 mm, PLA: 4h00 and 17.7 cm3. Not the estimator's
-            output, and not an invented year, which is how this line first came
-            to read six hours. */}
+            0.4 nozzle, 0.16 mm, PLA: 4h00 and 17.7 cm3 on the P1S it was
+            measured on, about five hours on the slower A1 the site quotes.
+            Not the estimator's output, and not an invented year, which is how
+            this line first came to read six hours. */}
           <p className="text-[0.72rem] leading-relaxed text-mute">
-            A 180 mm shelf piece slices to about four hours and 22 g of filament
-            on a stock 0.4 mm Bambu profile. Roughly fifty cents.
+            A 180 mm shelf piece slices to about five hours and 22 g of filament
+            on a stock 0.4 mm A1 profile. Around sixty cents.
           </p>
         </motion.div>
       </motion.div>
