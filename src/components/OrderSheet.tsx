@@ -112,7 +112,7 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
   const [product, setProduct] = useState<Product>(PRODUCTS[1]);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ orderId: string; demo: boolean } | null>(null);
+  const [result, setResult] = useState<{ orderId: string; url: string; demo: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [wide, setWide] = useState(false);
 
@@ -160,7 +160,7 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "failed");
       if (json.demo) {
-        setResult({ orderId: json.orderId, demo: true });
+        setResult({ orderId: json.orderId, url: json.url, demo: true });
         setStep("done");
         play("chime");
       } else {
@@ -333,13 +333,21 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
                         ? "Demo mode: the order is recorded, nothing was charged. Add STRIPE_SECRET_KEY to take real money."
                         : `We are casting it. ${product.lead.toLowerCase()}.`}
                     </p>
-                    <a
-                      href={`/api/stl?login=${encodeURIComponent(login)}&year=${year}&variant=${variant}&mm=${product.sizeMm}`}
-                      download
-                      className="hairline rounded-[5px] px-4 py-2.5 text-[0.66rem] tracking-[0.12em] uppercase text-fog transition-colors duration-150 hover:border-mute active:scale-[0.97]"
-                    >
-                      download production stl
-                    </a>
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <a
+                        href={`/api/stl?login=${encodeURIComponent(login)}&year=${year}&variant=${variant}&mm=${product.sizeMm}`}
+                        download
+                        className="hairline rounded-[5px] px-4 py-2.5 text-[0.66rem] tracking-[0.12em] uppercase text-fog transition-colors duration-150 hover:border-mute active:scale-[0.97]"
+                      >
+                        download production stl
+                      </a>
+                      <a
+                        href={result.url}
+                        className="text-[0.66rem] tracking-[0.12em] uppercase text-accent transition-opacity duration-150 hover:opacity-70"
+                      >
+                        keep this link ↗
+                      </a>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>

@@ -5,6 +5,7 @@ import { buildMonolith, computeStats } from "@/lib/build";
 import { toBinarySTL } from "@/lib/stl";
 import { syntheticYear } from "@/lib/github";
 import { measureText, rasterise } from "@/lib/font5x7";
+import { constantTimeEqual, studioAccess } from "@/lib/admin";
 import type { Variant } from "@/lib/types";
 
 const VARIANTS: Variant[] = ["skyline", "ring", "wave", "spine"];
@@ -167,4 +168,28 @@ test("every variant closes its surface", () => {
     const residual = Math.hypot(...sum) / area;
     assert.ok(residual < 1e-4, `${variant} leaks area: residual ${residual}`);
   }
+});
+
+test("the studio guard fails closed", () => {
+  const key = "s3cret-key";
+  // Configured: only the exact key gets in, from either the cookie or the query.
+  assert.equal(studioAccess(key, { key, production: true }), true);
+  assert.equal(studioAccess("s3cret-ke", { key, production: true }), false);
+  assert.equal(studioAccess("s3cret-keZ", { key, production: true }), false);
+  assert.equal(studioAccess("", { key, production: true }), false);
+  assert.equal(studioAccess(undefined, { key, production: true }), false);
+
+  // Unset in production must lock the queue rather than publish it.
+  assert.equal(studioAccess(undefined, { production: true }), false);
+  assert.equal(studioAccess("anything", { production: true }), false);
+
+  // Unset locally stays open so the bench needs no ceremony.
+  assert.equal(studioAccess(undefined, { production: false }), true);
+});
+
+test("constant time compare still answers correctly", () => {
+  assert.equal(constantTimeEqual("abc", "abc"), true);
+  assert.equal(constantTimeEqual("abc", "abd"), false);
+  assert.equal(constantTimeEqual("abc", "abcd"), false);
+  assert.equal(constantTimeEqual("", ""), true);
 });

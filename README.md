@@ -38,7 +38,7 @@ That is the whole setup. Every environment variable is optional:
 |---|---|
 | `GITHUB_TOKEN` | The public contributions calendar is parsed instead of the GraphQL API. Same numbers, GitHub's own rate limits. |
 | `STRIPE_SECRET_KEY` | Checkout runs in demo mode: real order records, nobody is charged, the UI says so. |
-| `MONOLITH_ADMIN_KEY` | `/studio` is open. Set it and the page needs `?key=`. |
+| `MONOLITH_ADMIN_KEY` | `/studio` is open in development and **404s in production**. It fails closed, so forgetting it never publishes the order queue. Visit `/studio?key=<value>` once; the key is swapped for an httpOnly cookie and dropped from the URL. |
 
 If GitHub cannot be reached at all, the app falls back to a deterministic synthetic year and labels it `sample data` in the interface rather than quietly faking someone's history.
 
@@ -49,7 +49,7 @@ If GitHub cannot be reached at all, the app falls back to a deterministic synthe
 | `/` | The prompt, the forge, the studio. One page, three states. |
 | `/s/[login]?year=` | Shareable permalink. Boots straight into the build. |
 | `/studio` | Production bench and order queue. Rebuild any handle at any size, pull the STL for a job. |
-| `/order/[id]` | Order receipt with its production file. |
+| `/order/[token]` | Order receipt with its production file. The token is a 128-bit capability, not the short serial, so receipts cannot be enumerated. |
 | `/api/contributions?login=&year=` | The parsed year plus derived stats. |
 | `/api/stl?login=&year=&variant=&mm=` | Binary STL download. |
 | `/api/checkout` | Creates an order, returns a Stripe session or a demo confirmation. |

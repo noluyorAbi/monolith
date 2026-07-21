@@ -1,19 +1,18 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
+import { STUDIO_COOKIE, studioAccess, studioEnv } from "@/lib/admin";
 import { listOrders } from "@/lib/orders";
 import { formatPrice, productById } from "@/lib/products";
 import { ProductionTool } from "@/components/ProductionTool";
 
 export const dynamic = "force-dynamic";
 
-export default async function Studio({
-  searchParams,
-}: {
-  searchParams: Promise<{ key?: string }>;
-}) {
-  const { key } = await searchParams;
-  const expected = process.env.MONOLITH_ADMIN_KEY;
-  if (expected && key !== expected) notFound();
+export default async function Studio() {
+  // Middleware already gated this route. Checking again here means a bad
+  // matcher or a direct render can never expose the queue on its own.
+  const cookie = (await cookies()).get(STUDIO_COOKIE)?.value;
+  if (!studioAccess(cookie, studioEnv())) notFound();
 
   const orders = await listOrders();
   const revenue = orders.filter((o) => o.status !== "demo").reduce((a, o) => a + o.price, 0);
@@ -69,7 +68,11 @@ export default async function Studio({
                 <tbody>
                   {orders.map((o) => (
                     <tr key={o.id} className="border-b border-line/70 last:border-0">
-                      <td className="px-3 py-2.5 text-accent">{o.id}</td>
+                      <td className="px-3 py-2.5">
+                        <Link href={`/order/${o.token}`} className="text-accent transition-opacity duration-150 hover:opacity-70">
+                          {o.id}
+                        </Link>
+                      </td>
                       <td className="px-3 py-2.5 text-fog">{o.login}</td>
                       <td className="px-3 py-2.5 tabular-nums text-mute">{o.year}</td>
                       <td className="px-3 py-2.5 text-mute">{o.variant}</td>

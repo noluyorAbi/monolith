@@ -1,9 +1,15 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
 export interface Order {
+  /** Short serial. Printed on the object and shown to the buyer. Not a secret. */
   id: string;
+  /**
+   * 128-bit capability token. The only thing that opens the receipt, because a
+   * short serial is guessable and the receipt names a real person's account.
+   */
+  token: string;
   createdAt: string;
   login: string;
   year: number;
@@ -43,8 +49,21 @@ export async function listOrders(): Promise<Order[]> {
   return orders.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export async function createOrder(input: Omit<Order, "id" | "createdAt">): Promise<Order> {
-  const order: Order = { ...input, id: randomUUID().slice(0, 8).toUpperCase(), createdAt: new Date().toISOString() };
+export async function findOrderByToken(token: string): Promise<Order | null> {
+  if (!token) return null;
+  const orders = await readAll();
+  return orders.find((o) => o.token === token) ?? null;
+}
+
+export async function createOrder(
+  input: Omit<Order, "id" | "token" | "createdAt">,
+): Promise<Order> {
+  const order: Order = {
+    ...input,
+    id: randomBytes(4).toString("hex").toUpperCase(),
+    token: randomBytes(16).toString("base64url"),
+    createdAt: new Date().toISOString(),
+  };
   const orders = await readAll();
   orders.push(order);
   await writeAll(orders);

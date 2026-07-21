@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { listOrders } from "@/lib/orders";
+import { findOrderByToken } from "@/lib/orders";
 import { formatPrice, productById } from "@/lib/products";
 
 export const dynamic = "force-dynamic";
 
-export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const order = (await listOrders()).find((o) => o.id === id);
+export default async function OrderPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const order = await findOrderByToken(token);
   if (!order) notFound();
   const product = productById(order.productId);
 

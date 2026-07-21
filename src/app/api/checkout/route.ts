@@ -55,13 +55,13 @@ export async function POST(request: Request) {
 
   if (!key) {
     // Demo mode: the whole flow works, nobody is charged, and the UI says so.
-    return NextResponse.json({ demo: true, orderId: order.id, url: `/order/${order.id}` });
+    return NextResponse.json({ demo: true, orderId: order.id, url: `/order/${order.token}` });
   }
 
   const session = await stripeSession(
     {
       mode: "payment",
-      success_url: `${origin}/order/${order.id}?paid=1`,
+      success_url: `${origin}/order/${order.token}?paid=1`,
       cancel_url: `${origin}/s/${login}?year=${year}`,
       "line_items[0][quantity]": "1",
       "line_items[0][price_data][currency]": "eur",
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
       "line_items[0][price_data][product_data][name]": `MONOLITH ${product.name} — ${login} ${year}`,
       "line_items[0][price_data][product_data][description]": `${variant} · ${finish} · ${product.sizeMm}mm · ${product.material}`,
       "metadata[orderId]": order.id,
+      "metadata[orderToken]": order.token,
       ...(email ? { customer_email: email } : {}),
     },
     key,
