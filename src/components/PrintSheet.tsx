@@ -21,7 +21,7 @@ import {
 } from "@/lib/print";
 import { modelQuery } from "@/lib/request";
 import { SLOT_CHOICES, type ColourSlots } from "@/lib/slots";
-import { splitByLevel } from "@/lib/parts";
+import { printableParts } from "@/lib/parts";
 import { PROJECT } from "@/lib/project";
 import type { BuiltMesh, Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
@@ -129,9 +129,12 @@ export function PrintSheet(props: PrintSheetProps) {
   const material = materialById(materialId);
   const quality = qualityById(qualityId);
 
+  // Only while the sheet is open. This welds the whole object, and the dialog
+  // stays mounted for the entire live phase, so ungated it would re-run on
+  // every form and size change during the reveal animation.
   const est = useMemo(
-    () => estimate(splitByLevel(props.mesh), material, quality),
-    [props.mesh, material, quality],
+    () => (open ? estimate(printableParts(props.mesh), material, quality) : null),
+    [open, props.mesh, material, quality],
   );
   const specs = useMemo(() => overrides(material, quality), [material, quality]);
 
@@ -289,7 +292,7 @@ export function PrintSheet(props: PrintSheetProps) {
                   </Row>
 
                   <div className="flex flex-col gap-1.5 border-t border-line pt-4 text-[0.72rem]">
-                    {[
+                    {est && [
                       ["Filament", `about ${est.grams.toFixed(0)} g`],
                       ["Print time", `${est.hoursLow.toFixed(1)} to ${est.hoursHigh.toFixed(1)} h`],
                       ["Filament cost", formatPrice(est.filamentCost)],

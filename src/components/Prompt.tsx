@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { LOGIN_RE, normaliseLogin } from "@/lib/contributions";
 import { play } from "@/lib/sound";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -22,9 +23,10 @@ const HOLD_MS = 1800;
  */
 function useTypedHint(active: boolean): string {
   const [shown, setShown] = useState("");
+  const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || reduced) return;
     let timer = 0;
     let word = 0;
     let count = 0;
@@ -54,9 +56,10 @@ function useTypedHint(active: boolean): string {
 
     timer = window.setTimeout(tick, 700);
     return () => window.clearTimeout(timer);
-  }, [active]);
+  }, [active, reduced]);
 
-  return shown;
+  // Reduced motion still needs the example, just without it moving.
+  return reduced ? EXAMPLES[0] : shown;
 }
 
 export function Prompt({

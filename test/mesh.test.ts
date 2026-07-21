@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { MeshBuilder, scaleToSize } from "@/lib/mesh";
-import { buildMonolith, computeStats } from "@/lib/build";
+import { buildMonolith } from "@/lib/build";
+import { computeStats } from "@/lib/contributions";
 import { toBinarySTL } from "@/lib/stl";
 import { syntheticYear } from "@/lib/contributions";
 import { measureText, rasterise } from "@/lib/font5x7";

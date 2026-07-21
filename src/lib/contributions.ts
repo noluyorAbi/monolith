@@ -1,4 +1,4 @@
-import type { ContributionYear, Day, Level } from "./types";
+import type { ContributionYear, Day, Level, Stats } from "./types";
 
 /**
  * Calendar helpers with no network and no environment access, so the browser
@@ -29,6 +29,14 @@ export function yearRange(year: number): { from: string; to: string } {
   const isCurrent = year === today.getUTCFullYear();
   const end = isCurrent ? today.toISOString().slice(0, 10) : `${year}-12-31`;
   return { from: `${year}-01-01`, to: end };
+}
+
+/** GitHub launched in 2008, and a year we cannot render is not worth caching. */
+export function parseYear(raw: string | null): number {
+  const current = availableYears(1)[0];
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 2008 || value > current) return current;
+  return value;
 }
 
 export function availableYears(count = 6): number[] {
@@ -127,3 +135,43 @@ export function syntheticYear(login: string, year: number): ContributionYear {
   return pack(login, login, year, days, "synthetic");
 }
 
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export function computeStats(data: ContributionYear): Stats {
+  let activeDays = 0;
+  let longest = 0;
+  let run = 0;
+  let best: Day | null = null;
+  const perWeekday = new Array(7).fill(0);
+
+  for (const day of data.days) {
+    if (day.count > 0) {
+      activeDays++;
+      run++;
+      if (run > longest) longest = run;
+    } else {
+      run = 0;
+    }
+    if (!best || day.count > best.count) best = day;
+    perWeekday[new Date(`${day.date}T00:00:00Z`).getUTCDay()] += day.count;
+  }
+
+  let current = 0;
+  for (let i = data.days.length - 1; i >= 0; i--) {
+    if (data.days[i].count > 0) current++;
+    else break;
+  }
+
+  let busiest = 0;
+  for (let i = 1; i < 7; i++) if (perWeekday[i] > perWeekday[busiest]) busiest = i;
+
+  return {
+    total: data.total,
+    activeDays,
+    longestStreak: longest,
+    currentStreak: current,
+    bestDay: best && best.count > 0 ? best : null,
+    averagePerActiveDay: activeDays ? data.total / activeDays : 0,
+    busiestWeekday: WEEKDAYS[busiest],
+  };
+}

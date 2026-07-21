@@ -1,6 +1,6 @@
 import { MeshBuilder, scaleToSize, type Attribs } from "./mesh";
 import { GLYPH_H, measureText, rasterise } from "./font5x7";
-import type { BuildOptions, BuiltMesh, ContributionYear, Day, Stats, Variant } from "./types";
+import type { BuildOptions, BuiltMesh, ContributionYear, Day, Variant } from "./types";
 
 /** Millimetres. Chosen so a default skyline lands close to a 210mm desk piece. */
 const CELL = 4;
@@ -33,6 +33,12 @@ export const SIZES = [
 ] as const;
 
 export type SizeId = (typeof SIZES)[number]["id"];
+
+export const DEFAULT_SIZE_ID: SizeId = "shelf";
+
+export function sizeById(id: string): (typeof SIZES)[number] {
+  return SIZES.find((s) => s.id === id) ?? SIZES.find((s) => s.id === DEFAULT_SIZE_ID)!;
+}
 
 function barHeight(count: number, max: number): number {
   if (count <= 0) return 0;
@@ -368,45 +374,4 @@ export function buildMonolith(data: ContributionYear, options: BuildOptions): Bu
     gapMm: GAPPED.includes(options.variant) ? GAP * k : null,
   };
   return scaled;
-}
-
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-export function computeStats(data: ContributionYear): Stats {
-  let activeDays = 0;
-  let longest = 0;
-  let run = 0;
-  let best: Day | null = null;
-  const perWeekday = new Array(7).fill(0);
-
-  for (const day of data.days) {
-    if (day.count > 0) {
-      activeDays++;
-      run++;
-      if (run > longest) longest = run;
-    } else {
-      run = 0;
-    }
-    if (!best || day.count > best.count) best = day;
-    perWeekday[new Date(`${day.date}T00:00:00Z`).getUTCDay()] += day.count;
-  }
-
-  let current = 0;
-  for (let i = data.days.length - 1; i >= 0; i--) {
-    if (data.days[i].count > 0) current++;
-    else break;
-  }
-
-  let busiest = 0;
-  for (let i = 1; i < 7; i++) if (perWeekday[i] > perWeekday[busiest]) busiest = i;
-
-  return {
-    total: data.total,
-    activeDays,
-    longestStreak: longest,
-    currentStreak: current,
-    bestDay: best && best.count > 0 ? best : null,
-    averagePerActiveDay: activeDays ? data.total / activeDays : 0,
-    busiestWeekday: WEEKDAYS[busiest],
-  };
 }

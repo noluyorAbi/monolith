@@ -1,6 +1,7 @@
 import { PROJECT } from "@/lib/project";
 import { VARIANTS, SIZES } from "@/lib/build";
 import { MATERIALS, PRINTERS, QUALITIES, overrides, materialById, qualityById } from "@/lib/print";
+import { MAX_SIZE_MM, MIN_SIZE_MM } from "@/lib/request";
 
 export const runtime = "nodejs";
 
@@ -31,13 +32,13 @@ A print kit ZIP containing:
 
 ## Forms
 
-${VARIANTS.map((v) => `- \`${v.id}\` — ${v.name}: ${v.blurb.toLowerCase()}.`).join("\n")}
+${VARIANTS.map((v) => `- \`${v.id}\`: ${v.name}: ${v.blurb.toLowerCase()}.`).join("\n")}
 
 ## Sizes
 
 ${SIZES.map((s) => `- ${s.name}: ${s.mm} mm along the longest edge. ${s.blurb}.`).join("\n")}
 
-Any size from 60 to 400 mm can be requested directly from the API. Below roughly 150 mm the engraved handle falls under one nozzle width and prints faint.
+Any size from ${MIN_SIZE_MM} to ${MAX_SIZE_MM} mm can be requested directly from the API. Below roughly 150 mm the engraved handle falls under one nozzle width and prints faint.
 
 ## Print profile
 
@@ -53,15 +54,15 @@ ${specs.map((s) => `- ${s.label}: ${s.value}. ${s.why}`).join("\n")}
 
 ## Endpoints
 
-- \`GET /api/kit?login=&year=&variant=&mm=&printer=&material=&quality=&slots=\` — the print kit as a ZIP.
-- \`GET /api/3mf?login=&year=&variant=&mm=\` — the 3MF on its own.
-- \`GET /api/stl?login=&year=&variant=&mm=\` — binary STL, 60 to 400 mm.
-- \`GET /api/contributions?login=&year=\` — the parsed contribution year plus derived statistics, as JSON.
+- \`GET /api/kit?login=&year=&variant=&mm=&printer=&material=&quality=&slots=\`: the print kit as a ZIP.
+- \`GET /api/3mf?login=&year=&variant=&mm=\`: the 3MF on its own.
+- \`GET /api/stl?login=&year=&variant=&mm=\`: binary STL, 60 to 400 mm.
+- \`GET /api/contributions?login=&year=\`: the parsed contribution year plus derived statistics, as JSON.
 
 ## Pages
 
-- ${PROJECT.site}/ — the builder.
-- ${PROJECT.site}/s/{login}?year={year} — a shareable page for one account and year.
+- ${PROJECT.site}/: the builder.
+- ${PROJECT.site}/s/{login}?year={year}: a shareable page for one account and year.
 
 ## Printing it yourself
 
@@ -69,7 +70,7 @@ Nothing overhangs; the whole object grows straight up off a flat plinth, so supp
 
 ## Licence
 
-The code is licensed PolyForm Noncommercial 1.0.0: use, change and share it for any noncommercial purpose. Commercial use needs a licence from the author. The objects it generates are licensed CC BY 4.0 and belong to the person whose year they describe.
+The code is licensed ${PROJECT.licence}: use, change and share it for any noncommercial purpose. Commercial use needs a licence from the author. The objects it generates are licensed ${PROJECT.modelLicence} and belong to the person whose year they describe.
 
 ## When GitHub cannot be reached
 

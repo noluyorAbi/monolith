@@ -30,9 +30,12 @@ const config = [
     // Mutating the camera, a material's uniforms and a mesh's transform IS its
     // public API, and useFrame runs outside React's render cycle on purpose.
     // The compiler's purity rules model a DOM-rendering world and flag those
-    // documented calls as defects. Scoped to the one file that talks to the
-    // renderer, so every other component is still held to them.
-    files: ["src/components/Scene.tsx"],
+    // documented calls as defects.
+    //
+    // Scoped to the single module that touches the renderer. The projection
+    // maths (framing.ts), the canvas textures and the scene composition
+    // (Scene.tsx) were split out so they stay under these rules.
+    files: ["src/components/SceneObject.tsx"],
     rules: {
       "react-hooks/immutability": "off",
       "react-hooks/refs": "off",

@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { zip } from "@/lib/zip";
 import { unzip } from "./helpers/zip";
 import { buildMonolith } from "@/lib/build";
-import { splitByLevel, wholeObject, signedVolume } from "@/lib/parts";
+import { printableParts, splitByLevel, wholeObject, signedVolume } from "@/lib/parts";
 import { buildThreeMf } from "@/lib/threemf";
 import { bambuPreset, printCard } from "@/lib/kit";
 import { bambuOverrides, materialById, printerById, qualityById } from "@/lib/print";
@@ -90,6 +90,23 @@ test("the 3mf is a valid container with in-range geometry", () => {
   assert.equal(triangleCount, parts.reduce((a, p) => a + p.triangles, 0));
   // Welding has to actually save something, or the split was pointless.
   assert.ok(vertexCount < triangleCount * 3);
+});
+
+test("an object that will not split cleanly ships as one welded solid", () => {
+  const clean = printableParts(MESH);
+  assert.ok(clean.length > 1, "a healthy skyline should split per level");
+  assert.ok(clean.every((p) => p.closed));
+
+  // Every form must survive this, since an open group would otherwise reach a
+  // slicer as a shell it cannot fill.
+  for (const variant of ["skyline", "ring", "wave", "spine"] as const) {
+    const mesh = buildMonolith(DATA, { variant, sizeMm: 180, label: true });
+    const parts = printableParts(mesh);
+    assert.ok(parts.length >= 1, variant);
+    assert.ok(parts.every((p) => p.closed), `${variant} shipped an open part`);
+    const volume = parts.reduce((a, p) => a + p.volumeMm3, 0);
+    assert.ok(volume > 0, variant);
+  }
 });
 
 test("the shipped preset inherits rather than restating the vendor profile", () => {

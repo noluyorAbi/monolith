@@ -3,7 +3,7 @@ import { fetchContributionYear } from "@/lib/github";
 import { LOGIN_RE, availableYears } from "@/lib/contributions";
 import { notFound } from "next/navigation";
 import { defaultPalette } from "@/lib/palettes";
-import { computeStats } from "@/lib/build";
+import { computeStats } from "@/lib/contributions";
 import { PROJECT } from "@/lib/project";
 
 export const runtime = "nodejs";
@@ -25,6 +25,8 @@ export default async function Image({ params }: { params: Promise<{ login: strin
   // still render 1200x630 of attacker-chosen text under the wordmark, and run
   // a full satori pass per request while doing it.
   if (!LOGIN_RE.test(login)) notFound();
+  // This route receives only the path segment, so it always renders the most
+  // recent year and says which one, rather than implying it followed ?year=.
   const year = availableYears(1)[0];
   const data = await fetchContributionYear(login, year).catch(() => null);
   const stats = data ? computeStats(data) : null;
@@ -52,7 +54,7 @@ export default async function Image({ params }: { params: Promise<{ login: strin
             <div style={{ display: "flex", fontSize: 24, color: "#8b9096", marginTop: 4 }}>
               {data?.demo
                 ? `${year} · sample data, GitHub unreachable`
-                : `${year} · ${stats ? stats.total.toLocaleString("en-GB") : "—"} contributions`}
+                : `${year} · ${stats ? stats.total.toLocaleString("en-GB") : "no data"} contributions`}
             </div>
           </div>
           <div

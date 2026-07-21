@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
-import { BadLoginError, NotFoundError, fetchContributionYear } from "@/lib/github";
-import { computeStats } from "@/lib/build";
+import { fetchContributionYear } from "@/lib/github";
+import { computeStats, parseYear } from "@/lib/contributions";
+import { modelErrorResponse } from "@/lib/responses";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const login = url.searchParams.get("login") ?? "";
-  const year = Number(url.searchParams.get("year")) || new Date().getUTCFullYear();
+  // Same clamp the download routes apply. Without it a junk year still issued
+  // a real outbound request to GitHub and minted its own cache entry.
+  const year = parseYear(url.searchParams.get("year"));
 
   try {
     const data = await fetchContributionYear(login, year);
@@ -16,12 +19,6 @@ export async function GET(request: Request) {
       { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } },
     );
   } catch (err) {
-    if (err instanceof BadLoginError) {
-      return NextResponse.json({ error: "invalid_login", message: "That is not a GitHub handle." }, { status: 400 });
-    }
-    if (err instanceof NotFoundError) {
-      return NextResponse.json({ error: "not_found", message: `No GitHub account called ${login}.` }, { status: 404 });
-    }
-    return NextResponse.json({ error: "upstream", message: "GitHub would not answer." }, { status: 502 });
+    return modelErrorResponse(err);
   }
 }

@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
-import { BadLoginError, NotFoundError, fetchContributionYear } from "@/lib/github";
-import { LOGIN_RE, availableYears, normaliseLogin, syntheticYear } from "@/lib/contributions";
+import { fetchContributionYear } from "@/lib/github";
+import {
+  BadLoginError,
+  LOGIN_RE,
+  NotFoundError,
+  availableYears,
+  normaliseLogin,
+  syntheticYear,
+} from "@/lib/contributions";
 
 /**
  * The handle is the only user input the whole app takes, and it reaches an

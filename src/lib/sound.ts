@@ -6,7 +6,7 @@
  * under a kilobyte and always in tune with itself.
  */
 
-type Cue = "tick" | "step" | "lock" | "thunk" | "chime" | "error";
+type Cue = "tick" | "step" | "lock" | "thunk" | "error";
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -84,11 +84,6 @@ const CUES: Record<Cue, Voice[]> = {
   thunk: [
     { freq: 128, to: 62, type: "sine", gain: 0.34, attack: 0.004, decay: 0.44 },
     { freq: 320, to: 190, type: "triangle", gain: 0.08, attack: 0.002, decay: 0.2 },
-  ],
-  chime: [
-    { freq: 587.33, type: "sine", gain: 0.09, attack: 0.006, decay: 0.5 },
-    { freq: 880, type: "sine", gain: 0.07, attack: 0.006, decay: 0.5, delay: 0.07 },
-    { freq: 1174.66, type: "sine", gain: 0.05, attack: 0.006, decay: 0.7, delay: 0.14 },
   ],
   error: [{ freq: 190, to: 120, type: "sawtooth", gain: 0.06, attack: 0.003, decay: 0.16 }],
 };

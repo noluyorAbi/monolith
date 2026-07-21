@@ -1,6 +1,9 @@
 node_modules
 .next
-.env*.local
+# Any .env, because cp .env.example .env is the natural setup step and the
+# first line of that template is a GitHub token.
+.env*
+!.env.example
 .data
 *.stl
 .DS_Store

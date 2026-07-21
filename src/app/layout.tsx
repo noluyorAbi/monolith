@@ -23,8 +23,8 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   metadataBase: new URL(PROJECT.site),
   title: {
-    default: `${PROJECT.name} — ${PROJECT.tagline}`,
-    template: `%s — ${PROJECT.name}`,
+    default: `${PROJECT.name}: ${PROJECT.tagline}`,
+    template: `%s · ${PROJECT.name}`,
   },
   description: DESCRIPTION,
   applicationName: PROJECT.name,
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: PROJECT.name,
-    title: `${PROJECT.name} — ${PROJECT.tagline}`,
+    title: `${PROJECT.name}: ${PROJECT.tagline}`,
     description: DESCRIPTION,
     url: PROJECT.site,
     locale: "en",
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${PROJECT.name} — ${PROJECT.tagline}`,
+    title: `${PROJECT.name}: ${PROJECT.tagline}`,
     description: DESCRIPTION,
     images: ["/og.png"],
   },

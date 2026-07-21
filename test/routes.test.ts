@@ -4,6 +4,7 @@ import { unzip } from "./helpers/zip";
 import { GET as getKit } from "@/app/api/kit/route";
 import { GET as getStl } from "@/app/api/stl/route";
 import { GET as get3mf } from "@/app/api/3mf/route";
+import { GET as getContributions } from "@/app/api/contributions/route";
 import { MAX_SIZE_MM, MIN_SIZE_MM, modelQuery, parseModelRequest } from "@/lib/request";
 import { DEFAULT_MATERIAL_ID, DEFAULT_PRINTER_ID, DEFAULT_QUALITY_ID } from "@/lib/print";
 import { yearFromDays } from "@/lib/contributions";
@@ -35,6 +36,7 @@ const BASE = "http://localhost/api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 test("the query the browser builds is the query the routes parse", () => {
@@ -115,8 +117,62 @@ test("an unusable handle is a 400, not a generated object", async () => {
   ] as const) {
     const res = await handler(new Request(`${BASE}/${name}?login=not%20a%20handle`));
     assert.equal(res.status, 400, `${name} accepted an invalid handle`);
-    assert.deepEqual(await res.json(), { error: "invalid_login" });
+    const body = (await res.json()) as { error: string; message?: string };
+    assert.equal(body.error, "invalid_login");
+    // The browser renders this string verbatim, so it has to be there.
+    assert.ok(body.message && body.message.length > 0, `${name} returned no message`);
   }
+});
+
+test("the contributions endpoint answers with data, stats and a usable error", async () => {
+  stubGitHub();
+  const ok = await getContributions(new Request(`${BASE}/contributions?login=noluyorAbi&year=2025`));
+  assert.equal(ok.status, 200);
+  const payload = (await ok.json()) as { data: { total: number; demo: boolean }; stats: { total: number } };
+  assert.equal(payload.data.demo, false);
+  assert.equal(payload.stats.total, payload.data.total);
+
+  const bad = await getContributions(new Request(`${BASE}/contributions?login=not%20a%20handle`));
+  assert.equal(bad.status, 400);
+  assert.ok(((await bad.json()) as { message?: string }).message);
+});
+
+test("a year we cannot render never reaches GitHub", async () => {
+  const fetchSpy = vi.fn(async (_url: unknown) => new Response("", { status: 200 }));
+  vi.stubGlobal("fetch", fetchSpy);
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  // Every route clamps to the same window, so the same query string cannot
+  // mean one year on the preview and another on the download.
+  const current = new Date().getUTCFullYear();
+  for (const junk of ["99999", "1900", "1e21", "-5", "notayear"]) {
+    assert.equal(parseModelRequest(new URL(`${BASE}/kit?year=${junk}`)).year, current, junk);
+  }
+  await getContributions(new Request(`${BASE}/contributions?login=octocat&year=1e21`));
+  const requested = String(fetchSpy.mock.calls.at(0)?.at(0) ?? "");
+  assert.ok(requested.includes(`${current}-01-01`), `asked GitHub for ${requested}`);
+});
+
+test("an invented year is labelled in the stl header and the 3mf description", async () => {
+  vi.stubGlobal("fetch", async () => {
+    throw new Error("rate limited");
+  });
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const stl = await getStl(new Request(`${BASE}/stl?login=octocat&year=2025`));
+  assert.equal(stl.headers.get("X-Monolith-Sample-Data"), "true");
+  const header = Buffer.from(await stl.arrayBuffer()).subarray(0, 80).toString("ascii");
+  assert.match(header, /SAMPLE-DATA/, "the stl header does not mark the year as invented");
+
+  vi.stubGlobal("fetch", async () => {
+    throw new Error("rate limited");
+  });
+  const threeMf = await get3mf(new Request(`${BASE}/3mf?login=octocat&year=2025`));
+  const files = unzip(Buffer.from(await threeMf.arrayBuffer()));
+  assert.match(files.get("3D/3dmodel.model")!.toString(), /SAMPLE DATA/);
+  assert.match(files.get("Metadata/MONOLITH.txt")!.toString(), /SAMPLE DATA/);
 });
 
 test("a missing account is a 404 rather than an invented year", async () => {
@@ -139,8 +195,6 @@ test("sample data is announced in the response, not shipped quietly", async () =
   const buffer = Buffer.from(await res.arrayBuffer());
   const card = unzip(buffer).get("PRINT-ME.txt")?.toString() ?? "";
   assert.match(card, /SAMPLE DATA/, "the print card does not warn that the year is invented");
-
-  vi.restoreAllMocks();
 });
 
 test("the fixture year survives a round trip through the parser", () => {

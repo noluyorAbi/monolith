@@ -19,13 +19,20 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     title: login,
     description,
     alternates: { canonical: `/s/${login}?year=${chosen}` },
+    // The share card is generated from a route that only receives the path
+    // segment, so it can never honour ?year=. Neither promises a year the
+    // other cannot show.
     openGraph: {
       type: "profile",
-      title: `${login} — ${chosen}`,
-      description,
+      title: login,
+      description: `${login}'s GitHub contributions as a 3D printable object. Free 3MF, STL and a slicer preset.`,
       url: `/s/${login}?year=${chosen}`,
     },
-    twitter: { card: "summary_large_image", title: `${login} — ${chosen}`, description },
+    twitter: {
+      card: "summary_large_image",
+      title: login,
+      description: `${login}'s GitHub contributions as a 3D printable object.`,
+    },
   };
 }
 

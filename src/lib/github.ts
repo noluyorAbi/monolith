@@ -16,8 +16,6 @@ import type { ContributionYear, Day, Level } from "./types";
  * neither belongs anywhere near a browser bundle.
  */
 
-export { BadLoginError, NotFoundError } from "./contributions";
-
 const LEVELS: Record<string, Level> = {
   NONE: 0,
   FIRST_QUARTILE: 1,
