@@ -2,23 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { PRODUCTS, formatPrice, type Finish, type Product } from "@/lib/products";
-import type { Variant } from "@/lib/types";
+import { SHIPPING, formatPrice, quote, type ShippingId } from "@/lib/products";
+import { MATERIALS, QUALITIES, estimate } from "@/lib/print";
+import { splitByLevel } from "@/lib/parts";
+import { SIZES } from "@/lib/build";
+import { PROJECT } from "@/lib/project";
+import type { BuiltMesh, Variant } from "@/lib/types";
+import type { ColourSlots } from "@/lib/slots";
 import { play } from "@/lib/sound";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 const SOFT = [0.16, 1, 0.3, 1] as const;
 
-type Step = "pick" | "confirm" | "done";
-
-/** Mobile keeps fixed sheet heights so the drag gesture has a stop to pull
- *  against. Wider screens let the content decide, which keeps every step a
- *  visibly different size instead of one tall empty box. */
-const HEIGHTS: Record<Step, string> = {
-  pick: "min(30rem, 74svh)",
-  confirm: "min(34rem, 82svh)",
-  done: "min(22rem, 58svh)",
-};
+type Step = "configure" | "done";
 
 function Confetti() {
   const reduced = useReducedMotion();
@@ -51,49 +47,27 @@ function Confetti() {
   );
 }
 
-function Card({
-  product,
-  selected,
-  onSelect,
+function Pick({
+  active,
+  onClick,
+  title,
+  children,
 }: {
-  product: Product;
-  selected: boolean;
-  onSelect: () => void;
+  active: boolean;
+  onClick: () => void;
+  title?: string;
+  children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
-      onClick={onSelect}
-      className={`relative flex w-full flex-col gap-3 rounded-lg border p-4 text-left transition-colors duration-200 active:scale-[0.99] ${
-        selected ? "border-accent bg-accent/[0.06]" : "border-edge hover:border-mute"
+      title={title}
+      onClick={onClick}
+      className={`rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] transition-colors duration-150 active:scale-[0.97] ${
+        active ? "border-accent bg-accent/[0.08] text-fog" : "border-edge text-mute hover:text-fog"
       }`}
     >
-      {product.featured && (
-        <span className="absolute right-3 top-3 text-[0.5rem] tracking-[0.2em] uppercase text-accent">
-          most ordered
-        </span>
-      )}
-      <div>
-        <div className="font-[family-name:var(--font-display)] text-[1.05rem] tracking-[-0.01em] text-fog">
-          {product.name}
-        </div>
-        <div className="mt-0.5 text-[0.68rem] leading-snug text-mute">{product.tagline}</div>
-      </div>
-      <div className="text-[0.6rem] tracking-[0.14em] uppercase text-dim">{product.material}</div>
-      <ul className="flex flex-col gap-1">
-        {product.perks.map((p) => (
-          <li key={p} className="flex gap-2 text-[0.66rem] text-mute">
-            <span className="text-dim">—</span>
-            {p}
-          </li>
-        ))}
-      </ul>
-      <div className="mt-auto flex items-baseline justify-between pt-1">
-        <span className="font-[family-name:var(--font-display)] text-[1.1rem] tabular-nums text-fog">
-          {formatPrice(product.price)}
-        </span>
-        <span className="text-[0.58rem] tracking-[0.14em] uppercase text-dim">{product.lead}</span>
-      </div>
+      {children}
     </button>
   );
 }
@@ -104,12 +78,16 @@ export interface OrderSheetProps {
   login: string;
   year: number;
   variant: Variant;
-  finish: Finish;
+  sizeMm: number;
+  paletteId: string;
+  mesh: BuiltMesh;
 }
 
-export function OrderSheet({ open, onClose, login, year, variant, finish }: OrderSheetProps) {
-  const [step, setStep] = useState<Step>("pick");
-  const [product, setProduct] = useState<Product>(PRODUCTS[1]);
+export function OrderSheet(props: OrderSheetProps) {
+  const [step, setStep] = useState<Step>("configure");
+  const [materialId, setMaterialId] = useState("pla");
+  const [slots, setSlots] = useState<ColourSlots>(1);
+  const [shippingId, setShippingId] = useState<ShippingId>("de");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ orderId: string; url: string; demo: boolean } | null>(null);
@@ -125,21 +103,34 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
   }, []);
 
   useEffect(() => {
-    if (open) {
-      setStep("pick");
+    if (props.open) {
+      setStep("configure");
       setResult(null);
       setError(null);
     }
-  }, [open]);
+  }, [props.open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!props.open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") props.onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [props]);
+
+  const material = MATERIALS.find((m) => m.id === materialId)!;
+  // We print at Standard, so the quote has to be built on what actually runs.
+  const quality = QUALITIES.find((q) => q.id === "standard")!;
+  const est = useMemo(
+    () => estimate(splitByLevel(props.mesh), material, quality),
+    [props.mesh, material, quality],
+  );
+  const hours = (est.hoursLow + est.hoursHigh) / 2;
+  const bill = useMemo(
+    () => quote({ grams: est.grams, hours, slots }, shippingId),
+    [est.grams, hours, slots, shippingId],
+  );
 
   async function checkout() {
     setBusy(true);
@@ -149,11 +140,15 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          login,
-          year,
-          variant,
-          finish: finish.id,
-          productId: product.id,
+          login: props.login,
+          year: props.year,
+          variant: props.variant,
+          palette: props.paletteId,
+          sizeMm: props.sizeMm,
+          material: materialId,
+          quality: "standard",
+          slots,
+          shipping: shippingId,
           ...(email ? { email } : {}),
         }),
       });
@@ -174,11 +169,11 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
     }
   }
 
-  const summary = `${login} · ${year} · ${variant} · ${finish.name} · ${product.sizeMm}mm`;
+  const sizeName = SIZES.find((s) => s.mm === props.sizeMm)?.name ?? "";
 
   return (
     <AnimatePresence>
-      {open && (
+      {props.open && (
         <>
           <motion.div
             className="absolute inset-0 z-40 bg-void/70 backdrop-blur-[3px]"
@@ -186,22 +181,25 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
-            onClick={onClose}
+            onClick={props.onClose}
           />
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-label="Order your monolith"
+            aria-label="Have it printed"
             className="absolute inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-edge bg-ink"
             style={{ maxHeight: "90svh" }}
             initial={{ y: "100%" }}
-            animate={{ y: 0, height: wide ? "auto" : HEIGHTS[step] }}
+            animate={{
+              y: 0,
+              height: wide ? "auto" : step === "done" ? "min(22rem, 58svh)" : "min(36rem, 86svh)",
+            }}
             exit={{ y: "100%" }}
             drag="y"
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.4 }}
             onDragEnd={(_, info) => {
-              if (info.offset.y > 110 || info.velocity.y > 420) onClose();
+              if (info.offset.y > 110 || info.velocity.y > 420) props.onClose();
             }}
             transition={{ duration: 0.5, ease: EASE }}
           >
@@ -209,16 +207,18 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
               <div className="mx-auto h-1 w-9 rounded-full bg-edge sm:hidden" />
             </div>
 
-            <div className="mx-auto flex w-full max-w-4xl items-start justify-between gap-4 px-5 pb-4 pt-3 sm:px-7">
+            <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-4 px-5 pb-4 pt-3 sm:px-7">
               <div>
                 <h3 className="font-[family-name:var(--font-display)] text-[1.15rem] tracking-[-0.02em] text-fog">
-                  {step === "done" ? "Order placed" : step === "confirm" ? product.name : "Take it off the screen"}
+                  {step === "done" ? "Order placed" : "No printer? We will run it."}
                 </h3>
-                <p className="mt-1 text-[0.66rem] tracking-[0.1em] uppercase text-dim">{summary}</p>
+                <p className="mt-1 text-[0.66rem] tracking-[0.1em] uppercase text-dim">
+                  {props.login} · {props.year} · {props.variant} · {sizeName} {props.sizeMm}mm
+                </p>
               </div>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={props.onClose}
                 aria-label="Close"
                 className="hairline grid h-7 w-7 shrink-0 place-items-center rounded-[5px] text-mute transition-colors duration-150 hover:text-fog active:scale-[0.95]"
               >
@@ -226,90 +226,134 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
               </button>
             </div>
 
-            <div className="relative mx-auto min-h-0 w-full max-w-4xl flex-1 overflow-y-auto px-5 pb-7 sm:px-7">
+            <div className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto px-5 pb-7 sm:px-7">
               <AnimatePresence mode="wait" initial={false}>
-                {step === "pick" && (
+                {step === "configure" && (
                   <motion.div
-                    key="pick"
-                    className="grid gap-3 sm:grid-cols-3"
-                    initial={{ opacity: 0, x: 18 }}
+                    key="configure"
+                    className="grid gap-6 sm:grid-cols-2"
+                    initial={{ opacity: 0, x: 16 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -18 }}
+                    exit={{ opacity: 0, x: -16 }}
                     transition={{ duration: 0.28, ease: SOFT }}
                   >
-                    {PRODUCTS.map((p) => (
-                      <Card
-                        key={p.id}
-                        product={p}
-                        selected={product.id === p.id}
-                        onSelect={() => {
-                          play("lock");
-                          setProduct(p);
-                          setStep("confirm");
-                        }}
-                      />
-                    ))}
-                  </motion.div>
-                )}
-
-                {step === "confirm" && (
-                  <motion.div
-                    key="confirm"
-                    className="flex flex-col gap-5"
-                    initial={{ opacity: 0, x: 18 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -18 }}
-                    transition={{ duration: 0.28, ease: SOFT }}
-                  >
-                    <div className="flex flex-col gap-2 border-y border-line py-4 text-[0.72rem]">
-                      {[
-                        ["Object", `${login} ${year}`],
-                        ["Form", variant],
-                        ["Finish", finish.name],
-                        ["Material", product.material],
-                        ["Size", `${product.sizeMm}mm`],
-                        ["Lead time", product.lead],
-                      ].map(([k, v]) => (
-                        <div key={k} className="flex justify-between gap-4">
-                          <span className="tracking-[0.12em] uppercase text-dim">{k}</span>
-                          <span className="text-right text-fog">{v}</span>
+                    <div className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+                          Filament
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {MATERIALS.map((m) => (
+                            <Pick
+                              key={m.id}
+                              active={materialId === m.id}
+                              title={m.note}
+                              onClick={() => {
+                                play("step");
+                                setMaterialId(m.id);
+                              }}
+                            >
+                              {m.name}
+                            </Pick>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+                          Colours
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {([1, 4] as ColourSlots[]).map((n) => (
+                            <Pick
+                              key={n}
+                              active={slots === n}
+                              onClick={() => {
+                                play("step");
+                                setSlots(n);
+                              }}
+                            >
+                              {n === 1 ? "One colour" : "Four colour"}
+                            </Pick>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+                          Ships to
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {SHIPPING.map((s) => (
+                            <Pick
+                              key={s.id}
+                              active={shippingId === s.id}
+                              onClick={() => {
+                                play("step");
+                                setShippingId(s.id);
+                              }}
+                            >
+                              {s.name}
+                            </Pick>
+                          ))}
+                        </div>
+                      </div>
+
+                      <label className="flex flex-col gap-2">
+                        <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+                          Where do we send it
+                        </span>
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="you@wherever.dev"
+                          className="w-full border-b border-edge pb-2 text-[0.85rem] text-fog transition-colors duration-200 focus:border-accent"
+                        />
+                      </label>
                     </div>
 
-                    <label className="flex flex-col gap-2">
-                      <span className="text-[0.58rem] tracking-[0.2em] uppercase text-dim">
-                        Where do we send it
-                      </span>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@wherever.dev"
-                        className="w-full border-b border-edge pb-2 text-[0.85rem] text-fog transition-colors duration-200 focus:border-accent"
-                      />
-                    </label>
+                    <div className="flex flex-col gap-4">
+                      <div className="rounded-lg border border-edge p-4">
+                        <div className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+                          What it costs us
+                        </div>
+                        <dl className="mt-3 flex flex-col gap-1.5 text-[0.72rem]">
+                          {bill.lines.map((line) => (
+                            <div key={line.label} className="flex justify-between gap-4">
+                              <dt className="text-mute">
+                                {line.label}
+                                <span className="ml-2 text-dim">{line.detail}</span>
+                              </dt>
+                              <dd className="text-fog tabular-nums">{formatPrice(line.amount)}</dd>
+                            </div>
+                          ))}
+                          <div className="mt-1 flex justify-between gap-4 border-t border-line pt-2">
+                            <dt className="text-mute">Postage</dt>
+                            <dd className="text-fog tabular-nums">{formatPrice(bill.shipping)}</dd>
+                          </div>
+                          <div className="mt-1 flex items-baseline justify-between gap-4 border-t border-line pt-2">
+                            <dt className="tracking-[0.14em] uppercase text-dim">Total</dt>
+                            <dd className="font-[family-name:var(--font-display)] text-[1.2rem] tabular-nums text-fog">
+                              {formatPrice(bill.total)}
+                            </dd>
+                          </div>
+                        </dl>
+                        <p className="mt-3 text-[0.6rem] leading-relaxed text-dim">
+                          That is the whole sum, with nothing added on top. It is also why we only
+                          do this in small numbers. The file is the same object and costs nothing.
+                        </p>
+                      </div>
 
-                    {error && <p className="text-[0.7rem] text-danger">{error}</p>}
+                      {error && <p className="text-[0.7rem] text-danger">{error}</p>}
 
-                    <div className="mt-auto flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          play("tick");
-                          setStep("pick");
-                        }}
-                        className="hairline rounded-[5px] px-3 py-2.5 text-[0.66rem] tracking-[0.12em] uppercase text-mute transition-colors duration-150 hover:text-fog active:scale-[0.97]"
-                      >
-                        ← back
-                      </button>
                       <button
                         type="button"
                         onClick={checkout}
                         disabled={busy}
-                        className="flex-1 rounded-[5px] bg-accent px-4 py-2.5 text-[0.7rem] font-medium tracking-[0.12em] uppercase text-void transition-all duration-150 hover:brightness-110 active:scale-[0.985] disabled:opacity-60"
+                        className="rounded-[5px] bg-accent px-4 py-3 text-[0.7rem] font-medium tracking-[0.12em] uppercase text-void transition-all duration-150 hover:brightness-110 active:scale-[0.985] disabled:opacity-60"
                       >
-                        {busy ? "opening checkout" : `pay ${formatPrice(product.price)}`}
+                        {busy ? "opening checkout" : `pay ${formatPrice(bill.total)}`}
                       </button>
                     </div>
                   </motion.div>
@@ -328,26 +372,25 @@ export function OrderSheet({ open, onClose, login, year, variant, finish }: Orde
                     <div className="font-[family-name:var(--font-display)] text-[2rem] tracking-[-0.03em] text-accent">
                       {result.orderId}
                     </div>
-                    <p className="max-w-[36ch] text-[0.75rem] leading-relaxed text-mute">
+                    <p className="max-w-[40ch] text-[0.75rem] leading-relaxed text-mute">
                       {result.demo
                         ? "Demo mode: the order is recorded, nothing was charged. Add STRIPE_SECRET_KEY to take real money."
-                        : `We are casting it. ${product.lead.toLowerCase()}.`}
+                        : "On the plate. We will mail you when it ships."}
                     </p>
-                    <div className="flex flex-wrap items-center justify-center gap-3">
-                      <a
-                        href={`/api/stl?login=${encodeURIComponent(login)}&year=${year}&variant=${variant}&mm=${product.sizeMm}`}
-                        download
-                        className="hairline rounded-[5px] px-4 py-2.5 text-[0.66rem] tracking-[0.12em] uppercase text-fog transition-colors duration-150 hover:border-mute active:scale-[0.97]"
-                      >
-                        download production stl
-                      </a>
-                      <a
-                        href={result.url}
-                        className="text-[0.66rem] tracking-[0.12em] uppercase text-accent transition-opacity duration-150 hover:opacity-70"
-                      >
-                        keep this link ↗
-                      </a>
-                    </div>
+                    <a
+                      href={result.url}
+                      className="text-[0.66rem] tracking-[0.12em] uppercase text-accent transition-opacity duration-150 hover:opacity-70"
+                    >
+                      keep this link ↗
+                    </a>
+                    <a
+                      href={PROJECT.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-[0.6rem] tracking-[0.14em] uppercase text-dim transition-colors duration-150 hover:text-fog"
+                    >
+                      or star the repo, that one is free
+                    </a>
                   </motion.div>
                 )}
               </AnimatePresence>

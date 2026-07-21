@@ -54,4 +54,15 @@ export interface BuiltMesh {
   bounds: { min: [number, number, number]; max: [number, number, number] };
   /** Millimetres, after scaling. */
   size: { x: number; y: number; z: number };
+  /**
+   * Real-world sizes of the two features that decide whether this prints well.
+   * A 0.4 mm nozzle lays a 0.42 mm line, so anything below that is at the mercy
+   * of the slicer's thin-feature handling.
+   */
+  print: {
+    /** Width of one engraved font pixel. */
+    engravePixelMm: number;
+    /** Narrowest air gap between neighbouring towers, if the form has any. */
+    gapMm: number | null;
+  };
 }

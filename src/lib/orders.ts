@@ -14,11 +14,15 @@ export interface Order {
   login: string;
   year: number;
   variant: string;
-  finish: string;
-  productId: string;
+  palette: string;
   sizeMm: number;
-  price: number;
-  status: "pending" | "paid" | "in_production" | "shipped" | "demo";
+  material: string;
+  quality: string;
+  slots: number;
+  shipping: string;
+  /** Cents, so money never touches a float. */
+  priceCents: number;
+  status: "pending" | "paid" | "printing" | "shipped" | "demo";
   email?: string;
   checkoutUrl?: string;
 }

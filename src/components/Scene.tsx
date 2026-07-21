@@ -5,7 +5,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Grid, Lightformer, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import type { BuiltMesh } from "@/lib/types";
-import type { Finish } from "@/lib/products";
+import type { Palette } from "@/lib/products";
 
 interface Uniforms {
   uReveal: { value: number };
@@ -15,7 +15,7 @@ interface Uniforms {
   uRamp: { value: THREE.Color[] };
 }
 
-function useMonolithMaterial(finish: Finish) {
+function useMonolithMaterial(finish: Palette) {
   const uniforms = useRef<Uniforms>({
     uReveal: { value: 0 },
     uGlow: { value: finish.glow },
@@ -127,7 +127,7 @@ function Monolith({
   onRevealed,
 }: {
   mesh: BuiltMesh;
-  finish: Finish;
+  finish: Palette;
   offsetY: number;
   revealToken: string;
   onRevealed?: () => void;
@@ -356,7 +356,7 @@ function Rig({ spin, onInteract }: { spin: boolean; onInteract: () => void }) {
 
 export interface SceneProps {
   mesh: BuiltMesh;
-  finish: Finish;
+  finish: Palette;
   /** Ambient mode sinks the object below the type and drops the orbit rig. */
   ghost?: boolean;
   revealToken: string;

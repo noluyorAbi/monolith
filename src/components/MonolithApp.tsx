@@ -8,9 +8,11 @@ import { Forge, type ForgeStep } from "./Forge";
 import { Hud } from "./Hud";
 import { Dock } from "./Dock";
 import { OrderSheet } from "./OrderSheet";
+import { PrintSheet } from "./PrintSheet";
+import { PROJECT } from "@/lib/project";
 import { SIZES, VARIANTS, buildMonolith, computeStats } from "@/lib/build";
 import { availableYears, syntheticYear } from "@/lib/github";
-import { GHOST_FINISH, finishById } from "@/lib/products";
+import { GHOST_PALETTE, paletteById } from "@/lib/products";
 import { initSound, play, setSoundEnabled, soundEnabled } from "@/lib/sound";
 import type { SizeId } from "@/lib/build";
 import type { ContributionYear, Stats, Variant } from "@/lib/types";
@@ -27,7 +29,7 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
   const [login, setLogin] = useState(initialLogin ?? "");
   const [year, setYear] = useState(initialYear ?? years[0]);
   const [variant, setVariant] = useState<Variant>("skyline");
-  const [finishId, setFinishId] = useState("signal");
+  const [paletteId, setPaletteId] = useState("signal");
   const [sizeId, setSizeId] = useState<SizeId>("shelf");
   const [data, setData] = useState<ContributionYear | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -36,6 +38,7 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
   const [error, setError] = useState<string | null>(null);
   const [spin, setSpin] = useState(true);
   const [sound, setSound] = useState(true);
+  const [printing, setPrinting] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [copied, setCopied] = useState(false);
   const runId = useRef(0);
@@ -46,7 +49,7 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
   }, []);
 
   const sizeMm = SIZES.find((s) => s.id === sizeId)?.mm ?? 180;
-  const finish = finishById(finishId);
+  const palette = paletteById(paletteId);
 
   // The idle backdrop is a real object, built from a fixed seed, so the landing
   // page shows the product rather than describing it.
@@ -174,8 +177,6 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, years, year, login, forge, reset]);
 
-  const stlHref = `/api/stl?login=${encodeURIComponent(login)}&year=${year}&variant=${variant}&mm=${sizeMm}`;
-
   async function share() {
     const url = `${window.location.origin}/s/${login}?year=${year}`;
     try {
@@ -196,7 +197,7 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
       <div className="absolute inset-0 z-0">
         <Scene
           mesh={activeMesh}
-          finish={isGhost ? GHOST_FINISH : finish}
+          finish={isGhost ? GHOST_PALETTE : palette}
           ghost={isGhost}
           revealToken={`${login}:${year}:${variant}`}
           spin={spin}
@@ -246,6 +247,15 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
               >
                 new
               </button>
+              <span aria-hidden className="text-edge">/</span>
+              <a
+                href={PROJECT.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-mute transition-colors duration-150 hover:text-fog"
+              >
+                source ↗
+              </a>
             </motion.div>
           )}
         </AnimatePresence>
@@ -271,12 +281,12 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
         }}
         variant={variant}
         onVariant={setVariant}
-        finish={finish}
-        onFinish={setFinishId}
+        palette={palette}
+        onPalette={setPaletteId}
         sizeId={sizeId}
         onSize={setSizeId}
         total={stats?.total ?? 0}
-        stlHref={stlHref}
+        onPrint={() => setPrinting(true)}
         onOrder={() => setOrdering(true)}
         spin={spin}
         onSpin={setSpin}
@@ -287,14 +297,30 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
         }}
       />
 
-      <OrderSheet
-        open={ordering}
-        onClose={() => setOrdering(false)}
-        login={login}
-        year={year}
-        variant={variant}
-        finish={finish}
-      />
+      {mesh && (
+        <>
+          <PrintSheet
+            open={printing}
+            onClose={() => setPrinting(false)}
+            login={login}
+            year={year}
+            variant={variant}
+            sizeMm={sizeMm}
+            paletteId={paletteId}
+            mesh={mesh}
+          />
+          <OrderSheet
+            open={ordering}
+            onClose={() => setOrdering(false)}
+            login={login}
+            year={year}
+            variant={variant}
+            sizeMm={sizeMm}
+            paletteId={paletteId}
+            mesh={mesh}
+          />
+        </>
+      )}
 
       <AnimatePresence>
         {phase === "idle" && (
@@ -305,7 +331,7 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4, delay: 0.3 }}
           >
-            <span>STL is free · the object is not</span>
+            <span>Open source · the files are free · print it yourself</span>
             <span className="hidden sm:inline">no account, no upload, no cookie banner</span>
           </motion.footer>
         )}

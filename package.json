@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:print": "./scripts/verify-print-kit.sh"
   },
   "dependencies": {
     "@react-three/drei": "10.7.7",
@@ -30,5 +31,11 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
+  },
+  "license": "MIT",
+  "description": "Turn a GitHub year into a printable object. Open source, files free.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/noluyorAbi/monolith.git"
   }
 }

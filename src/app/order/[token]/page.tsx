@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { findOrderByToken } from "@/lib/orders";
-import { formatPrice, productById } from "@/lib/products";
+import { formatPrice } from "@/lib/products";
+import { materialById } from "@/lib/print";
+import { PROJECT } from "@/lib/project";
 
 export const dynamic = "force-dynamic";
 
@@ -9,16 +11,14 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
   const { token } = await params;
   const order = await findOrderByToken(token);
   if (!order) notFound();
-  const product = productById(order.productId);
-
   const rows: [string, string][] = [
     ["Order", order.id],
     ["Object", `${order.login} ${order.year}`],
     ["Form", order.variant],
-    ["Finish", order.finish],
-    ["Edition", product?.name ?? order.productId],
-    ["Size", `${order.sizeMm}mm`],
-    ["Total", formatPrice(order.price)],
+    ["Size", `${order.sizeMm} mm`],
+    ["Filament", materialById(order.material).name],
+    ["Colours", String(order.slots)],
+    ["Paid", formatPrice(order.priceCents / 100)],
     ["Status", order.status.replace("_", " ")],
     ["Placed", new Date(order.createdAt).toISOString().slice(0, 16).replace("T", " ")],
   ];
@@ -40,7 +40,7 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
           <p className="mt-3 max-w-[42ch] text-[0.8rem] leading-relaxed text-mute">
             {order.status === "demo"
               ? "Demo order. Recorded in full, charged for nothing. Add a Stripe key to switch the shop on."
-              : `Locked in. ${product?.lead ?? "We will email you when it ships."}`}
+              : "On the plate. We will email you when it ships."}
           </p>
         </div>
 
@@ -60,6 +60,14 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
             className="hairline rounded-[5px] px-4 py-2.5 text-[0.66rem] tracking-[0.12em] uppercase text-fog transition-colors duration-150 hover:border-mute"
           >
             download stl
+          </a>
+          <a
+            href={PROJECT.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="hairline rounded-[5px] px-4 py-2.5 text-[0.66rem] tracking-[0.12em] uppercase text-mute transition-colors duration-150 hover:text-fog"
+          >
+            source ↗
           </a>
           <Link
             href={`/s/${order.login}?year=${order.year}`}

@@ -1,6 +1,6 @@
 import type { SizeId } from "./build";
 
-export interface Finish {
+export interface Palette {
   id: string;
   name: string;
   /** Plate / structural colour. */
@@ -18,7 +18,7 @@ export interface Finish {
   note?: string;
 }
 
-export const FINISHES: Finish[] = [
+export const PALETTES: Palette[] = [
   {
     id: "signal",
     name: "Signal",
@@ -93,7 +93,7 @@ export const FINISHES: Finish[] = [
  * palette, so the object reads as raw stock and the reveal is the moment it
  * gains colour.
  */
-export const GHOST_FINISH: Finish = {
+export const GHOST_PALETTE: Palette = {
   id: "ghost",
   name: "Ghost",
   base: "#0b0d0f",
@@ -104,79 +104,97 @@ export const GHOST_FINISH: Finish = {
   rim: 0.34,
 };
 
-export function finishById(id: string): Finish {
-  return FINISHES.find((f) => f.id === id) ?? FINISHES[0];
+export function paletteById(id: string): Palette {
+  return PALETTES.find((f) => f.id === id) ?? PALETTES[0];
 }
 
-export interface Product {
+export interface Size {
   id: string;
   name: string;
-  tagline: string;
-  size: SizeId;
-  sizeMm: number;
-  material: string;
-  /** Cents, EUR. */
-  price: number;
-  lead: string;
-  perks: string[];
-  featured?: boolean;
+  mm: number;
+  blurb: string;
 }
 
-export const PRODUCTS: Product[] = [
-  {
-    id: "print",
-    name: "Print",
-    tagline: "The one that lives next to your keyboard",
-    size: "desk",
-    sizeMm: 120,
-    material: "Matte PLA, 0.08mm layers",
-    price: 3900,
-    lead: "Ships in 5 days",
-    perks: ["120mm footprint", "Handle engraved in the plate", "Any finish", "Source STL included"],
-  },
-  {
-    id: "object",
-    name: "Object",
-    tagline: "Cast, sanded, and heavy enough to notice",
-    size: "shelf",
-    sizeMm: 180,
-    material: "Cast resin on a steel plate",
-    price: 8900,
-    lead: "Ships in 12 days",
-    perks: [
-      "180mm footprint",
-      "Weighted steel base",
-      "Serial number on the underside",
-      "Source STL included",
-    ],
-    featured: true,
-  },
-  {
-    id: "monument",
-    name: "Monument",
-    tagline: "For the year you will not shut up about",
-    size: "statement",
-    sizeMm: 260,
-    material: "Machined aluminium, bead blasted",
-    price: 24900,
-    lead: "Ships in 21 days",
-    perks: [
-      "260mm footprint",
-      "Solid aluminium, ~2.4kg",
-      "Numbered edition card",
-      "Source STL included",
-    ],
-  },
-];
+/**
+ * What it costs us to print one and put it in the post. Not a price list: the
+ * numbers below are the actual inputs, and the checkout shows them line by
+ * line. There is no margin in here on purpose. If you own a printer, the file
+ * is free and this page is pointless for you, which is the intended outcome.
+ */
+export const COST = {
+  /** Bambu's own list price, EUR per gram. */
+  filamentPerGram: 24.99 / 1000,
+  /** Electricity at 0.35 EUR/kWh plus machine depreciation over 3000 hours. */
+  machinePerHour: 0.37,
+  /** Box, corner foam, label. */
+  packaging: 1.8,
+  /** Twenty minutes of someone's time: plate prep, removal, inspection, packing. */
+  handling: 4.0,
+  /** Tool changes on a four colour print purge a lot of filament. */
+  multiColourPurge: 4.0,
+} as const;
 
-export function productById(id: string): Product | undefined {
-  return PRODUCTS.find((p) => p.id === id);
+export const SHIPPING = [
+  { id: "de", name: "Germany", price: 4.5 },
+  { id: "eu", name: "Europe", price: 7.0 },
+  { id: "world", name: "Rest of world", price: 14.0 },
+] as const;
+
+export type ShippingId = (typeof SHIPPING)[number]["id"];
+
+export function shippingById(id: string) {
+  return SHIPPING.find((s) => s.id === id) ?? SHIPPING[0];
 }
 
-export function formatPrice(cents: number): string {
+export interface QuoteLine {
+  label: string;
+  detail: string;
+  amount: number;
+}
+
+export interface Quote {
+  lines: QuoteLine[];
+  subtotal: number;
+  shipping: number;
+  total: number;
+}
+
+/** A quote built from this object's own geometry, not from a tier. */
+export function quote(
+  input: { grams: number; hours: number; slots: number },
+  shippingId: ShippingId,
+): Quote {
+  const lines: QuoteLine[] = [
+    {
+      label: "Filament",
+      detail: `${input.grams.toFixed(0)} g`,
+      amount: input.grams * COST.filamentPerGram,
+    },
+    {
+      label: "Machine time",
+      detail: `${input.hours.toFixed(1)} h`,
+      amount: input.hours * COST.machinePerHour,
+    },
+    { label: "Packaging", detail: "box and foam", amount: COST.packaging },
+    { label: "Handling", detail: "prep, removal, packing", amount: COST.handling },
+  ];
+  if (input.slots > 1) {
+    lines.push({
+      label: "Colour changes",
+      detail: `${input.slots} filaments, purge waste`,
+      amount: COST.multiColourPurge,
+    });
+  }
+  const subtotal = lines.reduce((a, l) => a + l.amount, 0);
+  const shipping = shippingById(shippingId).price;
+  return { lines, subtotal, shipping, total: Math.round((subtotal + shipping) * 2) / 2 };
+}
+
+export function formatPrice(euros: number): string {
   return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency: "EUR",
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(euros);
 }

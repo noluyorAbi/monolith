@@ -144,6 +144,7 @@ export class MeshBuilder {
       triangles: this.triangles,
       bounds: { min, max },
       size: { x: max[0] - min[0], y: max[1] - min[1], z: max[2] - min[2] },
+      print: { engravePixelMm: 0, gapMm: null },
     };
   }
 }

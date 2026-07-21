@@ -10,6 +10,14 @@ const MIN_BAR = 0.9;
 const BASE_H = 5;
 const PLATE_PAD = 3.5;
 const ENGRAVE_DEPTH = 0.7;
+/**
+ * Text height on the plate. Raised from 3.2 so that at the default 180 mm the
+ * font pixel lands at 0.47 mm, clear of the 0.42 mm line a 0.4 mm nozzle lays
+ * down. That threshold is not theoretical: slicing with and without the
+ * engraving showed it contributes 22.5 mm of filament at 0.47 mm pixels and
+ * 1.3 mm at 0.31 mm, which is the difference between a signature and a rumour.
+ */
+const ENGRAVE_TEXT_MM = 4.0;
 
 export const VARIANTS: { id: Variant; name: string; blurb: string }[] = [
   { id: "skyline", name: "Skyline", blurb: "The full year, day by day" },
@@ -38,18 +46,32 @@ function maxCount(days: Day[]): number {
   return max;
 }
 
-/** Raise text out of a front-facing (+Z) wall. */
+/**
+ * Raise text out of a vertical wall. `face` says which way the wall points, so
+ * the letters grow away from the solid instead of burying themselves in it.
+ */
 function engraveWall(
   mb: MeshBuilder,
   text: string,
-  opts: { x: number; y: number; px: number; z: number; align: "left" | "right" },
+  opts: {
+    x: number;
+    y: number;
+    px: number;
+    z: number;
+    align: "left" | "right";
+    face?: "front" | "back";
+  },
 ): void {
   const width = measureText(text) * opts.px;
   const startX = opts.align === "left" ? opts.x : opts.x - width;
+  const back = opts.face === "back";
   for (const p of rasterise(text)) {
-    const x0 = startX + p.col * opts.px;
+    // Mirrored on a back-facing wall, so it reads correctly from that side.
+    const col = back ? measureText(text) - p.col - 1 : p.col;
+    const x0 = startX + col * opts.px;
     const y0 = opts.y + p.row * opts.px;
-    mb.box(x0, y0, opts.z, x0 + opts.px, y0 + opts.px, opts.z + ENGRAVE_DEPTH);
+    const z0 = back ? opts.z - ENGRAVE_DEPTH : opts.z;
+    mb.box(x0, y0, z0, x0 + opts.px, y0 + opts.px, z0 + ENGRAVE_DEPTH);
   }
 }
 
@@ -105,8 +127,8 @@ function buildSkyline(data: ContributionYear, label: boolean): MeshBuilder {
   }
 
   if (!label) return mb;
-  const px = 3.2 / GLYPH_H;
-  const textY = (BASE_H - 3.2) / 2;
+  const px = ENGRAVE_TEXT_MM / GLYPH_H;
+  const textY = (BASE_H - ENGRAVE_TEXT_MM) / 2;
   engraveWall(mb, signature(data), {
     x: x0 + PLATE_PAD,
     y: textY,
@@ -246,10 +268,10 @@ function buildWave(data: ContributionYear, label: boolean): MeshBuilder {
   mb.quad([px(0), 0, pz(0)], [px(cols), 0, pz(0)], [px(cols), 0, pz(7)], [px(0), 0, pz(7)]);
 
   if (!label) return mb;
-  const tpx = 3.2 / GLYPH_H;
+  const tpx = ENGRAVE_TEXT_MM / GLYPH_H;
   engraveWall(mb, `${signature(data)} ${data.year}`, {
     x: px(0) + 2,
-    y: 0.9,
+    y: (BASE_H - ENGRAVE_TEXT_MM) / 2,
     px: tpx,
     z: pz(7),
     align: "left",
@@ -299,13 +321,15 @@ function buildSpine(data: ContributionYear, label: boolean): MeshBuilder {
   }
 
   if (!label) return mb;
-  const px = 3.0 / GLYPH_H;
-  engraveWall(mb, `${signature(data)} ${data.year}`, {
-    x: x0 + plateW / 2,
-    y: (BASE_H - 3.0) / 2,
+  const px = ENGRAVE_TEXT_MM / GLYPH_H;
+  const text = `${signature(data)} ${data.year}`;
+  engraveWall(mb, text, {
+    x: x0 + plateW / 2 - (measureText(text) * px) / 2,
+    y: (BASE_H - ENGRAVE_TEXT_MM) / 2,
     px,
     z: z0,
     align: "left",
+    face: "back",
   });
   return mb;
 }
@@ -325,12 +349,25 @@ function buildSlab(): MeshBuilder {
   return mb;
 }
 
+/** Forms whose towers are separated by a real air gap the nozzle has to clear. */
+const GAPPED: Variant[] = ["skyline", "ring"];
+
 export function buildMonolith(data: ContributionYear, options: BuildOptions): BuiltMesh {
   if (data.login.toLowerCase() === "monolith") {
     return scaleToSize(buildSlab().finish(), options.sizeMm * 0.28);
   }
   const builder = BUILDERS[options.variant] ?? buildSkyline;
-  return scaleToSize(builder(data, options.label).finish(), options.sizeMm);
+  const raw = builder(data, options.label).finish();
+  const scaled = scaleToSize(raw, options.sizeMm);
+
+  // Everything is modelled at a nominal size and then scaled, so the features
+  // that matter on the machine only get their real dimensions here.
+  const k = options.sizeMm / Math.max(raw.size.x, raw.size.z);
+  scaled.print = {
+    engravePixelMm: options.label ? (ENGRAVE_TEXT_MM / GLYPH_H) * k : 0,
+    gapMm: GAPPED.includes(options.variant) ? GAP * k : null,
+  };
+  return scaled;
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

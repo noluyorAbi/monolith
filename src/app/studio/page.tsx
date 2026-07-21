@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { STUDIO_COOKIE, studioEnv, verifyStudioSession } from "@/lib/admin";
 import { listOrders } from "@/lib/orders";
-import { formatPrice, productById } from "@/lib/products";
+import { formatPrice } from "@/lib/products";
+import { materialById } from "@/lib/print";
 import { ProductionTool } from "@/components/ProductionTool";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default async function Studio() {
   if (!(await verifyStudioSession(cookie, studioEnv(), Date.now()))) notFound();
 
   const orders = await listOrders();
-  const revenue = orders.filter((o) => o.status !== "demo").reduce((a, o) => a + o.price, 0);
+  const takings = orders.filter((o) => o.status !== "demo").reduce((a, o) => a + o.priceCents, 0) / 100;
 
   return (
     <main className="min-h-svh bg-void px-6 py-12">
@@ -32,7 +33,7 @@ export default async function Studio() {
               <span className="text-fog tabular-nums">{orders.length}</span> orders
             </span>
             <span>
-              <span className="text-fog tabular-nums">{formatPrice(revenue)}</span> booked
+              <span className="text-fog tabular-nums">{formatPrice(takings)}</span> at cost
             </span>
           </div>
         </header>
@@ -56,7 +57,7 @@ export default async function Studio() {
               <table className="w-full min-w-[54rem] text-left text-[0.72rem]">
                 <thead className="text-[0.55rem] tracking-[0.2em] uppercase text-dim">
                   <tr className="border-b border-edge">
-                    {["Order", "Handle", "Year", "Form", "Finish", "Edition", "Size", "Total", "Status", ""].map(
+                    {["Order", "Handle", "Year", "Form", "Filament", "Colours", "Size", "Total", "Status", ""].map(
                       (h) => (
                         <th key={h} className="px-3 py-2.5 font-normal">
                           {h}
@@ -76,10 +77,10 @@ export default async function Studio() {
                       <td className="px-3 py-2.5 text-fog">{o.login}</td>
                       <td className="px-3 py-2.5 tabular-nums text-mute">{o.year}</td>
                       <td className="px-3 py-2.5 text-mute">{o.variant}</td>
-                      <td className="px-3 py-2.5 text-mute">{o.finish}</td>
-                      <td className="px-3 py-2.5 text-mute">{productById(o.productId)?.name ?? o.productId}</td>
+                      <td className="px-3 py-2.5 text-mute">{materialById(o.material).name}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-mute">{o.slots}</td>
                       <td className="px-3 py-2.5 tabular-nums text-mute">{o.sizeMm}mm</td>
-                      <td className="px-3 py-2.5 tabular-nums text-fog">{formatPrice(o.price)}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-fog">{formatPrice(o.priceCents / 100)}</td>
                       <td className="px-3 py-2.5 text-mute">{o.status.replace("_", " ")}</td>
                       <td className="px-3 py-2.5">
                         <a

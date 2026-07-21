@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { SIZES, VARIANTS, type SizeId } from "@/lib/build";
-import { FINISHES, type Finish } from "@/lib/products";
+import { PALETTES, type Palette } from "@/lib/products";
 import type { Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
 
@@ -59,12 +59,12 @@ export interface DockProps {
   onYear: (y: number) => void;
   variant: Variant;
   onVariant: (v: Variant) => void;
-  finish: Finish;
-  onFinish: (id: string) => void;
+  palette: Palette;
+  onPalette: (id: string) => void;
   sizeId: SizeId;
   onSize: (id: SizeId) => void;
   total: number;
-  stlHref: string;
+  onPrint: () => void;
   onOrder: () => void;
   spin: boolean;
   onSpin: (next: boolean) => void;
@@ -139,10 +139,10 @@ export function Dock(props: DockProps) {
               ))}
             </Group>
 
-            <Group label="Finish">
-              {FINISHES.map((f) => {
+            <Group label="Colours">
+              {PALETTES.map((f) => {
                 const locked = f.unlockAt !== undefined && props.total < f.unlockAt;
-                const active = props.finish.id === f.id;
+                const active = props.palette.id === f.id;
                 return (
                   <button
                     key={f.id}
@@ -151,7 +151,7 @@ export function Dock(props: DockProps) {
                     disabled={locked}
                     onClick={() => {
                       play("step");
-                      props.onFinish(f.id);
+                      props.onPalette(f.id);
                     }}
                     className="relative grid h-7 w-7 place-items-center rounded-full border border-line transition-all duration-150 hover:border-edge active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-40"
                   >
@@ -211,23 +211,25 @@ export function Dock(props: DockProps) {
               >
                 {props.sound ? "◉" : "◎"}
               </button>
-              <a
-                href={props.stlHref}
-                download
-                onClick={() => play("lock")}
-                className="hairline rounded-[5px] px-3 py-2 text-[0.68rem] tracking-[0.12em] uppercase text-fog transition-colors duration-150 hover:border-mute active:scale-[0.97]"
+              <button
+                type="button"
+                onClick={() => {
+                  play("tick");
+                  props.onOrder();
+                }}
+                className="hairline rounded-[5px] px-3 py-2 text-[0.68rem] tracking-[0.12em] uppercase text-mute transition-colors duration-150 hover:border-mute hover:text-fog active:scale-[0.97]"
               >
-                .stl
-              </a>
+                Print for me
+              </button>
               <button
                 type="button"
                 onClick={() => {
                   play("lock");
-                  props.onOrder();
+                  props.onPrint();
                 }}
                 className="rounded-[5px] bg-accent px-4 py-2 text-[0.68rem] font-medium tracking-[0.12em] uppercase text-void transition-transform duration-150 hover:brightness-110 active:scale-[0.97]"
               >
-                Order object
+                Get the files
               </button>
             </div>
           </div>
