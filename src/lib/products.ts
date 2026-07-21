@@ -1,5 +1,3 @@
-import type { SizeId } from "./build";
-
 export interface Palette {
   id: string;
   name: string;

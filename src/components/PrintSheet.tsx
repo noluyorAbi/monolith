@@ -9,6 +9,7 @@ import { PROJECT } from "@/lib/project";
 import { formatPrice } from "@/lib/products";
 import type { BuiltMesh, Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 const SOFT = [0.16, 1, 0.3, 1] as const;
@@ -63,15 +64,7 @@ export function PrintSheet(props: PrintSheetProps) {
   const [materialId, setMaterialId] = useState("pla");
   const [qualityId, setQualityId] = useState("standard");
   const [slots, setSlots] = useState<ColourSlots>(1);
-  const [wide, setWide] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 640px)");
-    const sync = () => setWide(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
+  const wide = useMediaQuery("(min-width: 640px)");
 
   useEffect(() => {
     if (!props.open) return;
@@ -107,15 +100,21 @@ export function PrintSheet(props: PrintSheetProps) {
   const fits =
     props.mesh.size.x + 8 <= printer.bedMm[0] && props.mesh.size.z + 8 <= printer.bedMm[1];
 
-  // Bambu Studio registers bambustudioopen: on install, which is how the
-  // "open in" buttons on model sites work. Verified against the app's own
-  // Info.plist; bambustudio: resolves to nothing.
-  const [origin, setOrigin] = useState("");
-  useEffect(() => setOrigin(window.location.origin), []);
-  const modelUrl = `${origin}/api/3mf?${query}`;
-  const bambuHref = `bambustudioopen://open?file=${encodeURIComponent(modelUrl)}&name=${encodeURIComponent(
-    `monolith-${props.login}-${props.year}.3mf`,
-  )}`;
+  /**
+   * Bambu Studio registers bambustudioopen: on install, which is how the
+   * "open in" buttons on model sites work. Verified against the app's own
+   * Info.plist; bambustudio: resolves to nothing.
+   *
+   * Built when clicked rather than during render: it needs an absolute URL,
+   * because Bambu fetches the model itself, and the origin is only knowable in
+   * the browser.
+   */
+  function openInBambu() {
+    play("lock");
+    const model = `${window.location.origin}/api/3mf?${query}`;
+    const name = `monolith-${props.login}-${props.year}.3mf`;
+    window.location.href = `bambustudioopen://open?file=${encodeURIComponent(model)}&name=${encodeURIComponent(name)}`;
+  }
 
   return (
     <AnimatePresence>
@@ -312,14 +311,14 @@ export function PrintSheet(props: PrintSheetProps) {
                       Orca preset that inherits from your stock profile, and a text card with every
                       setting and why.
                     </p>
-                    <a
-                      href={bambuHref}
-                      onClick={() => play("lock")}
+                    <button
+                      type="button"
+                      onClick={openInBambu}
                       className="hairline flex items-center justify-center gap-2 rounded-[5px] px-4 py-2.5 text-center text-[0.68rem] tracking-[0.12em] uppercase text-fog transition-colors duration-150 hover:border-mute active:scale-[0.98]"
                     >
                       Open in Bambu Studio
                       <span aria-hidden className="text-dim">↗</span>
-                    </a>
+                    </button>
                     <p className="-mt-1 text-[0.58rem] leading-relaxed text-dim">
                       Hands the model straight to Bambu Studio if you have it installed. The
                       preset is not part of that handoff, so import it once from the kit.

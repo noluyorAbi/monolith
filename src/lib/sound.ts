@@ -14,14 +14,31 @@ let enabled = true;
 
 const STORAGE_KEY = "monolith:sound";
 
-export function initSound(): void {
-  if (typeof window === "undefined") return;
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (stored !== null) enabled = stored === "on";
+const listeners = new Set<() => void>();
+let hydrated = false;
+
+/**
+ * The preference lives in localStorage, which React cannot see. Exposing it as
+ * a subscribable store lets a component read it with useSyncExternalStore
+ * instead of setting state from an effect and re-rendering to correct itself.
+ */
+export function subscribeSound(listener: () => void): () => void {
+  if (!hydrated && typeof window !== "undefined") {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored !== null) enabled = stored === "on";
+    hydrated = true;
+  }
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 export function soundEnabled(): boolean {
   return enabled;
+}
+
+/** Sound is on by default, and the server has no localStorage to say otherwise. */
+export function soundServerSnapshot(): boolean {
+  return true;
 }
 
 export function setSoundEnabled(next: boolean): void {
@@ -29,6 +46,7 @@ export function setSoundEnabled(next: boolean): void {
   if (typeof window !== "undefined") {
     window.localStorage.setItem(STORAGE_KEY, next ? "on" : "off");
   }
+  for (const listener of listeners) listener();
   if (next) play("tick");
 }
 

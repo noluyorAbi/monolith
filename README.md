@@ -15,7 +15,6 @@
 <a href="https://github.com/noluyorAbi/monolith/stargazers"><img src="https://img.shields.io/github/stars/noluyorAbi/monolith?style=for-the-badge&logo=github&logoColor=white&label=stars&labelColor=0b0b0b&color=d7ff45" alt="stars"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm_Noncommercial-3a3a3a?style=for-the-badge&labelColor=0b0b0b" alt="PolyForm Noncommercial 1.0.0"></a>
 <a href="#verified-against-a-real-slicer-not-a-spec-from-memory"><img src="https://img.shields.io/badge/slicer_verified-Bambu_Studio-d7ff45?style=for-the-badge&labelColor=0b0b0b" alt="verified against Bambu Studio"></a>
-<a href="https://github.com/noluyorAbi/monolith/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/noluyorAbi/monolith/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ci&labelColor=0b0b0b" alt="ci"></a>
 
 <br>
 

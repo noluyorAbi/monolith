@@ -6,8 +6,6 @@ import { PALETTES, type Palette } from "@/lib/products";
 import type { Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
 
-const EASE = [0.16, 1, 0.3, 1] as const;
-
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex shrink-0 flex-col gap-2">

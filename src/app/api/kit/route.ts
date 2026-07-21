@@ -4,7 +4,6 @@ import { SIZES, VARIANTS, buildMonolith } from "@/lib/build";
 import { splitByLevel, wholeObject } from "@/lib/parts";
 import { buildKit } from "@/lib/kit";
 import { materialById, printerById, qualityById } from "@/lib/print";
-import { paletteById } from "@/lib/products";
 import { PROJECT } from "@/lib/project";
 import type { ColourSlots } from "@/lib/slots";
 import type { Variant } from "@/lib/types";
@@ -21,7 +20,6 @@ export async function GET(request: Request) {
   const printer = printerById(url.searchParams.get("printer") ?? "p1s");
   const material = materialById(url.searchParams.get("material") ?? "pla");
   const quality = qualityById(url.searchParams.get("quality") ?? "standard");
-  const finish = paletteById(url.searchParams.get("finish") ?? "signal");
   const slotsParam = Number(url.searchParams.get("slots"));
   const slots = ([1, 2, 4].includes(slotsParam) ? slotsParam : 1) as ColourSlots;
 
@@ -35,10 +33,6 @@ export async function GET(request: Request) {
     const split = splitByLevel(mesh);
     const parts = split.every((p) => p.closed) ? split : [wholeObject(mesh)];
 
-    const colours = [
-      { level: -1, hex: finish.base },
-      ...finish.ramp.map((hex, i) => ({ level: i, hex })),
-    ];
 
     const file = buildKit(parts, mesh, {
       login: data.login,

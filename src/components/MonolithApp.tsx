@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "motion/react";
 import { Prompt } from "./Prompt";
@@ -9,10 +9,10 @@ import { Hud } from "./Hud";
 import { Dock } from "./Dock";
 import { PrintSheet } from "./PrintSheet";
 import { PROJECT } from "@/lib/project";
-import { SIZES, VARIANTS, buildMonolith, computeStats } from "@/lib/build";
+import { SIZES, VARIANTS, buildMonolith } from "@/lib/build";
 import { availableYears, syntheticYear } from "@/lib/github";
 import { GHOST_PALETTE, paletteById } from "@/lib/products";
-import { initSound, play, setSoundEnabled, soundEnabled } from "@/lib/sound";
+import { play, setSoundEnabled, soundEnabled, soundServerSnapshot, subscribeSound } from "@/lib/sound";
 import type { SizeId } from "@/lib/build";
 import type { ContributionYear, Stats, Variant } from "@/lib/types";
 
@@ -36,15 +36,10 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [spin, setSpin] = useState(true);
-  const [sound, setSound] = useState(true);
+  const sound = useSyncExternalStore(subscribeSound, soundEnabled, soundServerSnapshot);
   const [printing, setPrinting] = useState(false);
   const [copied, setCopied] = useState(false);
   const runId = useRef(0);
-
-  useEffect(() => {
-    initSound();
-    setSound(soundEnabled());
-  }, []);
 
   const sizeMm = SIZES.find((s) => s.id === sizeId)?.mm ?? 180;
   const palette = paletteById(paletteId);
@@ -135,11 +130,16 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
     [variant, sizeMm],
   );
 
+  // Deep-link boot. The guard is what makes this run once, rather than an
+  // empty dependency list that lies about what the effect reads: `forge` is
+  // rebuilt whenever the form or size changes, and without the ref a shared
+  // link would rebuild itself every time you touched a control.
+  const booted = useRef(false);
   useEffect(() => {
-    if (initialLogin) void forge(initialLogin, initialYear ?? years[0]);
-    // Deliberately runs once: this is the deep-link boot, not a reactive rebuild.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (booted.current || !initialLogin) return;
+    booted.current = true;
+    void forge(initialLogin, initialYear ?? years[0]);
+  }, [initialLogin, initialYear, years, forge]);
 
   const reset = useCallback(() => {
     runId.current++;
@@ -288,10 +288,7 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
         spin={spin}
         onSpin={setSpin}
         sound={sound}
-        onSound={(next) => {
-          setSoundEnabled(next);
-          setSound(next);
-        }}
+        onSound={setSoundEnabled}
       />
 
       {mesh && (
