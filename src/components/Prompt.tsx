@@ -90,19 +90,23 @@ export function Prompt({
   onSubmit,
   error,
   hidden,
+  /** Handed up so the story's closing call can put the caret back in here. */
+  inputRef,
 }: {
   onSubmit: (login: string) => void;
   error: string | null;
   hidden: boolean;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const ownRef = useRef<HTMLInputElement>(null);
+  const field = inputRef ?? ownRef;
   const hint = useTypedHint(!hidden);
 
   useEffect(() => {
-    if (!hidden) inputRef.current?.focus();
-  }, [hidden]);
+    if (!hidden) field.current?.focus();
+  }, [hidden, field]);
 
   const clean = normaliseLogin(value);
   const valid = LOGIN_RE.test(clean);
@@ -168,7 +172,7 @@ export function Prompt({
         <div className="flex items-baseline gap-0 text-[clamp(1.05rem,3.4vw,1.6rem)]">
           <span className="select-none text-dim">github.com/</span>
           <input
-            ref={inputRef}
+            ref={field}
             value={value}
             onChange={(e) => {
               const next = e.target.value;

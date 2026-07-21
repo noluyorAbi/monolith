@@ -79,12 +79,12 @@ function SoftShadow({ width, depth, y }: { width: number; depth: number; y: numb
 
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]} renderOrder={-1}>
-      <planeGeometry args={[width * 1.55, depth * 2.6]} />
+      <planeGeometry args={[width * 1.2, depth * 1.7]} />
       <meshBasicMaterial
         color="#000000"
         alphaMap={texture}
         transparent
-        opacity={0.8}
+        opacity={0.58}
         depthWrite={false}
       />
     </mesh>

@@ -15,9 +15,10 @@ import { Forge, type ForgeStep } from "./Forge";
 import { Hud } from "./Hud";
 import { Dock } from "./Dock";
 import { PrintSheet } from "./PrintSheet";
+import { Story } from "./Story";
 import { PROJECT } from "@/lib/project";
 import { VARIANTS, buildMonolith, sizeById } from "@/lib/build";
-import { SELECTABLE_YEARS, availableYears, syntheticYear } from "@/lib/contributions";
+import { SELECTABLE_YEARS, availableYears, yearFromDays } from "@/lib/contributions";
 import { AMBIENT_PALETTE, DEFAULT_PALETTE_ID, paletteById } from "@/lib/palettes";
 import {
   play,
@@ -28,7 +29,8 @@ import {
 } from "@/lib/sound";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import type { SizeId } from "@/lib/build";
-import type { BuiltMesh, ContributionYear, Stats, Variant } from "@/lib/types";
+import type { BuiltMesh, ContributionYear, Day, Stats, Variant } from "@/lib/types";
+import frozen from "../../data/contributions-2025.json";
 
 const Scene = dynamic(() => import("./Scene"), { ssr: false });
 
@@ -66,6 +68,12 @@ export function MonolithApp({
   const [copied, setCopied] = useState(false);
   /** Whether the object has been taken hold of. The hint is owed until it is. */
   const [turned, setTurned] = useState(false);
+  /** Whether the page has been scrolled at all. The cue is owed until it has. */
+  const [scrolled, setScrolled] = useState(false);
+  /** What the story has told the idle object to be. */
+  const [storyVariant, setStoryVariant] = useState<Variant>("skyline");
+  const [storyPaletteId, setStoryPaletteId] = useState(AMBIENT_PALETTE.id);
+  const promptInput = useRef<HTMLInputElement>(null);
   /**
    * The mesh the forge already built, kept so the render does not generate the
    * identical object a second time. State rather than a ref: reading a ref
@@ -82,14 +90,34 @@ export function MonolithApp({
   const sizeMm = sizeById(sizeId).mm;
   const palette = paletteById(paletteId);
 
-  // The idle backdrop is a real object, built from a fixed seed, so the landing
-  // page shows the product rather than describing it.
-  const ghost = useMemo(() => syntheticYear("skyline", years[0]), [years]);
+  // The object on the landing page is a measured year, the same frozen 2025 the
+  // banner, the share card and the calibration test all draw. An invented year
+  // came out about four times denser than a real one, which put a print time
+  // and a filament weight on the page that no year would ever produce.
+  const ghost = useMemo(
+    () => yearFromDays(frozen.login, frozen.year, frozen.days as Day[]),
+    [],
+  );
   const ghostMesh = useMemo(
     () =>
-      buildMonolith(ghost, { variant: "skyline", sizeMm: 180, label: false }),
-    [ghost],
+      buildMonolith(ghost, { variant: storyVariant, sizeMm: 180, label: false }),
+    [ghost, storyVariant],
   );
+
+  // The story's finish is a real palette worn at the landing's lower glow, so
+  // stepping through the finishes changes the object's colour and nothing else.
+  const ambientFinish = useMemo(
+    () =>
+      storyPaletteId === AMBIENT_PALETTE.id
+        ? AMBIENT_PALETTE
+        : { ...paletteById(storyPaletteId), glow: AMBIENT_PALETTE.glow, rim: AMBIENT_PALETTE.rim },
+    [storyPaletteId],
+  );
+
+  const onStoryState = useCallback((next: { variant: Variant; paletteId: string }) => {
+    setStoryVariant(next.variant);
+    setStoryPaletteId(next.paletteId);
+  }, []);
 
   const mesh = useMemo(() => {
     if (!data) return null;
@@ -109,6 +137,12 @@ export function MonolithApp({
       const id = ++runId.current;
       const alive = () => runId.current === id;
       setError(null);
+      // A build owns the whole screen, so the page goes back to the top and the
+      // story hands the object back. Without this, a handle typed after
+      // scrolling would build behind a page that was scrolled past it.
+      window.scrollTo({ top: 0, behavior: "auto" });
+      setStoryVariant("skyline");
+      setStoryPaletteId(AMBIENT_PALETTE.id);
       setPhase("forging");
       setSteps([{ label: "resolving", value: handle }]);
       setProgress(0.06);
@@ -273,6 +307,13 @@ export function MonolithApp({
   const activeMesh = mesh ?? ghostMesh;
   const isGhost = phase !== "live" || !mesh;
 
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   // Two columns from the width the headline stops wrapping at. Below it the
   // object goes back to sitting under the copy, because a 34 rem column beside
   // an object on a phone leaves neither of them readable.
@@ -280,13 +321,22 @@ export function MonolithApp({
 
   return (
     <MotionConfig reducedMotion="user">
-      <main className="relative h-svh w-full overflow-hidden bg-void">
-        <div className="absolute inset-0 z-0" onPointerDown={() => setTurned(true)}>
+      <main
+        className={
+          phase === "idle"
+            ? "relative w-full bg-void"
+            : "relative h-svh w-full overflow-hidden bg-void"
+        }
+      >
+        {/* Fixed rather than absolute: the story scrolls past a stage that
+          stays put, which is what makes the object read as one object being
+          shown four ways rather than four pictures going by. */}
+        <div className="fixed inset-0 z-0" onPointerDown={() => setTurned(true)}>
           <Scene
             mesh={activeMesh}
-            finish={isGhost ? AMBIENT_PALETTE : palette}
+            finish={isGhost ? ambientFinish : palette}
             ghost={isGhost}
-            revealToken={`${login}:${year}:${variant}`}
+            revealToken={`${login}:${year}:${isGhost ? storyVariant : variant}`}
             spin={spin && !reduceMotion}
             onInteract={() => setSpin(false)}
             shiftX={twoColumn ? 0.22 : 0}
@@ -296,8 +346,8 @@ export function MonolithApp({
           />
         </div>
 
-        <div className="field pointer-events-none absolute inset-0 z-10 opacity-40" />
-        <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_58%,rgba(6,7,8,0.55)_100%)]" />
+        <div className="field pointer-events-none fixed inset-0 z-10 opacity-40" />
+        <div className="pointer-events-none fixed inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_58%,rgba(6,7,8,0.55)_100%)]" />
 
         {/* The object is free to drift anywhere behind the readouts, so the
           readouts carry their own darkness rather than trusting whatever
@@ -306,10 +356,10 @@ export function MonolithApp({
           scrims darken the left column and the top strip the wordmark sits in.
           Narrow, the object is what occupies the top of the screen, and the
           same two scrims would be painting it out. */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-[15] h-[16%] bg-gradient-to-b from-void/85 via-void/30 to-transparent min-[900px]:h-[34%] min-[900px]:from-void min-[900px]:via-void/55" />
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-[15] hidden w-[min(26rem,60vw)] bg-gradient-to-r from-void via-void/45 to-transparent min-[900px]:block" />
+        <div className="pointer-events-none fixed inset-x-0 top-0 z-[15] h-[16%] bg-gradient-to-b from-void/85 via-void/30 to-transparent min-[900px]:h-[34%] min-[900px]:from-void min-[900px]:via-void/55" />
+        <div className="pointer-events-none fixed inset-y-0 left-0 z-[15] hidden w-[min(26rem,60vw)] bg-gradient-to-r from-void via-void/45 to-transparent min-[900px]:block" />
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between p-5 sm:p-7">
+        <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex items-start justify-between p-5 sm:p-7">
           <button
             type="button"
             onClick={reset}
@@ -364,11 +414,16 @@ export function MonolithApp({
           </AnimatePresence>
         </div>
 
-        <Prompt
-          onSubmit={(handle) => forge(handle, year)}
-          error={error}
-          hidden={phase !== "idle"}
-        />
+        {/* The hero owns exactly one screen. Everything in it is positioned
+          against this section rather than against the page, so it leaves when
+          the story arrives instead of following it down. */}
+        <section className="relative h-svh w-full snap-start">
+          <Prompt
+            onSubmit={(handle) => forge(handle, year)}
+            error={error}
+            hidden={phase !== "idle"}
+            inputRef={promptInput}
+          />
 
         {/* The object turns under the pointer, which is worth nothing if nobody
           learns it. One line, under the object's own column, gone for good the
@@ -393,6 +448,74 @@ export function MonolithApp({
             </motion.p>
           )}
         </AnimatePresence>
+
+          <AnimatePresence>
+            {phase === "idle" && (
+              <motion.button
+                type="button"
+                onClick={() =>
+                  window.scrollTo({
+                    top: window.innerHeight,
+                    behavior: reduceMotion ? "auto" : "smooth",
+                  })
+                }
+                className="absolute bottom-[3.4rem] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 text-[0.56rem] tracking-[0.24em] uppercase text-dim transition-colors duration-150 hover:text-fog"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: scrolled ? 0 : 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.45, delay: scrolled ? 0 : 1.1, ease: [0.16, 1, 0.3, 1] }}
+                aria-hidden={scrolled}
+                inert={scrolled}
+              >
+                <motion.span
+                  aria-hidden
+                  animate={reduceMotion ? {} : { y: [0, 3, 0] }}
+                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  ↓
+                </motion.span>
+                what you get
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {phase === "idle" && (
+              <motion.footer
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-between px-5 pb-5 text-[0.58rem] tracking-[0.18em] uppercase text-dim sm:px-7 sm:pb-7"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4, delay: 0.3 }}
+              >
+                <span className="hidden sm:inline">
+                  Source available · the files are free · print it yourself
+                </span>
+                <span className="sm:hidden">The files are free</span>
+                <a
+                  href={PROJECT.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="pointer-events-auto hidden transition-colors duration-150 hover:text-fog sm:inline"
+                >
+                  github.com/{PROJECT.repo} ↗
+                </a>
+              </motion.footer>
+            )}
+          </AnimatePresence>
+        </section>
+
+        {phase === "idle" && (
+          <Story
+            mesh={ghostMesh}
+            state={{ variant: storyVariant, paletteId: storyPaletteId }}
+            onState={onStoryState}
+            onTop={() => {
+              window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+              promptInput.current?.focus({ preventScroll: true });
+            }}
+          />
+        )}
 
         <Forge
           steps={steps}
@@ -442,27 +565,6 @@ export function MonolithApp({
           </>
         )}
 
-        <AnimatePresence>
-          {phase === "idle" && (
-            <motion.footer
-              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-between px-5 pb-5 text-[0.58rem] tracking-[0.18em] uppercase text-dim sm:px-7 sm:pb-7"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-            >
-              <span>Source available · the files are free · print it yourself</span>
-              <a
-                href={PROJECT.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="pointer-events-auto hidden transition-colors duration-150 hover:text-fog sm:inline"
-              >
-                github.com/{PROJECT.repo} ↗
-              </a>
-            </motion.footer>
-          )}
-        </AnimatePresence>
       </main>
     </MotionConfig>
   );

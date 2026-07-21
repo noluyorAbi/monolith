@@ -137,6 +137,16 @@
   animation: rise-in 0.44s var(--ease-out-soft) both;
 }
 
+/* On a phone the object owns the top of the screen and the story's copy the
+   bottom, which only holds if a panel is what you are looking at rather than
+   the seam between two. Proximity rather than mandatory: a deliberate scroll
+   past three panels is still allowed to overshoot. */
+@media (max-width: 899px) {
+  html {
+    scroll-snap-type: y proximity;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
