@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+@theme {
+  --color-void: #060708;
+  --color-ink: #0b0c0e;
+  --color-fog: #ecece9;
+  --color-mute: #70757c;
+  --color-dim: #43484e;
+  --color-line: #1a1d20;
+  --color-accent: #d7ff45;
+  --color-accent-dim: #8ba32c;
+  --color-danger: #ff6b4a;
+
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: var(--font-grotesk), var(--font-jetbrains), sans-serif;
+
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-strong: cubic-bezier(0.4, 0, 1, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    background: var(--color-void);
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--color-void);
+    color: var(--color-fog);
+    font-family: var(--font-mono);
+    font-feature-settings: "ss01", "cv01", "zero";
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: #000;
+  }
+
+  input {
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: inherit;
+    font: inherit;
+  }
+
+  input::placeholder {
+    color: var(--color-dim);
+  }
+
+  button {
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+  }
+
+  ::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border-radius: 99px;
+  }
+}
+
+@utility hairline {
+  border: 1px solid var(--color-line);
+}
+
+/* A faint stippled field behind the whole product, so pure black never reads
+   as an unpainted canvas. */
+@utility field {
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.055) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+@keyframes caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+@utility caret {
+  animation: caret 1.05s steps(1, end) infinite;
+}
+
+@utility rise {
+  animation: rise-in 0.44s var(--ease-out-soft) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
