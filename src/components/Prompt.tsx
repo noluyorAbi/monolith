@@ -11,15 +11,28 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 /** Real accounts, so the example is something you can actually press. */
 const EXAMPLES = ["noluyorAbi", "mvritz"];
 
-const TYPE_MS = 90;
-const DELETE_MS = 45;
-const HOLD_MS = 1800;
+/** Typing. Averages, because a fixed interval reads as a machine. */
+const TYPE_MS = 92;
+const TYPE_JITTER = 58;
+/** Roughly one keystroke in eight lands after a beat of thought. */
+const PAUSE_CHANCE = 0.13;
+const PAUSE_MS = 210;
+
+/** Deleting. A backspace starts deliberate and runs away with itself. */
+const DELETE_SLOW_MS = 125;
+const DELETE_FAST_MS = 32;
+
+const HOLD_FULL_MS = 2000;
+const HOLD_EMPTY_MS = 480;
 
 /**
  * Types an example handle into the placeholder, holds it, deletes it and moves
  * to the next. An empty box does not tell you what belongs in it; watching one
  * fill itself in does, without spending the field, which stays yours to type
  * into the moment you touch it.
+ *
+ * The timings are jittered rather than fixed. At a constant interval the eye
+ * reads a marquee; at a varying one it reads someone typing.
  */
 function useTypedHint(active: boolean): string {
   const [shown, setShown] = useState("");
@@ -32,6 +45,11 @@ function useTypedHint(active: boolean): string {
     let count = 0;
     let deleting = false;
 
+    const typeDelay = () =>
+      TYPE_MS +
+      (Math.random() - 0.4) * TYPE_JITTER +
+      (Math.random() < PAUSE_CHANCE ? PAUSE_MS : 0);
+
     const tick = () => {
       const target = EXAMPLES[word];
       if (!deleting) {
@@ -39,19 +57,25 @@ function useTypedHint(active: boolean): string {
         setShown(target.slice(0, count));
         if (count === target.length) {
           deleting = true;
-          timer = window.setTimeout(tick, HOLD_MS);
+          timer = window.setTimeout(tick, HOLD_FULL_MS);
           return;
         }
-        timer = window.setTimeout(tick, TYPE_MS);
+        timer = window.setTimeout(tick, typeDelay());
         return;
       }
+
+      // Accelerating backspace: slowest at the first character removed,
+      // fastest as the field empties.
+      const left = count / target.length;
       count -= 1;
       setShown(target.slice(0, count));
       if (count === 0) {
         deleting = false;
         word = (word + 1) % EXAMPLES.length;
+        timer = window.setTimeout(tick, HOLD_EMPTY_MS);
+        return;
       }
-      timer = window.setTimeout(tick, count === 0 ? 420 : DELETE_MS);
+      timer = window.setTimeout(tick, DELETE_FAST_MS + (DELETE_SLOW_MS - DELETE_FAST_MS) * left);
     };
 
     timer = window.setTimeout(tick, 700);
@@ -104,19 +128,38 @@ export function Prompt({
       // invisible input inside an aria-hidden subtree.
       inert={hidden}
     >
-      <motion.h1
-        className="mb-10 max-w-[22ch] text-center font-[family-name:var(--font-display)] text-[clamp(1.6rem,4.4vw,2.9rem)] leading-[1.08] tracking-[-0.03em] text-fog"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: EASE, delay: 0.05 }}
-      >
-        Your commit year,
-        <br />
-        <span className="text-mute">cast as an object.</span>
-      </motion.h1>
+      {/* One column, one alignment axis. The headline used to be centred over a
+        left aligned field, which left the two reading as separate screens. */}
+      <div className="relative w-full max-w-[min(36rem,88vw)]">
+        {/* The object is free to drift under this copy, so the copy carries its
+          own darkness. A soft ellipse rather than a panel, so there is no edge
+          to notice. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -inset-x-16 -inset-y-12 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(6,7,8,0.94)_38%,rgba(6,7,8,0.62)_66%,transparent_100%)]"
+        />
+        <motion.p
+          className="mb-5 text-[0.62rem] tracking-[0.24em] uppercase text-dim"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: EASE }}
+        >
+          A year of commits, as a printable object
+        </motion.p>
+
+        <motion.h1
+          className="mb-9 font-[family-name:var(--font-display)] text-[clamp(1.9rem,5.2vw,3.1rem)] leading-[1.04] tracking-[-0.035em] text-fog"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: EASE, delay: 0.05 }}
+        >
+          Your commit year,
+          <br />
+          <span className="text-mute">cast as an object.</span>
+        </motion.h1>
 
       <motion.div
-        className="pointer-events-auto w-full max-w-[min(34rem,88vw)]"
+        className="pointer-events-auto w-full"
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: EASE, delay: 0.14 }}
@@ -136,7 +179,10 @@ export function Prompt({
             }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
-            placeholder={hint ? `${hint}\u2588` : "handle"}
+            // Between two examples the hint is empty for a beat. Falling back
+            // to the word "handle" there made it look like a third example
+            // being typed, so the empty beat shows only the cursor.
+            placeholder={`${hint}\u2588`}
             spellCheck={false}
             autoComplete="off"
             autoCapitalize="off"
@@ -223,24 +269,29 @@ export function Prompt({
             )}
           </AnimatePresence>
         </div>
-        <motion.ul
-          className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[0.62rem] tracking-[0.14em] uppercase text-dim sm:justify-start"
+        <motion.div
+          className="mt-9 flex flex-col gap-3 border-t border-line pt-5"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: EASE, delay: 0.28 }}
         >
-          {[
-            "3MF, STL and a slicer preset",
-            "no account, no upload",
-            "source available, noncommercial",
-          ].map((item) => (
-            <li key={item} className="flex items-center gap-2">
-              <span aria-hidden className="h-1 w-1 rounded-full bg-accent" />
-              {item}
-            </li>
-          ))}
-        </motion.ul>
+          <ul className="flex flex-wrap gap-x-5 gap-y-2 text-[0.62rem] tracking-[0.14em] uppercase text-dim">
+            {["3MF, STL and a slicer preset", "no account, no upload", "free"].map((item) => (
+              <li key={item} className="flex items-center gap-2">
+                <span aria-hidden className="h-1 w-1 rounded-full bg-accent" />
+                {item}
+              </li>
+            ))}
+          </ul>
+          {/* The numbers the print sheet reports for the default object, so the
+            promise on the landing is the one the download keeps. */}
+          <p className="text-[0.72rem] leading-relaxed text-mute">
+            A 180 mm shelf piece is about six hours on a stock Bambu profile and
+            roughly one euro of filament.
+          </p>
+        </motion.div>
       </motion.div>
+      </div>
     </motion.div>
   );
 }
