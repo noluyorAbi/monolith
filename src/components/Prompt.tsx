@@ -118,7 +118,7 @@ export function Prompt({
 
   return (
     <motion.div
-      className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center px-6"
+      className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-end px-6 pb-[14vh] min-[900px]:items-start min-[900px]:justify-center min-[900px]:px-[max(3rem,6vw)] min-[900px]:pb-0"
       animate={{ opacity: hidden ? 0 : 1, filter: hidden ? "blur(6px)" : "blur(0px)" }}
       transition={{ duration: hidden ? 0.32 : 0.5, ease: EASE }}
       style={{ pointerEvents: hidden ? "none" : undefined }}
@@ -130,13 +130,14 @@ export function Prompt({
     >
       {/* One column, one alignment axis. The headline used to be centred over a
         left aligned field, which left the two reading as separate screens. */}
-      <div className="relative w-full max-w-[min(36rem,88vw)]">
-        {/* The object is free to drift under this copy, so the copy carries its
-          own darkness. A soft ellipse rather than a panel, so there is no edge
-          to notice. */}
+      <div className="relative w-full max-w-[min(36rem,88vw)] min-[900px]:max-w-[34rem]">
+        {/* On a narrow screen the object still passes under this copy, so the
+          copy carries its own darkness. A soft ellipse rather than a panel, so
+          there is no edge to notice. Wide, the object has its own column and
+          the scrim would only grey out the page for nothing. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute -inset-x-16 -inset-y-12 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(6,7,8,0.94)_38%,rgba(6,7,8,0.62)_66%,transparent_100%)]"
+          className="pointer-events-none absolute -inset-x-16 -inset-y-12 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(6,7,8,0.94)_38%,rgba(6,7,8,0.62)_66%,transparent_100%)] min-[900px]:opacity-45"
         />
         <motion.p
           className="mb-5 text-[0.62rem] tracking-[0.24em] uppercase text-dim"

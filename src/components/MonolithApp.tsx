@@ -18,7 +18,7 @@ import { PrintSheet } from "./PrintSheet";
 import { PROJECT } from "@/lib/project";
 import { VARIANTS, buildMonolith, sizeById } from "@/lib/build";
 import { SELECTABLE_YEARS, availableYears, syntheticYear } from "@/lib/contributions";
-import { DEFAULT_PALETTE_ID, GHOST_PALETTE, paletteById } from "@/lib/palettes";
+import { AMBIENT_PALETTE, DEFAULT_PALETTE_ID, paletteById } from "@/lib/palettes";
 import {
   play,
   setSoundEnabled,
@@ -64,6 +64,8 @@ export function MonolithApp({
   );
   const [printing, setPrinting] = useState(false);
   const [copied, setCopied] = useState(false);
+  /** Whether the object has been taken hold of. The hint is owed until it is. */
+  const [turned, setTurned] = useState(false);
   /**
    * The mesh the forge already built, kept so the render does not generate the
    * identical object a second time. State rather than a ref: reading a ref
@@ -271,17 +273,26 @@ export function MonolithApp({
   const activeMesh = mesh ?? ghostMesh;
   const isGhost = phase !== "live" || !mesh;
 
+  // Two columns from the width the headline stops wrapping at. Below it the
+  // object goes back to sitting under the copy, because a 34 rem column beside
+  // an object on a phone leaves neither of them readable.
+  const twoColumn = useMediaQuery("(min-width: 900px)");
+
   return (
     <MotionConfig reducedMotion="user">
       <main className="relative h-svh w-full overflow-hidden bg-void">
-        <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 z-0" onPointerDown={() => setTurned(true)}>
           <Scene
             mesh={activeMesh}
-            finish={isGhost ? GHOST_PALETTE : palette}
+            finish={isGhost ? AMBIENT_PALETTE : palette}
             ghost={isGhost}
             revealToken={`${login}:${year}:${variant}`}
             spin={spin && !reduceMotion}
             onInteract={() => setSpin(false)}
+            shiftX={twoColumn ? 0.22 : 0}
+            shiftY={twoColumn ? -0.02 : -0.19}
+            pad={twoColumn ? 2.55 : 2.0}
+            reduced={reduceMotion}
           />
         </div>
 
@@ -291,8 +302,12 @@ export function MonolithApp({
         {/* The object is free to drift anywhere behind the readouts, so the
           readouts carry their own darkness rather than trusting whatever
           happens to be rendered under them. */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-[15] h-[34%] bg-gradient-to-b from-void via-void/55 to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-[15] w-[min(26rem,60vw)] bg-gradient-to-r from-void via-void/45 to-transparent" />
+        {/* Wide, the copy is on the left and the object on the right, so the
+          scrims darken the left column and the top strip the wordmark sits in.
+          Narrow, the object is what occupies the top of the screen, and the
+          same two scrims would be painting it out. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[15] h-[16%] bg-gradient-to-b from-void/85 via-void/30 to-transparent min-[900px]:h-[34%] min-[900px]:from-void min-[900px]:via-void/55" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-[15] hidden w-[min(26rem,60vw)] bg-gradient-to-r from-void via-void/45 to-transparent min-[900px]:block" />
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between p-5 sm:p-7">
           <button
@@ -354,6 +369,30 @@ export function MonolithApp({
           error={error}
           hidden={phase !== "idle"}
         />
+
+        {/* The object turns under the pointer, which is worth nothing if nobody
+          learns it. One line, under the object's own column, gone for good the
+          first time a hand lands on it. */}
+        <AnimatePresence>
+          {phase === "idle" && twoColumn && !turned && (
+            <motion.p
+              className="pointer-events-none absolute bottom-[13%] right-[max(3rem,6vw)] z-20 flex items-center gap-2 text-[0.58rem] tracking-[0.22em] uppercase text-dim"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, delay: 1.6, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <motion.span
+                aria-hidden
+                animate={reduceMotion ? {} : { x: [-2.5, 2.5, -2.5] }}
+                transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+              >
+                ↔
+              </motion.span>
+              drag to turn it
+            </motion.p>
+          )}
+        </AnimatePresence>
 
         <Forge
           steps={steps}

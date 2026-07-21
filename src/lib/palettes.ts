@@ -107,6 +107,23 @@ export const GHOST_PALETTE: Palette = {
   rim: 0.5,
 };
 
+/**
+ * The finish the landing page shows before a handle is typed.
+ *
+ * The ghost above is a grey the object almost disappears into, which was right
+ * while the object sat behind the headline and wrong now that it has a column
+ * of its own: what the landing sells is a year of contributions, so the landing
+ * has to show one. This is the default finish with the glow pulled back, so it
+ * reads as the product at rest rather than as a second, brighter product.
+ */
+export const AMBIENT_PALETTE: Palette = {
+  ...(PALETTES.find((p) => p.id === "signal") ?? PALETTES[0]),
+  id: "ambient",
+  name: "Ambient",
+  glow: 0.26,
+  rim: 0.46,
+};
+
 export const DEFAULT_PALETTE_ID = "signal";
 
 export function paletteById(id: string): Palette {

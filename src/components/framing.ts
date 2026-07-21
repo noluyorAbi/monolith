@@ -21,8 +21,14 @@ export function viewDirection(aspect: number): THREE.Vector3 {
  * the skyline is long and flat, and a sphere fit would push it half a screen
  * away.
  */
-export function fitDistance(mesh: BuiltMesh, offsetY: number, fovDeg: number, aspect: number): number {
-  const dir = viewDirection(aspect);
+export function fitDistance(
+  mesh: BuiltMesh,
+  offsetY: number,
+  fovDeg: number,
+  aspect: number,
+  /** Overrides the angle without touching the containment maths. */
+  dir: THREE.Vector3 = viewDirection(aspect),
+): number {
   const up = new THREE.Vector3(0, 1, 0);
   const right = new THREE.Vector3().crossVectors(up, dir).normalize();
   const camUp = new THREE.Vector3().crossVectors(dir, right).normalize();

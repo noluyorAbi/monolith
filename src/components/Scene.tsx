@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Environment, Grid, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
-import { Framing, Monolith } from "./SceneObject";
+import { Framing, Monolith, Presenter } from "./SceneObject";
 import { Rig } from "./Rig";
 import type { BuiltMesh } from "@/lib/types";
 import type { Palette } from "@/lib/palettes";
@@ -94,11 +94,17 @@ function SoftShadow({ width, depth, y }: { width: number; depth: number; y: numb
 export interface SceneProps {
   mesh: BuiltMesh;
   finish: Palette;
-  /** Ambient mode sinks the object below the type and drops the orbit rig. */
+  /** Ambient mode hands the object to the presenter and drops the orbit rig. */
   ghost?: boolean;
   revealToken: string;
   spin: boolean;
   onInteract: () => void;
+  /** Where the ambient object sits in the frame, as a fraction of the canvas. */
+  shiftX?: number;
+  shiftY?: number;
+  /** Room around the ambient fit. Above 1 the object is read whole and small. */
+  pad?: number;
+  reduced?: boolean;
 }
 
 export default function Scene({
@@ -108,16 +114,19 @@ export default function Scene({
   revealToken,
   spin,
   onInteract,
+  shiftX = 0,
+  shiftY = 0,
+  pad = 1.72,
+  reduced = false,
 }: SceneProps) {
   const span = Math.max(mesh.size.x, mesh.size.z);
+  const fogRange = ghost ? pad : 1;
   const floorY = mesh.bounds.min[1];
-  // Live, the object sits centred on the orbit pivot. Idle, it sinks below the
-  // type so the headline owns the middle of the screen.
-  const centreY = -(mesh.bounds.min[1] + mesh.bounds.max[1]) / 2;
-  // Idle sat the object a full height below the frame, which cropped it at the
-  // bottom edge and left the landing looking empty. It now sits low but whole,
-  // under the hero copy rather than behind it.
-  const offsetY = ghost ? centreY - mesh.size.y * 0.62 - span * 0.03 : centreY;
+  // Centred on the pivot in both modes. Ambient used to sink the object below
+  // the type, which is what a backdrop does; it now has a column of its own,
+  // and an object centred on the pivot is one that turns in place instead of
+  // swinging around a point under its feet.
+  const offsetY = -(mesh.bounds.min[1] + mesh.bounds.max[1]) / 2;
 
   return (
     <Canvas
@@ -131,7 +140,15 @@ export default function Scene({
       }}
       style={{ touchAction: "none" }}
     >
-      <fog attach="fog" args={["#060708", span * 2.2, span * 7]} />
+      {/* The fog is measured in object spans, but the camera's distance is set
+        by the fit, and the ambient fit stands well back so the object can share
+        the frame with the copy. Fixed at the viewer's range, that put the whole
+        landing object behind the fog on any narrow screen, where it faded to
+        exactly the background colour and read as nothing at all. */}
+      <fog
+        attach="fog"
+        args={["#060708", span * 2.2 * fogRange, span * 7 * fogRange]}
+      />
       <ambientLight intensity={0.26} />
       <directionalLight position={[span * 0.55, span * 0.95, span * 0.45]} intensity={1.15} />
       <directionalLight
@@ -148,20 +165,40 @@ export default function Scene({
         <Lightformer intensity={0.9} position={[8, 3, 3]} scale={[8, 8, 1]} color="#fff0c2" />
       </Environment>
 
-      <Monolith
-        mesh={mesh}
-        finish={finish}
-        offsetY={offsetY}
-        revealToken={revealToken}
-      />
+      {ghost ? (
+        // The shadow turns with the object. It is the only thing that puts a
+        // floating skyline on a surface, and a footprint that stayed put while
+        // the object rotated above it would take that back.
+        <Presenter spin={spin} reduced={reduced}>
+          <Monolith
+            mesh={mesh}
+            finish={finish}
+            offsetY={offsetY}
+            revealToken={revealToken}
+          />
+          <SoftShadow
+            width={mesh.size.x}
+            depth={mesh.size.z}
+            y={floorY + offsetY + span * 0.002}
+          />
+        </Presenter>
+      ) : (
+        <>
+          <Monolith
+            mesh={mesh}
+            finish={finish}
+            offsetY={offsetY}
+            revealToken={revealToken}
+          />
+          <SoftShadow
+            width={mesh.size.x}
+            depth={mesh.size.z}
+            y={floorY + offsetY + span * 0.002}
+          />
+        </>
+      )}
 
       <StudioFloor radius={span * 2.6} y={floorY + offsetY - span * 0.006} />
-
-      <SoftShadow
-        width={mesh.size.x}
-        depth={mesh.size.z}
-        y={floorY + offsetY + span * 0.002}
-      />
 
       <Grid
         position={[0, floorY + offsetY - span * 0.004, 0]}
@@ -176,7 +213,14 @@ export default function Scene({
         fadeStrength={1.4}
       />
 
-      <Framing mesh={mesh} offsetY={offsetY} pad={ghost ? 1.72 : 1} />
+      <Framing
+        mesh={mesh}
+        offsetY={offsetY}
+        pad={ghost ? pad : 1}
+        shiftX={ghost ? shiftX : 0}
+        shiftY={ghost ? shiftY : 0}
+        aim={ghost}
+      />
       {!ghost && <Rig spin={spin} onInteract={onInteract} />}
     </Canvas>
   );

@@ -172,16 +172,148 @@ export function Monolith({
   );
 }
 
+/**
+ * The landing object, under the hand rather than under glass.
+ *
+ * The live viewer orbits the camera, which is right when the object owns the
+ * screen. Here it does not: it shares the frame with the headline and the
+ * field, and a camera orbit would swing it out from under its own column. So
+ * the object turns instead of the camera, which keeps it anchored where the
+ * layout put it.
+ *
+ * Three things move it, in falling order of authority: a drag, the pointer
+ * drifting across the page, and its own slow turn. Each is a spring towards a
+ * target rather than a value written straight to the transform, so letting go
+ * of a drag hands the object back to the drift without a step.
+ */
+export function Presenter({
+  children,
+  spin,
+  reduced,
+}: {
+  children: React.ReactNode;
+  spin: boolean;
+  reduced: boolean;
+}) {
+  const group = useRef<THREE.Group>(null);
+  const { gl } = useThree();
+
+  /**
+   * The angle the object rests at. Square to the camera it reads as a wall of
+   * bars; a third of a turn off it reads as a solid with a length, which is
+   * the thing being sold.
+   */
+  const yaw = useRef(-0.5);
+  const yawShown = useRef(-0.5);
+  /** Where the pointer sits, in -1 to 1 across the canvas. */
+  const point = useRef({ x: 0, y: 0 });
+  const dragging = useRef(false);
+  const last = useRef({ x: 0, y: 0 });
+  /** Seconds of stillness owed before the sway resumes. */
+  const rest = useRef(0);
+  const clock = useRef(0);
+
+  useEffect(() => {
+    const el = gl.domElement;
+    el.style.cursor = "grab";
+
+    const down = (e: PointerEvent) => {
+      dragging.current = true;
+      rest.current = 1.1;
+      last.current = { x: e.clientX, y: e.clientY };
+      el.style.cursor = "grabbing";
+      el.setPointerCapture(e.pointerId);
+    };
+
+    const move = (e: PointerEvent) => {
+      const box = el.getBoundingClientRect();
+      point.current = {
+        x: ((e.clientX - box.left) / box.width) * 2 - 1,
+        y: ((e.clientY - box.top) / box.height) * 2 - 1,
+      };
+      if (!dragging.current) return;
+      // Yaw only. A drag that also tilted would lift the object off the
+      // shadow it turns above, and the shadow is what puts it on a surface.
+      yaw.current += (e.clientX - last.current.x) * 0.0072;
+      last.current = { x: e.clientX, y: e.clientY };
+      rest.current = 1.1;
+    };
+
+    const up = (e: PointerEvent) => {
+      dragging.current = false;
+      el.style.cursor = "grab";
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    };
+
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    return () => {
+      el.style.cursor = "";
+      el.removeEventListener("pointerdown", down);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+  }, [gl]);
+
+  useFrame((_, delta) => {
+    const g = group.current;
+    if (!g) return;
+
+    if (rest.current > 0) rest.current -= delta;
+    // A sway rather than a turn. A continuous rotation eventually presents the
+    // plate broadside and the year edge on, which is the one angle where the
+    // object reads as a grey slab; swinging through a sixth of a radian keeps
+    // it alive and never leaves the angle the layout was drawn around.
+    if (spin && !reduced && rest.current <= 0 && !dragging.current) {
+      clock.current += delta;
+    }
+    const sway = spin && !reduced ? Math.sin(clock.current * 0.26) * 0.15 : 0;
+
+    // Frame-rate independent approach: the same fraction of the remaining
+    // distance per second regardless of how often this runs.
+    const k = 1 - Math.pow(0.0001, delta);
+    yawShown.current += (yaw.current - yawShown.current) * k;
+
+    // The drift is deliberately small. It should register as the object
+    // noticing the pointer, not as a second control.
+    const drift = reduced ? 0 : 1;
+    g.rotation.y = yawShown.current + sway + point.current.x * 0.06 * drift;
+    g.rotation.x = -point.current.y * 0.04 * drift;
+    g.rotation.z = point.current.x * 0.012 * drift;
+  });
+
+  return <group ref={group}>{children}</group>;
+}
+
 export function Framing({
   mesh,
   offsetY,
   /** Extra room around the fit. The landing wants the object read whole and
       small rather than filling the frame the way the viewer does. */
   pad = 1,
+  /** Fraction of the canvas to push the object right (+) or left (-). */
+  shiftX = 0,
+  /** Fraction of the canvas to push the object down (+) or up (-). */
+  shiftY = 0,
+  /**
+   * Point the camera at the pivot. The orbit rig does this itself, so it is
+   * only wanted when there is no rig: r3f aims the camera once at creation and
+   * never again, and this component then moves it somewhere else entirely. On
+   * a landscape screen the two directions were close enough to hide it; in
+   * portrait the fitted direction swings most of a right angle away, and the
+   * object left the frame completely.
+   */
+  aim = false,
 }: {
   mesh: BuiltMesh;
   offsetY: number;
   pad?: number;
+  shiftX?: number;
+  shiftY?: number;
+  aim?: boolean;
 }) {
   const { camera, size } = useThree();
   const goal = useRef(new THREE.Vector3());
@@ -192,10 +324,16 @@ export function Framing({
   useEffect(() => {
     const perspective = camera as THREE.PerspectiveCamera;
     const aspect = Math.max(0.3, size.width / Math.max(1, size.height));
-    const dist = fitDistance(mesh, offsetY, perspective.fov, aspect) * pad;
+    // The viewer swings the camera down the object's length on a tall screen,
+    // which fills a portrait frame. The landing does not want that: from up
+    // there the object is a plate seen from above, and what sells it is the
+    // low three quarter view. So the landing keeps the landscape angle at
+    // every width and lets the presenter's own turn supply the diagonal.
+    const angle = aim ? viewDirection(1.7) : viewDirection(aspect);
+    const dist = fitDistance(mesh, offsetY, perspective.fov, aspect, angle) * pad;
     // Re-framing keeps whatever angle the user has orbited to and moves only
     // the distance, so switching forms never yanks the view back to default.
-    const dir = settled.current ? camera.position.clone().normalize() : viewDirection(aspect);
+    const dir = settled.current && !aim ? camera.position.clone().normalize() : angle;
     goal.current.copy(dir).multiplyScalar(dist);
     if (!settled.current) {
       camera.position.copy(goal.current).multiplyScalar(1.9);
@@ -204,8 +342,26 @@ export function Framing({
     docking.current = true;
     perspective.near = dist / 80;
     perspective.far = dist * 14;
+
+    // Moving the object itself out of the middle would make it orbit its own
+    // column whenever it turns. Offsetting the frustum instead slides the
+    // whole picture across the canvas and leaves the object turning in place,
+    // which is what a column of a layout needs from it.
+    if (shiftX || shiftY) {
+      perspective.setViewOffset(
+        size.width,
+        size.height,
+        -shiftX * size.width,
+        -shiftY * size.height,
+        size.width,
+        size.height,
+      );
+    } else {
+      perspective.clearViewOffset();
+    }
     perspective.updateProjectionMatrix();
-  }, [camera, mesh, offsetY, pad, size.width, size.height]);
+    if (aim) camera.lookAt(0, 0, 0);
+  }, [aim, camera, mesh, offsetY, pad, shiftX, shiftY, size.width, size.height]);
 
   useFrame((_, delta) => {
     // Only the arrival is animated. After that the orbit controls own the
@@ -213,6 +369,7 @@ export function Framing({
     if (!docking.current) return;
     const k = 1 - Math.pow(0.0022, delta);
     camera.position.lerp(goal.current, k);
+    if (aim) camera.lookAt(0, 0, 0);
     if (camera.position.distanceTo(goal.current) < goal.current.length() * 0.004) {
       docking.current = false;
     }
