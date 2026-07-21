@@ -7,9 +7,9 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        // Generated files and private pages are worthless to an index and
-        // expensive to crawl: every hit builds a mesh.
-        disallow: ["/api/", "/studio", "/order/"],
+        // Generated files are worthless to an index and expensive to crawl:
+        // every hit builds a mesh.
+        disallow: ["/api/"],
       },
     ],
     sitemap: `${PROJECT.site}/sitemap.xml`,

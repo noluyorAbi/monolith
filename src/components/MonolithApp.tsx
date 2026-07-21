@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import dynamic from "next/dynamic";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { Prompt } from "./Prompt";
 import { Forge, type ForgeStep } from "./Forge";
 import { Hud } from "./Hud";
@@ -12,9 +19,15 @@ import { PROJECT } from "@/lib/project";
 import { SIZES, VARIANTS, buildMonolith } from "@/lib/build";
 import { availableYears, syntheticYear } from "@/lib/github";
 import { GHOST_PALETTE, paletteById } from "@/lib/products";
-import { play, setSoundEnabled, soundEnabled, soundServerSnapshot, subscribeSound } from "@/lib/sound";
+import {
+  play,
+  setSoundEnabled,
+  soundEnabled,
+  soundServerSnapshot,
+  subscribeSound,
+} from "@/lib/sound";
 import type { SizeId } from "@/lib/build";
-import type { ContributionYear, Stats, Variant } from "@/lib/types";
+import type { BuiltMesh, ContributionYear, Stats, Variant } from "@/lib/types";
 
 const Scene = dynamic(() => import("./Scene"), { ssr: false });
 
@@ -22,7 +35,13 @@ type Phase = "idle" | "forging" | "live";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: string; initialYear?: number }) {
+export function MonolithApp({
+  initialLogin,
+  initialYear,
+}: {
+  initialLogin?: string;
+  initialYear?: number;
+}) {
   const years = useMemo(() => availableYears(7), []);
   const [phase, setPhase] = useState<Phase>("idle");
   const [login, setLogin] = useState(initialLogin ?? "");
@@ -36,9 +55,24 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [spin, setSpin] = useState(true);
-  const sound = useSyncExternalStore(subscribeSound, soundEnabled, soundServerSnapshot);
+  const sound = useSyncExternalStore(
+    subscribeSound,
+    soundEnabled,
+    soundServerSnapshot,
+  );
   const [printing, setPrinting] = useState(false);
   const [copied, setCopied] = useState(false);
+  /**
+   * The mesh the forge already built, kept so the render does not generate the
+   * identical object a second time. State rather than a ref: reading a ref
+   * during render is not safe under concurrent rendering.
+   */
+  const [built, setBuilt] = useState<{
+    data: ContributionYear;
+    variant: Variant;
+    sizeMm: number;
+    mesh: BuiltMesh;
+  } | null>(null);
   const runId = useRef(0);
 
   const sizeMm = SIZES.find((s) => s.id === sizeId)?.mm ?? 180;
@@ -48,14 +82,23 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
   // page shows the product rather than describing it.
   const ghost = useMemo(() => syntheticYear("skyline", years[0]), [years]);
   const ghostMesh = useMemo(
-    () => buildMonolith(ghost, { variant: "skyline", sizeMm: 180, label: false }),
+    () =>
+      buildMonolith(ghost, { variant: "skyline", sizeMm: 180, label: false }),
     [ghost],
   );
 
-  const mesh = useMemo(
-    () => (data ? buildMonolith(data, { variant, sizeMm, label: true }) : null),
-    [data, variant, sizeMm],
-  );
+  const mesh = useMemo(() => {
+    if (!data) return null;
+    // The forge already built this mesh to report its triangle count. Reuse it
+    // rather than running the generator twice, but only when it was built from
+    // exactly this data and configuration: a control touched during the forge's
+    // scripted pauses would otherwise leave the readout describing an object
+    // that never gets rendered.
+    if (built && built.data === data && built.variant === variant && built.sizeMm === sizeMm) {
+      return built.mesh;
+    }
+    return buildMonolith(data, { variant, sizeMm, label: true });
+  }, [data, built, variant, sizeMm]);
 
   const forge = useCallback(
     async (handle: string, forYear: number) => {
@@ -97,25 +140,53 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
       if (!alive()) return;
 
       await wait(Math.max(0, 320 - (Date.now() - started)));
-      push({ label: "fetching", value: `${payload.data.days.length} days of ${forYear}` }, 0.34);
+      push(
+        {
+          label: "fetching",
+          value: `${payload.data.days.length} days of ${forYear}`,
+        },
+        0.34,
+      );
 
       await wait(280);
       push(
-        { label: "found", value: `${payload.data.total.toLocaleString("en-GB")} contributions` },
+        {
+          label: "found",
+          value: `${payload.data.total.toLocaleString("en-GB")} contributions`,
+        },
         0.56,
       );
 
       await wait(300);
-      const built = buildMonolith(payload.data, { variant, sizeMm, label: true });
       if (!alive()) return;
-      push({ label: "extruding", value: `${built.triangles.toLocaleString("en-GB")} triangles` }, 0.78);
+      // Same arguments the memo will use, kept so the readout describes the
+      // object that actually gets rendered.
+      const forged = buildMonolith(payload.data, {
+        variant,
+        sizeMm,
+        label: true,
+      });
+      setBuilt({ data: payload.data, variant, sizeMm, mesh: forged });
+      push(
+        {
+          label: "extruding",
+          value: `${forged.triangles.toLocaleString("en-GB")} triangles`,
+        },
+        0.78,
+      );
 
       await wait(260);
       push({ label: "welding", value: "base plate and signature" }, 0.92);
 
       await wait(300);
       if (!alive()) return;
-      push({ label: "ready", value: `${built.size.x.toFixed(0)} × ${built.size.z.toFixed(0)} mm` }, 1);
+      push(
+        {
+          label: "ready",
+          value: `${forged.size.x.toFixed(0)} × ${forged.size.z.toFixed(0)} mm`,
+        },
+        1,
+      );
 
       await wait(260);
       if (!alive()) return;
@@ -125,7 +196,11 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
       setPhase("live");
       setSpin(true);
       play("thunk");
-      window.history.replaceState(null, "", `/s/${payload.data.login}?year=${forYear}`);
+      window.history.replaceState(
+        null,
+        "",
+        `/s/${payload.data.login}?year=${forYear}`,
+      );
     },
     [variant, sizeMm],
   );
@@ -146,6 +221,7 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
     setPhase("idle");
     setData(null);
     setStats(null);
+    setBuilt(null);
     setSteps([]);
     setProgress(0);
     setError(null);
@@ -153,7 +229,10 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
   }, []);
 
   useEffect(() => {
-    if (phase !== "live") return;
+    // While a sheet is open it owns the keyboard. Otherwise Escape would close
+    // the sheet AND reset the app, throwing away the object and the share URL,
+    // and 1-4 would swap the form behind the open dialog.
+    if (phase !== "live" || printing) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       const n = Number(e.key);
@@ -173,7 +252,7 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, years, year, login, forge, reset]);
+  }, [phase, printing, years, year, login, forge, reset]);
 
   async function share() {
     const url = `${window.location.origin}/s/${login}?year=${year}`;
@@ -191,142 +270,160 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
   const isGhost = phase !== "live" || !mesh;
 
   return (
-    <main className="relative h-svh w-full overflow-hidden bg-void">
-      <div className="absolute inset-0 z-0">
-        <Scene
-          mesh={activeMesh}
-          finish={isGhost ? GHOST_PALETTE : palette}
-          ghost={isGhost}
-          revealToken={`${login}:${year}:${variant}`}
-          spin={spin}
-          onInteract={() => setSpin(false)}
-        />
-      </div>
+    <MotionConfig reducedMotion="user">
+      <main className="relative h-svh w-full overflow-hidden bg-void">
+        <div className="absolute inset-0 z-0">
+          <Scene
+            mesh={activeMesh}
+            finish={isGhost ? GHOST_PALETTE : palette}
+            ghost={isGhost}
+            revealToken={`${login}:${year}:${variant}`}
+            spin={spin}
+            onInteract={() => setSpin(false)}
+          />
+        </div>
 
-      <div className="field pointer-events-none absolute inset-0 z-10 opacity-40" />
-      <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_58%,rgba(6,7,8,0.55)_100%)]" />
+        <div className="field pointer-events-none absolute inset-0 z-10 opacity-40" />
+        <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_58%,rgba(6,7,8,0.55)_100%)]" />
 
-      {/* The object is free to drift anywhere behind the readouts, so the
+        {/* The object is free to drift anywhere behind the readouts, so the
           readouts carry their own darkness rather than trusting whatever
           happens to be rendered under them. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[15] h-[34%] bg-gradient-to-b from-void via-void/55 to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-[15] w-[min(26rem,60vw)] bg-gradient-to-r from-void via-void/45 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[15] h-[34%] bg-gradient-to-b from-void via-void/55 to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-[15] w-[min(26rem,60vw)] bg-gradient-to-r from-void via-void/45 to-transparent" />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between p-5 sm:p-7">
-        <button
-          type="button"
-          onClick={reset}
-          className="pointer-events-auto text-[0.62rem] tracking-[0.34em] uppercase text-mute transition-colors duration-150 hover:text-fog"
-        >
-          Monolith
-        </button>
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between p-5 sm:p-7">
+          <button
+            type="button"
+            onClick={reset}
+            className="pointer-events-auto text-[0.62rem] tracking-[0.34em] uppercase text-mute transition-colors duration-150 hover:text-fog"
+          >
+            Monolith
+          </button>
+
+          <AnimatePresence>
+            {phase === "live" && (
+              <motion.div
+                className="pointer-events-auto flex items-center gap-3 text-[0.6rem] tracking-[0.18em] uppercase"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <button
+                  type="button"
+                  onClick={share}
+                  className="text-mute transition-colors duration-150 hover:text-fog"
+                >
+                  {copied ? (
+                    <span className="text-accent">link copied</span>
+                  ) : (
+                    "share ↗"
+                  )}
+                </button>
+                <span aria-hidden className="text-edge">
+                  /
+                </span>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="text-mute transition-colors duration-150 hover:text-fog"
+                >
+                  new
+                </button>
+                <span aria-hidden className="text-edge">
+                  /
+                </span>
+                <a
+                  href={PROJECT.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-mute transition-colors duration-150 hover:text-fog"
+                >
+                  source ↗
+                </a>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <Prompt
+          onSubmit={(handle) => forge(handle, year)}
+          error={error}
+          hidden={phase !== "idle"}
+        />
+
+        <Forge
+          steps={steps}
+          progress={progress}
+          visible={phase === "forging"}
+        />
+
+        {phase === "live" && data && stats && mesh && (
+          <div className="pointer-events-none absolute inset-0 z-20">
+            <Hud data={data} stats={stats} mesh={mesh} variant={variant} />
+          </div>
+        )}
+
+        <Dock
+          visible={phase === "live" && !!data}
+          year={year}
+          years={years}
+          onYear={(y) => {
+            setYear(y);
+            void forge(login, y);
+          }}
+          variant={variant}
+          onVariant={setVariant}
+          palette={palette}
+          onPalette={setPaletteId}
+          sizeId={sizeId}
+          onSize={setSizeId}
+          total={stats?.total ?? 0}
+          onPrint={() => setPrinting(true)}
+          spin={spin}
+          onSpin={setSpin}
+          sound={sound}
+          onSound={setSoundEnabled}
+        />
+
+        {mesh && (
+          <>
+            <PrintSheet
+              open={printing}
+              onClose={() => setPrinting(false)}
+              login={login}
+              year={year}
+              variant={variant}
+              sizeMm={sizeMm}
+              paletteId={paletteId}
+              mesh={mesh}
+            />
+          </>
+        )}
 
         <AnimatePresence>
-          {phase === "live" && (
-            <motion.div
-              className="pointer-events-auto flex items-center gap-3 text-[0.6rem] tracking-[0.18em] uppercase"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          {phase === "idle" && (
+            <motion.footer
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-between px-5 pb-5 text-[0.58rem] tracking-[0.18em] uppercase text-dim sm:px-7 sm:pb-7"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
             >
-              <button
-                type="button"
-                onClick={share}
-                className="text-mute transition-colors duration-150 hover:text-fog"
-              >
-                {copied ? <span className="text-accent">link copied</span> : "share ↗"}
-              </button>
-              <span aria-hidden className="text-edge">/</span>
-              <button
-                type="button"
-                onClick={reset}
-                className="text-mute transition-colors duration-150 hover:text-fog"
-              >
-                new
-              </button>
-              <span aria-hidden className="text-edge">/</span>
+              <span>Open source · the files are free · print it yourself</span>
               <a
                 href={PROJECT.url}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="text-mute transition-colors duration-150 hover:text-fog"
+                className="pointer-events-auto hidden transition-colors duration-150 hover:text-fog sm:inline"
               >
-                source ↗
+                github.com/{PROJECT.repo} ↗
               </a>
-            </motion.div>
+            </motion.footer>
           )}
         </AnimatePresence>
-      </div>
-
-      <Prompt onSubmit={(handle) => forge(handle, year)} error={error} hidden={phase !== "idle"} />
-
-      <Forge steps={steps} progress={progress} visible={phase === "forging"} />
-
-      {phase === "live" && data && stats && mesh && (
-        <div className="pointer-events-none absolute inset-0 z-20">
-          <Hud data={data} stats={stats} mesh={mesh} variant={variant} />
-        </div>
-      )}
-
-      <Dock
-        visible={phase === "live" && !!data}
-        year={year}
-        years={years}
-        onYear={(y) => {
-          setYear(y);
-          void forge(login, y);
-        }}
-        variant={variant}
-        onVariant={setVariant}
-        palette={palette}
-        onPalette={setPaletteId}
-        sizeId={sizeId}
-        onSize={setSizeId}
-        total={stats?.total ?? 0}
-        onPrint={() => setPrinting(true)}
-        spin={spin}
-        onSpin={setSpin}
-        sound={sound}
-        onSound={setSoundEnabled}
-      />
-
-      {mesh && (
-        <>
-          <PrintSheet
-            open={printing}
-            onClose={() => setPrinting(false)}
-            login={login}
-            year={year}
-            variant={variant}
-            sizeMm={sizeMm}
-            paletteId={paletteId}
-            mesh={mesh}
-          />
-        </>
-      )}
-
-      <AnimatePresence>
-        {phase === "idle" && (
-          <motion.footer
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-between px-5 pb-5 text-[0.58rem] tracking-[0.18em] uppercase text-dim sm:px-7 sm:pb-7"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
-          >
-            <span>Open source · the files are free · print it yourself</span>
-            <a
-              href={PROJECT.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="pointer-events-auto hidden transition-colors duration-150 hover:text-fog sm:inline"
-            >
-              github.com/{PROJECT.repo} ↗
-            </a>
-          </motion.footer>
-        )}
-      </AnimatePresence>
-    </main>
+      </main>
+    </MotionConfig>
   );
 }

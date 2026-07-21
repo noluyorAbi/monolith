@@ -141,3 +141,15 @@ export function wholeObject(mesh: BuiltMesh): Part {
     closed: areaResidual(vertices, indices) < 1e-4,
   };
 }
+
+/**
+ * The parts a slicer should receive.
+ *
+ * One solid per contribution level is what lets someone assign a filament per
+ * intensity. If any group came out open, a single welded solid is the safe
+ * answer: a slicer will not thank us for a shell it cannot fill.
+ */
+export function printableParts(mesh: BuiltMesh): Part[] {
+  const split = splitByLevel(mesh);
+  return split.every((p) => p.closed) ? split : [wholeObject(mesh)];
+}

@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og";
-import { fetchContributionYear, availableYears } from "@/lib/github";
+import { LOGIN_RE, fetchContributionYear, availableYears } from "@/lib/github";
+import { notFound } from "next/navigation";
+import { PALETTES } from "@/lib/products";
 import { computeStats } from "@/lib/build";
 import { PROJECT } from "@/lib/project";
 
@@ -8,7 +10,8 @@ export const alt = "A GitHub year as a printable object";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const RAMP = ["#171c21", "#12603a", "#12894a", "#2fc45f", "#4dee7c"];
+/** The palette the viewer uses, rather than a third hand-copied ramp. */
+const RAMP = PALETTES[0].ramp;
 
 /**
  * A share card built from the person's own year rather than a generic logo.
@@ -17,6 +20,10 @@ const RAMP = ["#171c21", "#12603a", "#12894a", "#2fc45f", "#4dee7c"];
  */
 export default async function Image({ params }: { params: Promise<{ login: string }> }) {
   const { login } = await params;
+  // The page 404s an invalid handle; without the same guard this route would
+  // still render 1200x630 of attacker-chosen text under the wordmark, and run
+  // a full satori pass per request while doing it.
+  if (!LOGIN_RE.test(login)) notFound();
   const year = availableYears(1)[0];
   const data = await fetchContributionYear(login, year).catch(() => null);
   const stats = data ? computeStats(data) : null;
@@ -42,7 +49,9 @@ export default async function Image({ params }: { params: Promise<{ login: strin
             <div style={{ fontSize: 20, letterSpacing: 8, color: "#8b9096" }}>MONOLITH</div>
             <div style={{ fontSize: 78, marginTop: 12, letterSpacing: -2 }}>{data?.login ?? login}</div>
             <div style={{ display: "flex", fontSize: 24, color: "#8b9096", marginTop: 4 }}>
-              {`${year} · ${stats ? stats.total.toLocaleString("en-GB") : "—"} contributions`}
+              {data?.demo
+                ? `${year} · sample data, GitHub unreachable`
+                : `${year} · ${stats ? stats.total.toLocaleString("en-GB") : "—"} contributions`}
             </div>
           </div>
           <div

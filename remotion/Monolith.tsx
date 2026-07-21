@@ -10,7 +10,10 @@ import type { BuiltMesh, Variant } from "../src/lib/types";
  * marketing images on the next render instead of leaving them stale.
  */
 
-const RAMP = ["#1b2126", "#12603a", "#12894a", "#2fc45f", "#4dee7c"];
+import { PALETTES } from "../src/lib/products";
+
+/** The palette the viewer uses, so the artwork cannot drift from the product. */
+const RAMP = PALETTES[0].ramp;
 
 /** Isometric. No perspective, which keeps a very wide object readable. */
 function project(x: number, y: number, z: number): [number, number] {
@@ -50,7 +53,7 @@ function faces(mesh: BuiltMesh, reveal: number): Face[] {
     if ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax) <= 0) continue;
 
     const flat = p[i + 1] === p[i + 4] && p[i + 4] === p[i + 7];
-    const base = level < 0 ? "#20262c" : RAMP[Math.max(0, Math.min(4, level))];
+    const base = level < 0 ? PALETTES[0].base : RAMP[Math.max(0, Math.min(4, level))];
     out.push({
       points: `${ax},${ay} ${bx},${by} ${cx},${cy}`,
       depth: p[i + 2] + p[i + 5] + p[i + 8] + p[i] + p[i + 3] + p[i + 6],

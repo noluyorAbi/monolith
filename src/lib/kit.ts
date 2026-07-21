@@ -3,8 +3,11 @@ import { buildThreeMf } from "./threemf";
 import { toBinarySTL } from "./stl";
 import { slotForLevel, type ColourSlots } from "./slots";
 import {
+  MIN_TOWER_GAP_MM,
+  NOZZLE_LINE_MM,
   bambuOverrides,
   estimate,
+  fitsBed,
   overrides,
   type Material,
   type Printer,
@@ -33,6 +36,12 @@ export interface KitOptions {
   slots: ColourSlots;
   sourceUrl: string;
   modelLicence: string;
+  /**
+   * True when GitHub could not be reached and the year was invented. It has to
+   * travel with the artifact: someone is about to spend hours and filament on
+   * this, and the file is labelled with their real handle.
+   */
+  sampleData?: boolean;
 }
 
 /**
@@ -45,7 +54,7 @@ export function bambuPreset(options: KitOptions): string {
   return `${JSON.stringify(
     {
       type: "process",
-      name: `MONOLITH ${quality.layerHeightMm.toFixed(2)}mm @BBL ${printer.presetSuffix}`,
+      name: presetName(printer, quality),
       from: "User",
       instantiation: "true",
       inherits: `${quality.presetBase} @BBL ${printer.presetSuffix}`,
@@ -57,22 +66,40 @@ export function bambuPreset(options: KitOptions): string {
   )}\n`;
 }
 
-function fits(mesh: BuiltMesh, printer: Printer): boolean {
-  const margin = 8;
-  const [bx, by] = printer.bedMm;
-  return mesh.size.x + margin <= bx && mesh.size.z + margin <= by;
+/**
+ * The preset's name appears in the file, in the instructions telling you to
+ * select it, and in the zip entry path. They have to agree or the kit tells
+ * you to pick something that is not there.
+ */
+export function presetName(printer: Printer, quality: Quality): string {
+  return `MONOLITH ${quality.layerHeightMm.toFixed(2)}mm @BBL ${printer.presetSuffix}`;
 }
 
 export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): string {
   const { material, quality, printer, slots } = options;
   const est = estimate(parts, material, quality);
-  const presetName = `MONOLITH ${quality.layerHeightMm.toFixed(2)}mm @BBL ${printer.presetSuffix}`;
+  const preset = presetName(printer, quality);
   const pad = (s: string, n: number) => s.padEnd(n);
 
   const lines: string[] = [
     `MONOLITH`,
     `${options.login} · ${options.year} · ${options.variant} · ${options.sizeMm} mm`,
     ``,
+  ];
+
+  if (options.sampleData) {
+    lines.push(
+      `*******************************************************************`,
+      `  SAMPLE DATA. GitHub could not be reached, so this is NOT`,
+      `  ${options.login}'s real ${options.year}. The shape is invented.`,
+      `  Print it if you like the object, but do not read anything`,
+      `  into it. Try again when GitHub is reachable for the real year.`,
+      `*******************************************************************`,
+      ``,
+    );
+  }
+
+  lines.push(
     `${options.sourceUrl}`,
     `Model licensed ${options.modelLicence}. It is your year: print it, remix it, put it on a shelf.`,
     ``,
@@ -90,10 +117,10 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
     `-------------------------------------------------------------------`,
     `  1. File > Import > Import Configs...  and pick the json in presets/.`,
     `  2. Open monolith.3mf.`,
-    `  3. Select the "${presetName}" process preset.`,
+    `  3. Select the "${preset}" process preset.`,
     `  4. Slice. There is nothing else to set.`,
     ``,
-  ];
+  );
 
   if (slots > 1) {
     lines.push(
@@ -146,7 +173,6 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
     ``,
   );
 
-  const NOZZLE_LINE_MM = 0.42;
   if (mesh.print.engravePixelMm > 0 && mesh.print.engravePixelMm < NOZZLE_LINE_MM) {
     lines.push(
       `  !! At ${options.sizeMm} mm your handle is engraved in ${mesh.print.engravePixelMm.toFixed(2)} mm pixels,`,
@@ -158,7 +184,7 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
       ``,
     );
   }
-  if (mesh.print.gapMm !== null && mesh.print.gapMm < 0.4) {
+  if (mesh.print.gapMm !== null && mesh.print.gapMm < MIN_TOWER_GAP_MM) {
     lines.push(
       `  !! The gap between neighbouring towers is ${mesh.print.gapMm.toFixed(2)} mm, under one nozzle`,
       `     width. They will fuse at the base. Go bigger or drop to a 0.2 mm nozzle.`,
@@ -166,7 +192,7 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
     );
   }
 
-  if (!fits(mesh, printer)) {
+  if (!fitsBed(mesh.size, printer)) {
     lines.push(
       `  !! ${options.sizeMm} mm does not fit a ${printer.name} (${printer.bedMm[0]} x ${printer.bedMm[1]} mm bed).`,
       `     Pick a smaller size, or slice it on a bigger machine.`,
@@ -184,28 +210,37 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
   return lines.join("\n");
 }
 
-export function buildKit(parts: Part[], mesh: BuiltMesh, options: KitOptions): Buffer {
-  const encoder = new TextEncoder();
-  const card = printCard(parts, mesh, options);
-  const stem = `monolith-${options.login}-${options.year}-${options.variant}-${options.sizeMm}mm`;
-
-  const threeMf = buildThreeMf(parts, {
+/**
+ * The 3MF as it ships, card included. Both the standalone download and the
+ * copy inside the kit go through here, so the two cannot drift.
+ */
+export function buildKitThreeMf(parts: Part[], mesh: BuiltMesh, options: KitOptions): Buffer {
+  return buildThreeMf(parts, {
     login: options.login,
     year: options.year,
     variant: options.variant,
     printer: options.printer,
     sourceUrl: options.sourceUrl,
     modelLicence: options.modelLicence,
-    card,
+    sampleData: options.sampleData,
+    card: printCard(parts, mesh, options),
   });
+}
+
+export function buildKit(parts: Part[], mesh: BuiltMesh, options: KitOptions): Buffer {
+  const encoder = new TextEncoder();
+  const card = printCard(parts, mesh, options);
+  const stem = `monolith-${options.login}-${options.year}-${options.variant}-${options.sizeMm}mm`;
+
+  const threeMf = buildKitThreeMf(parts, mesh, options);
 
   const stl = toBinarySTL(mesh, `MONOLITH ${options.login} ${options.year} ${options.variant}`);
-  const presetName = `MONOLITH ${options.quality.layerHeightMm.toFixed(2)}mm @BBL ${options.printer.presetSuffix}`;
+  const preset = presetName(options.printer, options.quality);
 
   const entries: ZipEntry[] = [
     { path: `${stem}.3mf`, data: new Uint8Array(threeMf) },
     { path: `${stem}.stl`, data: new Uint8Array(stl) },
-    { path: `presets/${presetName}.json`, data: encoder.encode(bambuPreset(options)) },
+    { path: `presets/${preset}.json`, data: encoder.encode(bambuPreset(options)) },
     { path: "PRINT-ME.txt", data: encoder.encode(card) },
   ];
   return zip(entries);

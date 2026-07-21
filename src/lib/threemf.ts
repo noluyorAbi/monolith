@@ -29,6 +29,8 @@ export interface ThreeMfOptions {
   printer: Printer;
   sourceUrl: string;
   modelLicence: string;
+  /** True when the year behind this shape was invented rather than read. */
+  sampleData?: boolean;
   /** Plain text card describing the profile, carried inside the container. */
   card?: string;
 }
@@ -77,11 +79,10 @@ export function modelXml(
     ` <metadata name="Title">${esc(`${options.login} ${options.year} ${options.variant}`)}</metadata>`,
   );
   out.push(` <metadata name="Designer">${esc(options.login)}</metadata>`);
-  out.push(
-    ` <metadata name="Description">${esc(
-      `${options.login}'s ${options.year} of GitHub contributions, as an object. One part per intensity level.`,
-    )}</metadata>`,
-  );
+  const description = options.sampleData
+    ? `SAMPLE DATA: GitHub was unreachable, so this shape is invented and is NOT ${options.login}'s real ${options.year}.`
+    : `${options.login}'s ${options.year} of GitHub contributions, as an object. One part per intensity level.`;
+  out.push(` <metadata name="Description">${esc(description)}</metadata>`);
   out.push(` <metadata name="LicenseTerms">${esc(options.modelLicence)}</metadata>`);
   out.push(` <metadata name="Origin">${esc(options.sourceUrl)}</metadata>`);
   out.push(` <resources>`);

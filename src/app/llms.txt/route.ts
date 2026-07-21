@@ -16,7 +16,7 @@ export function GET() {
   const specs = overrides(materialById("pla"), qualityById("standard"));
   const body = `# ${PROJECT.name}
 
-> ${PROJECT.tagline} ${PROJECT.name} turns a public GitHub contribution year into a 3D-printable object and hands over the files for free. Type a handle, watch the object build in the browser, download a print kit, or have one printed at cost.
+> ${PROJECT.tagline} ${PROJECT.name} turns a public GitHub contribution year into a 3D-printable object and hands over the files for free. Type a handle, watch the object build in the browser, and download a print kit.
 
 ${PROJECT.name} is open source (${PROJECT.licence}) at ${PROJECT.url}. Generated models are licensed ${PROJECT.modelLicence}. No account, no sign-up, no upload: it reads the public contribution calendar GitHub already publishes.
 
@@ -67,9 +67,13 @@ ${specs.map((s) => `- ${s.label}: ${s.value}. ${s.why}`).join("\n")}
 
 Nothing overhangs; the whole object grows straight up off a flat plinth, so supports are never needed. On a 0.4 mm nozzle, 180 mm or larger keeps the engraved handle readable and the towers separated. A 180 mm skyline uses roughly 22 g of filament and about four hours on a Bambu P1S.
 
-## Having one printed
+## Licence
 
-Offered at cost, shipped from Germany, with the filament, machine time, labour, packaging and postage itemised at checkout. There is no margin added. Anyone with a printer should use the free files instead.
+The code is licensed PolyForm Noncommercial 1.0.0: use, change and share it for any noncommercial purpose. Commercial use needs a licence from the author. The objects it generates are licensed CC BY 4.0 and belong to the person whose year they describe.
+
+## When GitHub cannot be reached
+
+The app falls back to a deterministic synthetic year rather than failing, and labels it as sample data everywhere it can: in the interface, in the print card inside the kit, in the 3MF description, in the STL header and in an X-Monolith-Sample-Data response header. Do not present such a result as somebody's real contribution history.
 `;
 
   return new Response(body, {

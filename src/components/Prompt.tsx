@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { LOGIN_RE } from "@/lib/github";
+import { LOGIN_RE, normaliseLogin } from "@/lib/github";
 import { play } from "@/lib/sound";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -77,7 +77,7 @@ export function Prompt({
     if (!hidden) inputRef.current?.focus();
   }, [hidden]);
 
-  const clean = value.trim().replace(/^@/, "").replace(/^https?:\/\/github\.com\//i, "").replace(/\/+$/, "");
+  const clean = normaliseLogin(value);
   const valid = LOGIN_RE.test(clean);
 
   function submit() {
@@ -96,6 +96,10 @@ export function Prompt({
       transition={{ duration: hidden ? 0.32 : 0.5, ease: EASE }}
       style={{ pointerEvents: hidden ? "none" : undefined }}
       aria-hidden={hidden}
+      // Kept mounted for the blur transition, so it has to be taken out of the
+      // tab order too. Without this, tabbing after a build lands on an
+      // invisible input inside an aria-hidden subtree.
+      inert={hidden}
     >
       <motion.h1
         className="mb-10 max-w-[22ch] text-center font-[family-name:var(--font-display)] text-[clamp(1.6rem,4.4vw,2.9rem)] leading-[1.08] tracking-[-0.03em] text-fog"

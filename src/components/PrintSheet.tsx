@@ -1,8 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { MATERIALS, PRINTERS, QUALITIES, estimate, overrides } from "@/lib/print";
+import {
+  DEFAULT_MATERIAL_ID,
+  DEFAULT_PRINTER_ID,
+  DEFAULT_QUALITY_ID,
+  MATERIALS,
+  MIN_TOWER_GAP_MM,
+  NOZZLE_LINE_MM,
+  PRINTERS,
+  QUALITIES,
+  estimate,
+  fitsBed,
+  materialById,
+  overrides,
+  printerById,
+  qualityById,
+} from "@/lib/print";
+import { modelQuery } from "@/lib/request";
 import { SLOT_CHOICES, type ColourSlots } from "@/lib/slots";
 import { splitByLevel } from "@/lib/parts";
 import { PROJECT } from "@/lib/project";
@@ -60,24 +76,59 @@ export interface PrintSheetProps {
 }
 
 export function PrintSheet(props: PrintSheetProps) {
-  const [printerId, setPrinterId] = useState("p1s");
-  const [materialId, setMaterialId] = useState("pla");
-  const [qualityId, setQualityId] = useState("standard");
+  const [printerId, setPrinterId] = useState(DEFAULT_PRINTER_ID);
+  const [materialId, setMaterialId] = useState(DEFAULT_MATERIAL_ID);
+  const [qualityId, setQualityId] = useState(DEFAULT_QUALITY_ID);
   const [slots, setSlots] = useState<ColourSlots>(1);
   const wide = useMediaQuery("(min-width: 640px)");
 
+  const { open, onClose } = props;
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * aria-modal tells assistive tech to ignore everything outside this dialog,
+   * so focus has to actually be inside it. Focus moves in on open, Tab is kept
+   * within, and the trigger gets focus back on close.
+   */
   useEffect(() => {
-    if (!props.open) return;
+    if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const focusable = () =>
+      Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input, select, [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+    focusable()[0]?.focus();
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [props]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      opener?.focus();
+    };
+  }, [open, onClose]);
 
-  const printer = PRINTERS.find((p) => p.id === printerId)!;
-  const material = MATERIALS.find((m) => m.id === materialId)!;
-  const quality = QUALITIES.find((q) => q.id === qualityId)!;
+  const printer = printerById(printerId);
+  const material = materialById(materialId);
+  const quality = qualityById(qualityId);
 
   const est = useMemo(
     () => estimate(splitByLevel(props.mesh), material, quality),
@@ -85,20 +136,18 @@ export function PrintSheet(props: PrintSheetProps) {
   );
   const specs = useMemo(() => overrides(material, quality), [material, quality]);
 
-  const query = new URLSearchParams({
+  const query = modelQuery({
     login: props.login,
-    year: String(props.year),
+    year: props.year,
     variant: props.variant,
-    mm: String(props.sizeMm),
-    printer: printerId,
-    material: materialId,
-    quality: qualityId,
-    slots: String(slots),
-    finish: props.paletteId,
-  }).toString();
+    sizeMm: props.sizeMm,
+    printerId,
+    materialId,
+    qualityId,
+    slots,
+  });
 
-  const fits =
-    props.mesh.size.x + 8 <= printer.bedMm[0] && props.mesh.size.z + 8 <= printer.bedMm[1];
+  const fits = fitsBed(props.mesh.size, printer);
 
   /**
    * Bambu Studio registers bambustudioopen: on install, which is how the
@@ -129,6 +178,7 @@ export function PrintSheet(props: PrintSheetProps) {
             onClick={props.onClose}
           />
           <motion.div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label="Print it yourself"
@@ -256,15 +306,15 @@ export function PrintSheet(props: PrintSheetProps) {
                       this exact model. Treat it as a band.
                     </p>
                     {props.mesh.print.engravePixelMm > 0 &&
-                      props.mesh.print.engravePixelMm < 0.42 && (
+                      props.mesh.print.engravePixelMm < NOZZLE_LINE_MM && (
                         <p className="mt-1 text-[0.66rem] leading-relaxed text-danger">
                           At {props.sizeMm} mm the engraved handle is{" "}
                           {props.mesh.print.engravePixelMm.toFixed(2)} mm per pixel, under the
-                          0.42 mm line a 0.4 mm nozzle lays down. It will come out faint. 180 mm or
+                          {NOZZLE_LINE_MM} mm line a 0.4 mm nozzle lays down. It will come out faint. 180 mm or
                           larger reads properly.
                         </p>
                       )}
-                    {props.mesh.print.gapMm !== null && props.mesh.print.gapMm < 0.4 && (
+                    {props.mesh.print.gapMm !== null && props.mesh.print.gapMm < MIN_TOWER_GAP_MM && (
                       <p className="mt-1 text-[0.66rem] leading-relaxed text-danger">
                         Towers sit {props.mesh.print.gapMm.toFixed(2)} mm apart, under one nozzle
                         width. They will fuse at the base.

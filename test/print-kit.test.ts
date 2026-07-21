@@ -151,6 +151,61 @@ test("the shipped preset inherits rather than restating the vendor profile", () 
   for (const part of splitByLevel(MESH)) assert.ok(card.includes(part.name));
 });
 
+test("the print card warns when a size will not print well", () => {
+  const base = {
+    login: "octocat",
+    year: 2025,
+    variant: "skyline",
+    printer: printerById("p1s"),
+    material: materialById("pla"),
+    quality: qualityById("standard"),
+    slots: 1 as const,
+    sourceUrl: "https://example.test",
+    modelLicence: "CC BY 4.0",
+  };
+
+  // 180 mm on a 256 mm bed: nothing to warn about.
+  const fine = printCard(splitByLevel(MESH), MESH, { ...base, sizeMm: 180 });
+  assert.ok(!/!!/.test(fine), `unexpected warning:\n${fine}`);
+
+  // 120 mm puts the engraved handle under one nozzle line and fuses the towers.
+  const small = buildMonolith(DATA, { variant: "skyline", sizeMm: 120, label: true });
+  assert.ok(small.print.engravePixelMm < 0.42);
+  const smallCard = printCard(splitByLevel(small), small, { ...base, sizeMm: 120 });
+  assert.match(smallCard, /engraved in 0\.\d+ mm pixels/);
+  assert.match(smallCard, /gap between neighbouring towers/);
+
+  // 260 mm does not fit an A1 mini's 180 mm bed.
+  const big = buildMonolith(DATA, { variant: "skyline", sizeMm: 260, label: true });
+  const bigCard = printCard(splitByLevel(big), big, {
+    ...base,
+    sizeMm: 260,
+    printer: printerById("a1m"),
+  });
+  assert.match(bigCard, /does not fit a Bambu Lab A1 mini/);
+});
+
+test("the print card says so when the year behind it was invented", () => {
+  const options = {
+    login: "octocat",
+    year: 2025,
+    variant: "skyline",
+    sizeMm: 180,
+    printer: printerById("p1s"),
+    material: materialById("pla"),
+    quality: qualityById("standard"),
+    slots: 1 as const,
+    sourceUrl: "https://example.test",
+    modelLicence: "CC BY 4.0",
+  };
+  const parts = splitByLevel(MESH);
+
+  assert.ok(!/SAMPLE DATA/.test(printCard(parts, MESH, options)));
+  const warned = printCard(parts, MESH, { ...options, sampleData: true });
+  assert.match(warned, /SAMPLE DATA/);
+  assert.match(warned, /NOT\s+octocat's real 2025/);
+});
+
 test("four slots map to a base plus a three step ramp", () => {
   assert.equal(slotForLevel(-1, 4), 1);
   assert.equal(slotForLevel(1, 4), 2);

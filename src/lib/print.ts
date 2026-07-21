@@ -54,8 +54,10 @@ export const PRINTERS: Printer[] = [
   },
 ];
 
+export const DEFAULT_PRINTER_ID = "p1s";
+
 export function printerById(id: string): Printer {
-  return PRINTERS.find((p) => p.id === id) ?? PRINTERS[1];
+  return PRINTERS.find((p) => p.id === id) ?? PRINTERS.find((p) => p.id === DEFAULT_PRINTER_ID)!;
 }
 
 export interface Material {
@@ -121,8 +123,10 @@ export const MATERIALS: Material[] = [
   },
 ];
 
+export const DEFAULT_MATERIAL_ID = "pla";
+
 export function materialById(id: string): Material {
-  return MATERIALS.find((m) => m.id === id) ?? MATERIALS[0];
+  return MATERIALS.find((m) => m.id === id) ?? MATERIALS.find((m) => m.id === DEFAULT_MATERIAL_ID)!;
 }
 
 export interface Quality {
@@ -140,8 +144,10 @@ export const QUALITIES: Quality[] = [
   { id: "fast", name: "Fast", layerHeightMm: 0.2, presetBase: "0.20mm Standard", note: "Layer lines visible on the towers" },
 ];
 
+export const DEFAULT_QUALITY_ID = "standard";
+
 export function qualityById(id: string): Quality {
-  return QUALITIES.find((q) => q.id === id) ?? QUALITIES[1];
+  return QUALITIES.find((q) => q.id === id) ?? QUALITIES.find((q) => q.id === DEFAULT_QUALITY_ID)!;
 }
 
 export const WALL_LOOPS = 3;
@@ -164,6 +170,19 @@ export const INFILL_PATTERN = "gyroid";
  * of the lettering, but it is an improvement, not a rescue.
  */
 export const WALL_GENERATOR = "arachne";
+
+/** The line a 0.4 mm nozzle lays down. Detail under this is at the slicer's mercy. */
+export const NOZZLE_LINE_MM = 0.42;
+/** Below one nozzle width, neighbouring towers fuse at the base. */
+export const MIN_TOWER_GAP_MM = 0.4;
+/** Clearance kept between the object and the edge of the plate. */
+export const BED_MARGIN_MM = 8;
+
+export function fitsBed(size: { x: number; z: number }, printer: Printer): boolean {
+  return (
+    size.x + BED_MARGIN_MM <= printer.bedMm[0] && size.z + BED_MARGIN_MM <= printer.bedMm[1]
+  );
+}
 
 export interface PrintSpec {
   key: string;

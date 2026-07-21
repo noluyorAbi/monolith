@@ -1,53 +1,35 @@
 import { NextResponse } from "next/server";
 import { BadLoginError, NotFoundError, fetchContributionYear } from "@/lib/github";
-import { SIZES, VARIANTS, buildMonolith } from "@/lib/build";
-import { splitByLevel, wholeObject } from "@/lib/parts";
+import { buildMonolith } from "@/lib/build";
+import { printableParts } from "@/lib/parts";
 import { buildKit } from "@/lib/kit";
-import { materialById, printerById, qualityById } from "@/lib/print";
+import { parseModelRequest } from "@/lib/request";
 import { PROJECT } from "@/lib/project";
-import type { ColourSlots } from "@/lib/slots";
-import type { Variant } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const login = url.searchParams.get("login") ?? "";
-  const year = Number(url.searchParams.get("year")) || new Date().getUTCFullYear();
-  const variantParam = url.searchParams.get("variant") ?? "skyline";
-  const variant = (VARIANTS.some((v) => v.id === variantParam) ? variantParam : "skyline") as Variant;
-  const sizeMm = Math.min(400, Math.max(60, Number(url.searchParams.get("mm")) || SIZES[1].mm));
-  const printer = printerById(url.searchParams.get("printer") ?? "p1s");
-  const material = materialById(url.searchParams.get("material") ?? "pla");
-  const quality = qualityById(url.searchParams.get("quality") ?? "standard");
-  const slotsParam = Number(url.searchParams.get("slots"));
-  const slots = ([1, 2, 4].includes(slotsParam) ? slotsParam : 1) as ColourSlots;
+  const options = parseModelRequest(new URL(request.url));
 
   try {
-    const data = await fetchContributionYear(login, year);
-    const mesh = buildMonolith(data, { variant, sizeMm, label: true });
-
-    // One part per level is what lets someone assign a filament per intensity.
-    // If any group came out open, a single welded solid is the safe answer: a
-    // slicer will not thank us for a shell it cannot fill.
-    const split = splitByLevel(mesh);
-    const parts = split.every((p) => p.closed) ? split : [wholeObject(mesh)];
-
+    const data = await fetchContributionYear(options.login, options.year);
+    const mesh = buildMonolith(data, {
+      variant: options.variant,
+      sizeMm: options.sizeMm,
+      label: true,
+    });
+    const parts = printableParts(mesh);
 
     const file = buildKit(parts, mesh, {
+      ...options,
       login: data.login,
       year: data.year,
-      variant,
-      sizeMm,
-      printer,
-      material,
-      quality,
-      slots,
       sourceUrl: PROJECT.url,
       modelLicence: PROJECT.modelLicence,
+      sampleData: data.demo,
     });
 
-    const name = `monolith-${data.login}-${data.year}-${variant}-${sizeMm}mm-print-kit.zip`;
+    const name = `monolith-${data.login}-${data.year}-${options.variant}-${options.sizeMm}mm-print-kit.zip`;
     return new NextResponse(new Uint8Array(file), {
       headers: {
         "Content-Type": "application/zip",
@@ -55,6 +37,7 @@ export async function GET(request: Request) {
         "Content-Disposition": `attachment; filename="${name}"`,
         "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
         "X-Monolith-Parts": String(parts.length),
+        "X-Monolith-Sample-Data": String(data.demo),
       },
     });
   } catch (err) {

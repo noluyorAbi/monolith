@@ -3,6 +3,19 @@ import type { ContributionYear, Day, Level } from "./types";
 export const LOGIN_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/;
 
 export class BadLoginError extends Error {}
+
+/**
+ * Accepts what people actually paste: a bare handle, an @handle, or the whole
+ * profile URL. Exported because the browser validates the same string before
+ * sending it, and two copies of this had already drifted apart.
+ */
+export function normaliseLogin(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^@/, "")
+    .replace(/^https?:\/\/github\.com\//i, "")
+    .replace(/\/+$/, "");
+}
 export class NotFoundError extends Error {}
 
 const LEVELS: Record<string, Level> = {
@@ -59,6 +72,20 @@ function pack(
     demo: source === "synthetic",
     source,
   };
+}
+
+/**
+ * Rebuild a full year from a bare day list. The week grid is derived, not
+ * stored, so a fixture only has to carry the days and still exercises the same
+ * calendar layout the live paths use.
+ */
+export function yearFromDays(
+  login: string,
+  year: number,
+  days: Day[],
+  source: ContributionYear["source"] = "html",
+): ContributionYear {
+  return pack(login, login, year, days, source);
 }
 
 const GQL = `query($login:String!,$from:DateTime!,$to:DateTime!){
@@ -212,7 +239,7 @@ export async function fetchContributionYear(
   rawLogin: string,
   year: number,
 ): Promise<ContributionYear> {
-  const login = rawLogin.trim().replace(/^@/, "").replace(/^https?:\/\/github\.com\//i, "").replace(/\/$/, "");
+  const login = normaliseLogin(rawLogin);
   if (!LOGIN_RE.test(login)) throw new BadLoginError(rawLogin);
 
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
@@ -225,6 +252,10 @@ export async function fetchContributionYear(
     if (viaScrape) return viaScrape;
   } catch (err) {
     if (err instanceof NotFoundError) throw err;
+    // Falling back silently would make a rate limit, an expired token and a
+    // markup change all look like a quiet success. Say which one happened.
+    console.error(`[monolith] contributions lookup failed for ${login} ${year}:`, err);
   }
+  console.warn(`[monolith] serving synthetic data for ${login} ${year}`);
   return syntheticYear(login, year);
 }

@@ -12,7 +12,7 @@
 # Needs Bambu Studio installed. Skips cleanly when it is not.
 set -euo pipefail
 
-BASE="${BASE:-http://localhost:4321}"
+BASE="${BASE:-http://localhost:3000}"
 LOGIN="${LOGIN:-noluyorAbi}"
 YEAR="${YEAR:-2025}"
 BS="/Applications/BambuStudio.app/Contents/MacOS/BambuStudio"
