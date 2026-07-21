@@ -9,7 +9,7 @@ import { MAX_SIZE_MM, MIN_SIZE_MM, modelQuery, parseModelRequest } from "@/lib/r
 import { DEFAULT_MATERIAL_ID, DEFAULT_PRINTER_ID, DEFAULT_QUALITY_ID } from "@/lib/print";
 import { yearFromDays } from "@/lib/contributions";
 import type { Day } from "@/lib/types";
-import fixture from "./fixtures/contributions-2025.json";
+import fixture from "../data/contributions-2025.json";
 
 /**
  * The download contract is the public surface of this project. These tests

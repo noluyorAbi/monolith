@@ -1,6 +1,8 @@
 import React, { useMemo } from "react";
 import { buildMonolith } from "../src/lib/build";
-import { syntheticYear } from "../src/lib/contributions";
+import { yearFromDays } from "../src/lib/contributions";
+import type { Day } from "../src/lib/types";
+import frozen from "../data/contributions-2025.json";
 import type { BuiltMesh, Variant } from "../src/lib/types";
 
 /**
@@ -10,10 +12,7 @@ import type { BuiltMesh, Variant } from "../src/lib/types";
  * marketing images on the next render instead of leaving them stale.
  */
 
-import { defaultPalette } from "../src/lib/palettes";
-
-/** The palette the viewer uses, so the artwork cannot drift from the product. */
-const RAMP = defaultPalette().ramp;
+import { defaultPalette, type Palette } from "../src/lib/palettes";
 
 /** Isometric. No perspective, which keeps a very wide object readable. */
 function project(x: number, y: number, z: number): [number, number] {
@@ -26,13 +25,38 @@ function shade(hex: string, factor: number): string {
   return `rgb(${Math.round(((n >> 16) & 255) * factor)},${Math.round(((n >> 8) & 255) * factor)},${Math.round((n & 255) * factor)})`;
 }
 
+/**
+ * Flat light for one triangle, from the wall it belongs to.
+ *
+ * One factor for every wall made the two visible sides of a bar the same
+ * value, and on a light finish that value landed on the plate's own colour:
+ * a short bar sank into the plate and only its lit top read as a stray
+ * triangle. Separating the two walls gives every bar a corner to be seen by.
+ */
+function lightOn(p: Float32Array, i: number): number {
+  const ux = p[i + 3] - p[i];
+  const uy = p[i + 4] - p[i + 1];
+  const uz = p[i + 5] - p[i + 2];
+  const vx = p[i + 6] - p[i];
+  const vy = p[i + 7] - p[i + 1];
+  const vz = p[i + 8] - p[i + 2];
+  const nx = uy * vz - uz * vy;
+  const ny = uz * vx - ux * vz;
+  const nz = ux * vy - uy * vx;
+  const max = Math.max(Math.abs(nx), Math.abs(ny), Math.abs(nz));
+  if (max === Math.abs(ny)) return 1;
+  return max === Math.abs(nx) ? 0.74 : 0.52;
+}
+
 interface Face {
   points: string;
   depth: number;
   fill: string;
+  /** Plate and engraving. Everything a bar stands on, so it is painted first. */
+  structural: boolean;
 }
 
-function faces(mesh: BuiltMesh, reveal: number): Face[] {
+function faces(mesh: BuiltMesh, reveal: number, palette: Palette): Face[] {
   const out: Face[] = [];
   const p = mesh.positions;
   for (let t = 0; t < mesh.triangles; t++) {
@@ -52,43 +76,64 @@ function faces(mesh: BuiltMesh, reveal: number): Face[] {
     const [cx, cy] = project(p[i + 6], lift(p[i + 7]), p[i + 8]);
     if ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax) <= 0) continue;
 
-    const flat = p[i + 1] === p[i + 4] && p[i + 4] === p[i + 7];
-    const base = level < 0 ? defaultPalette().base : RAMP[Math.max(0, Math.min(4, level))];
+    const base = level < 0 ? palette.base : palette.ramp[Math.max(0, Math.min(4, level))];
     out.push({
       points: `${ax},${ay} ${bx},${by} ${cx},${cy}`,
       depth: p[i + 2] + p[i + 5] + p[i + 8] + p[i] + p[i + 3] + p[i + 6],
-      fill: flat ? base : shade(base, 0.62),
+      fill: shade(base, lightOn(p, i)),
+      structural: level < 0,
     });
   }
-  return out.sort((a, b) => a.depth - b.depth);
+  // A painter's sort on x+z alone is exact between bars, because each bar is a
+  // column on the grid and a larger x+z column stands wholly in front of a
+  // smaller one. It is not exact for the plate: its top is two triangles the
+  // size of the whole object, so their centre depth put half the grid behind
+  // the plate and the grey top painted over the bars at the back. The plate
+  // and its engraving carry nothing above them, so they can be laid down
+  // first unconditionally and the bars sorted on top of them.
+  return out.sort((a, b) =>
+    a.structural === b.structural ? a.depth - b.depth : a.structural ? -1 : 1,
+  );
+}
+
+/**
+ * The year every asset draws: noluyorAbi's real 2025, frozen in data/ and
+ * shared with the calibration test. Rendering an invented year here would put
+ * a denser object and a longer print time in front of people than the one the
+ * slicer was measured against.
+ */
+export function assetYear() {
+  return yearFromDays(frozen.login, frozen.year, frozen.days as Day[]);
 }
 
 export const Monolith: React.FC<{
-  seed: string;
   width: number;
   height: number;
   variant?: Variant;
   /** 0 to 1. Below 1 the towers are still rising. */
   reveal?: number;
+  /** Defaults to the finish the viewer opens with. */
+  palette?: Palette;
   style?: React.CSSProperties;
-}> = ({ seed, width, height, variant = "skyline", reveal = 1, style }) => {
+}> = ({ width, height, variant = "skyline", reveal = 1, palette, style }) => {
+  const finish = palette ?? defaultPalette();
   const mesh = useMemo(
-    () => buildMonolith(syntheticYear(seed, 2025), { variant, sizeMm: 180, label: false }),
-    [seed, variant],
+    () => buildMonolith(assetYear(), { variant, sizeMm: 180, label: false }),
+    [variant],
   );
 
   // The viewBox is fixed to the fully grown object so a rising animation does
   // not appear to zoom while it plays.
   const box = useMemo(() => {
-    const full = faces(mesh, 1);
+    const full = faces(mesh, 1, finish);
     const xs = full.flatMap((f) => f.points.split(" ").map((q) => Number(q.split(",")[0])));
     const ys = full.flatMap((f) => f.points.split(" ").map((q) => Number(q.split(",")[1])));
     const minX = Math.min(...xs);
     const minY = Math.min(...ys);
     return { minX, minY, w: Math.max(...xs) - minX, h: Math.max(...ys) - minY };
-  }, [mesh]);
+  }, [mesh, finish]);
 
-  const drawn = faces(mesh, reveal);
+  const drawn = faces(mesh, reveal, finish);
 
   return (
     <svg

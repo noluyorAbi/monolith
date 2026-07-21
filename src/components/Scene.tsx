@@ -114,7 +114,10 @@ export default function Scene({
   // Live, the object sits centred on the orbit pivot. Idle, it sinks below the
   // type so the headline owns the middle of the screen.
   const centreY = -(mesh.bounds.min[1] + mesh.bounds.max[1]) / 2;
-  const offsetY = ghost ? centreY - mesh.size.y * 1.1 - span * 0.14 : centreY;
+  // Idle sat the object a full height below the frame, which cropped it at the
+  // bottom edge and left the landing looking empty. It now sits low but whole,
+  // under the hero copy rather than behind it.
+  const offsetY = ghost ? centreY - mesh.size.y * 0.62 - span * 0.03 : centreY;
 
   return (
     <Canvas
@@ -173,7 +176,7 @@ export default function Scene({
         fadeStrength={1.4}
       />
 
-      <Framing mesh={mesh} offsetY={offsetY} />
+      <Framing mesh={mesh} offsetY={offsetY} pad={ghost ? 1.72 : 1} />
       {!ghost && <Rig spin={spin} onInteract={onInteract} />}
     </Canvas>
   );

@@ -10,7 +10,7 @@ export const PROJECT = {
   /** The generated objects, as opposed to the code that generates them. */
   modelLicence: "CC BY 4.0",
   /** Where this is deployed. Drives canonicals, sitemap, robots and OG urls. */
-  site: process.env.NEXT_PUBLIC_SITE_URL || "https://monolith.adatepe.dev",
+  site: process.env.NEXT_PUBLIC_SITE_URL || "https://monolith-ebon-six.vercel.app",
   author: "noluyorAbi",
   tagline: "Your commit year, cast as an object.",
 } as const;
