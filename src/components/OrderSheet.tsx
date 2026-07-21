@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { SHIPPING, formatPrice, quote, type ShippingId } from "@/lib/products";
+import { DEFAULT_SLOT_COLOURS, SWATCHES, swatchById } from "@/lib/filaments";
 import { MATERIALS, QUALITIES, estimate } from "@/lib/print";
 import { splitByLevel } from "@/lib/parts";
 import { SIZES } from "@/lib/build";
@@ -88,6 +89,7 @@ export function OrderSheet(props: OrderSheetProps) {
   const [materialId, setMaterialId] = useState("pla");
   const [slots, setSlots] = useState<ColourSlots>(1);
   const [shippingId, setShippingId] = useState<ShippingId>("de");
+  const [colours, setColours] = useState<string[]>(DEFAULT_SLOT_COLOURS);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ orderId: string; url: string; demo: boolean } | null>(null);
@@ -149,6 +151,7 @@ export function OrderSheet(props: OrderSheetProps) {
           quality: "standard",
           slots,
           shipping: shippingId,
+          colours: colours.slice(0, slots),
           ...(email ? { email } : {}),
         }),
       });
@@ -281,7 +284,51 @@ export function OrderSheet(props: OrderSheetProps) {
 
                       <div className="flex flex-col gap-2">
                         <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">
-                          Ships to
+                          {slots === 1 ? "Spool colour" : "Spool colour per part"}
+                        </span>
+                        <div className="flex flex-col gap-2">
+                          {Array.from({ length: slots }, (_, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              {slots > 1 && (
+                                <span className="w-[9ch] shrink-0 text-[0.58rem] tracking-[0.1em] uppercase text-dim">
+                                  {["plinth", "quiet", "busy", "peak"][i]}
+                                </span>
+                              )}
+                              <div className="flex flex-wrap gap-1">
+                                {SWATCHES.map((sw) => (
+                                  <button
+                                    key={sw.id}
+                                    type="button"
+                                    title={sw.name}
+                                    aria-label={`${sw.name} for slot ${i + 1}`}
+                                    onClick={() => {
+                                      play("tick");
+                                      setColours((prev) => {
+                                        const next = [...prev];
+                                        next[i] = sw.id;
+                                        return next;
+                                      });
+                                    }}
+                                    className={`h-5 w-5 rounded-full border transition-transform duration-150 active:scale-90 ${
+                                      colours[i] === sw.id
+                                        ? "border-accent ring-1 ring-accent"
+                                        : "border-edge hover:border-mute"
+                                    }`}
+                                    style={{ background: sw.hex }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <span className="text-[0.6rem] text-dim">
+                          {Array.from({ length: slots }, (_, i) => swatchById(colours[i]).name).join(" · ")}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+                          Ships from Germany to
                         </span>
                         <div className="flex flex-wrap gap-1.5">
                           {SHIPPING.map((s) => (
@@ -329,7 +376,10 @@ export function OrderSheet(props: OrderSheetProps) {
                             </div>
                           ))}
                           <div className="mt-1 flex justify-between gap-4 border-t border-line pt-2">
-                            <dt className="text-mute">Postage</dt>
+                            <dt className="text-mute">
+                              Postage
+                              <span className="ml-2 text-dim">{bill.shippingDetail}</span>
+                            </dt>
                             <dd className="text-fog tabular-nums">{formatPrice(bill.shipping)}</dd>
                           </div>
                           <div className="mt-1 flex items-baseline justify-between gap-4 border-t border-line pt-2">

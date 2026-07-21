@@ -7,6 +7,30 @@ import { play } from "@/lib/sound";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
+/** Real accounts, so the example is something you can actually press. */
+const EXAMPLES = ["noluyorAbi", "torvalds", "sindresorhus"];
+
+/**
+ * Types the first example into the placeholder and leaves it there. People do
+ * not know what belongs in an empty box; watching it fill in answers that
+ * without spending the field itself, which stays yours to type into.
+ */
+function useTypedHint(active: boolean): string {
+  const [shown, setShown] = useState("");
+  useEffect(() => {
+    if (!active) return;
+    const target = EXAMPLES[0];
+    let i = 0;
+    const start = window.setTimeout(function step() {
+      i += 1;
+      setShown(target.slice(0, i));
+      if (i < target.length) window.setTimeout(step, 55 + (i % 3) * 25);
+    }, 650);
+    return () => window.clearTimeout(start);
+  }, [active]);
+  return shown;
+}
+
 export function Prompt({
   onSubmit,
   error,
@@ -19,6 +43,7 @@ export function Prompt({
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const hint = useTypedHint(!hidden);
 
   useEffect(() => {
     if (!hidden) inputRef.current?.focus();
@@ -76,7 +101,7 @@ export function Prompt({
             }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
-            placeholder="handle"
+            placeholder={hint || "handle"}
             spellCheck={false}
             autoComplete="off"
             autoCapitalize="off"
@@ -116,12 +141,37 @@ export function Prompt({
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.22 }}
               >
-                any public account
+                try
               </motion.span>
             )}
           </AnimatePresence>
 
           <AnimatePresence initial={false}>
+            {!valid && (
+              <motion.span
+                key="examples"
+                className="flex items-center gap-2 text-dim"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.24, ease: EASE }}
+              >
+                {EXAMPLES.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => {
+                      play("lock");
+                      setValue(name);
+                      onSubmit(name);
+                    }}
+                    className="normal-case tracking-normal text-mute underline decoration-edge underline-offset-4 transition-colors duration-150 hover:text-fog hover:decoration-mute"
+                  >
+                    {name}
+                  </button>
+                ))}
+              </motion.span>
+            )}
             {valid && (
               <motion.button
                 type="button"
@@ -138,6 +188,23 @@ export function Prompt({
             )}
           </AnimatePresence>
         </div>
+        <motion.ul
+          className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[0.62rem] tracking-[0.14em] uppercase text-dim sm:justify-start"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: EASE, delay: 0.28 }}
+        >
+          {[
+            "3MF, STL and a slicer preset",
+            "no account, no upload",
+            "MIT licensed",
+          ].map((item) => (
+            <li key={item} className="flex items-center gap-2">
+              <span aria-hidden className="h-1 w-1 rounded-full bg-accent" />
+              {item}
+            </li>
+          ))}
+        </motion.ul>
       </motion.div>
     </motion.div>
   );

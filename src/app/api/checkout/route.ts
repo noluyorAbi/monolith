@@ -20,6 +20,7 @@ const Body = z.object({
   quality: z.enum(QUALITIES.map((q) => q.id) as [string, ...string[]]),
   slots: z.union([z.literal(1), z.literal(2), z.literal(4)]),
   shipping: z.enum(SHIPPING.map((s) => s.id) as [string, ...string[]]),
+  colours: z.array(z.string()).max(4).optional(),
   email: z.string().email().optional(),
 });
 
@@ -70,6 +71,7 @@ export async function POST(request: Request) {
     quality: input.quality,
     slots: input.slots,
     shipping: input.shipping,
+    colours: input.colours ?? [],
     priceCents,
     status: key ? "pending" : "demo",
     email: input.email,

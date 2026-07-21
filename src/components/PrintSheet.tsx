@@ -107,6 +107,16 @@ export function PrintSheet(props: PrintSheetProps) {
   const fits =
     props.mesh.size.x + 8 <= printer.bedMm[0] && props.mesh.size.z + 8 <= printer.bedMm[1];
 
+  // Bambu Studio registers bambustudioopen: on install, which is how the
+  // "open in" buttons on model sites work. Verified against the app's own
+  // Info.plist; bambustudio: resolves to nothing.
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const modelUrl = `${origin}/api/3mf?${query}`;
+  const bambuHref = `bambustudioopen://open?file=${encodeURIComponent(modelUrl)}&name=${encodeURIComponent(
+    `monolith-${props.login}-${props.year}.3mf`,
+  )}`;
+
   return (
     <AnimatePresence>
       {props.open && (
@@ -301,6 +311,18 @@ export function PrintSheet(props: PrintSheetProps) {
                       3MF split into one part per intensity, the same object as STL, a Bambu and
                       Orca preset that inherits from your stock profile, and a text card with every
                       setting and why.
+                    </p>
+                    <a
+                      href={bambuHref}
+                      onClick={() => play("lock")}
+                      className="hairline flex items-center justify-center gap-2 rounded-[5px] px-4 py-2.5 text-center text-[0.68rem] tracking-[0.12em] uppercase text-fog transition-colors duration-150 hover:border-mute active:scale-[0.98]"
+                    >
+                      Open in Bambu Studio
+                      <span aria-hidden className="text-dim">↗</span>
+                    </a>
+                    <p className="-mt-1 text-[0.58rem] leading-relaxed text-dim">
+                      Hands the model straight to Bambu Studio if you have it installed. The
+                      preset is not part of that handoff, so import it once from the kit.
                     </p>
                     <div className="mt-1 flex gap-2">
                       <a

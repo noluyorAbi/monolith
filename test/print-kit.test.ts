@@ -172,7 +172,15 @@ test("the quote is the sum of its stated parts and nothing else", () => {
   // Rounded to the nearest 50 cents, so allow exactly that and no more.
   assert.ok(Math.abs(bill.total - (bill.subtotal + bill.shipping)) <= 0.25);
 
+  // Four colours cost more in two distinct ways, and both must show up.
   const four = quote({ grams: 22.4, hours: 3.9, slots: 4 }, "de");
-  assert.ok(four.subtotal > bill.subtotal, "purge waste is not being charged for");
-  assert.ok(four.lines.some((l) => /colour/i.test(l.label)));
+  assert.ok(four.grams > bill.grams, "purge waste is not counted");
+  assert.ok(four.hours > bill.hours, "tool change time is not counted");
+  assert.ok(four.subtotal > bill.subtotal);
+
+  // Postage is the only thing that varies by destination.
+  const world = quote({ grams: 22.4, hours: 3.9, slots: 1 }, "world");
+  assert.equal(world.subtotal, bill.subtotal);
+  assert.ok(world.shipping > bill.shipping);
+  assert.ok(world.shippingDetail.length > 0);
 });

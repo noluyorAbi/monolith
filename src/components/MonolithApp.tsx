@@ -332,7 +332,14 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
             transition={{ duration: 0.4, delay: 0.3 }}
           >
             <span>Open source · the files are free · print it yourself</span>
-            <span className="hidden sm:inline">no account, no upload, no cookie banner</span>
+            <a
+              href={PROJECT.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="pointer-events-auto hidden transition-colors duration-150 hover:text-fog sm:inline"
+            >
+              github.com/{PROJECT.repo} ↗
+            </a>
           </motion.footer>
         )}
       </AnimatePresence>

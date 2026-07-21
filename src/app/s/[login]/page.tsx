@@ -8,11 +8,24 @@ interface Props {
   searchParams: Promise<{ year?: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { login } = await params;
+  const { year } = await searchParams;
+  const years = availableYears(7);
+  const parsed = Number(year);
+  const chosen = years.includes(parsed) ? parsed : years[0];
+  const description = `${login}'s ${chosen} GitHub contributions as a 3D printable object. Free 3MF, STL and a slicer preset.`;
   return {
-    title: `${login} — MONOLITH`,
-    description: `${login}'s GitHub year, cast as a printable object.`,
+    title: login,
+    description,
+    alternates: { canonical: `/s/${login}?year=${chosen}` },
+    openGraph: {
+      type: "profile",
+      title: `${login} — ${chosen}`,
+      description,
+      url: `/s/${login}?year=${chosen}`,
+    },
+    twitter: { card: "summary_large_image", title: `${login} — ${chosen}`, description },
   };
 }
 

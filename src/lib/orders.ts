@@ -20,6 +20,8 @@ export interface Order {
   quality: string;
   slots: number;
   shipping: string;
+  /** Spool colour ids, one per filament slot. */
+  colours: string[];
   /** Cents, so money never touches a float. */
   priceCents: number;
   status: "pending" | "paid" | "printing" | "shipped" | "demo";

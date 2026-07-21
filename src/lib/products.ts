@@ -116,28 +116,37 @@ export interface Size {
 }
 
 /**
- * What it costs us to print one and put it in the post. Not a price list: the
- * numbers below are the actual inputs, and the checkout shows them line by
- * line. There is no margin in here on purpose. If you own a printer, the file
- * is free and this page is pointless for you, which is the intended outcome.
+ * What one print actually costs us, shipped from Germany. Not a price list:
+ * these are the inputs, and the checkout shows them line by line with their
+ * rates. There is no margin on top. If you own a printer the files are free
+ * and this page is pointless for you, which is the intended outcome.
+ *
+ * Every number here is meant to be edited by whoever is running the printer.
  */
 export const COST = {
-  /** Bambu's own list price, EUR per gram. */
-  filamentPerGram: 24.99 / 1000,
-  /** Electricity at 0.35 EUR/kWh plus machine depreciation over 3000 hours. */
-  machinePerHour: 0.37,
+  /** EUR per kg. Bambu refill without the spool, which is what we rebuy. */
+  filamentPerKg: 19.99,
+  /** Power, wear over roughly 3000 printer hours, and a failed-print allowance. */
+  machinePerHour: 0.35,
+  /** Plate prep, removal, inspection, packing. */
+  labourPerHour: 15.0,
+  labourMinutes: 20,
   /** Box, corner foam, label. */
-  packaging: 1.8,
-  /** Twenty minutes of someone's time: plate prep, removal, inspection, packing. */
-  handling: 4.0,
-  /** Tool changes on a four colour print purge a lot of filament. */
-  multiColourPurge: 4.0,
+  packaging: 2.2,
+  /** Grams flushed per filament change on a four colour plate. */
+  purgeGrams: 35,
+  /**
+   * Tool changes dominate a multi colour print of 371 towers, so the machine
+   * runs far longer than the single colour version rather than a little.
+   */
+  timeMultiplier: { 1: 1, 2: 1.5, 4: 2.4 } as Record<number, number>,
 } as const;
 
+/** DHL from Germany. Update when Deutsche Post moves its prices, which it will. */
 export const SHIPPING = [
-  { id: "de", name: "Germany", price: 4.5 },
-  { id: "eu", name: "Europe", price: 7.0 },
-  { id: "world", name: "Rest of world", price: 14.0 },
+  { id: "de", name: "Germany", price: 5.49, detail: "DHL Paket, 2 kg" },
+  { id: "eu", name: "EU", price: 13.9, detail: "DHL Paket EU" },
+  { id: "world", name: "Rest of world", price: 24.9, detail: "DHL Paket International" },
 ] as const;
 
 export type ShippingId = (typeof SHIPPING)[number]["id"];
@@ -156,7 +165,11 @@ export interface Quote {
   lines: QuoteLine[];
   subtotal: number;
   shipping: number;
+  shippingDetail: string;
   total: number;
+  /** Hours the machine is actually tied up, after colour changes. */
+  hours: number;
+  grams: number;
 }
 
 /** A quote built from this object's own geometry, not from a tier. */
@@ -164,30 +177,42 @@ export function quote(
   input: { grams: number; hours: number; slots: number },
   shippingId: ShippingId,
 ): Quote {
+  const multiplier = COST.timeMultiplier[input.slots] ?? 1;
+  const hours = input.hours * multiplier;
+  const purge = input.slots > 1 ? COST.purgeGrams * (input.slots - 1) * 0.5 : 0;
+  const grams = input.grams + purge;
+
   const lines: QuoteLine[] = [
     {
       label: "Filament",
-      detail: `${input.grams.toFixed(0)} g`,
-      amount: input.grams * COST.filamentPerGram,
+      detail: `${grams.toFixed(0)} g at ${COST.filamentPerKg.toFixed(2)} EUR/kg`,
+      amount: (grams / 1000) * COST.filamentPerKg,
     },
     {
       label: "Machine time",
-      detail: `${input.hours.toFixed(1)} h`,
-      amount: input.hours * COST.machinePerHour,
+      detail: `${hours.toFixed(1)} h at ${COST.machinePerHour.toFixed(2)} EUR/h`,
+      amount: hours * COST.machinePerHour,
     },
-    { label: "Packaging", detail: "box and foam", amount: COST.packaging },
-    { label: "Handling", detail: "prep, removal, packing", amount: COST.handling },
+    {
+      label: "Our time",
+      detail: `${COST.labourMinutes} min at ${COST.labourPerHour.toFixed(0)} EUR/h`,
+      amount: (COST.labourMinutes / 60) * COST.labourPerHour,
+    },
+    { label: "Packaging", detail: "box, foam, label", amount: COST.packaging },
   ];
-  if (input.slots > 1) {
-    lines.push({
-      label: "Colour changes",
-      detail: `${input.slots} filaments, purge waste`,
-      amount: COST.multiColourPurge,
-    });
-  }
+
   const subtotal = lines.reduce((a, l) => a + l.amount, 0);
-  const shipping = shippingById(shippingId).price;
-  return { lines, subtotal, shipping, total: Math.round((subtotal + shipping) * 2) / 2 };
+  const post = shippingById(shippingId);
+  return {
+    lines,
+    subtotal,
+    shipping: post.price,
+    shippingDetail: post.detail,
+    // Rounded to the nearest 50 cents so it reads as a price, not a readout.
+    total: Math.round((subtotal + post.price) * 2) / 2,
+    hours,
+    grams,
+  };
 }
 
 export function formatPrice(euros: number): string {

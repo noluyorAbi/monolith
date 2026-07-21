@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify:print": "./scripts/verify-print-kit.sh"
+    "verify:print": "./scripts/verify-print-kit.sh",
+    "og": "remotion still remotion/index.ts OgCard public/og.png --overwrite"
   },
   "dependencies": {
     "@react-three/drei": "10.7.7",
@@ -23,11 +24,14 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@remotion/cli": "^4.0.496",
+    "@remotion/renderer": "^4.0.496",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.185.1",
+    "remotion": "^4.0.496",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

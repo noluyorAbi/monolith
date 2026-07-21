@@ -75,6 +75,13 @@ The same approach produced two findings worth writing down:
 
 - **The filament and time estimates are fitted, not guessed.** Bambu Studio sliced the same 180 mm skyline at 0.12, 0.16 and 0.20 mm. Those three runs calibrate the shell model in `src/lib/print.ts`; the fit reproduces all three to within 0.3%, and `test/calib.test.ts` fails if it ever drifts.
 
+## Discoverability
+
+- `/llms.txt` is generated from the code, not written by hand, so what an assistant reads about the forms, sizes and print profile cannot drift from what the app produces.
+- `/robots.txt` and `/sitemap.xml` come from Next's file conventions. The API, the studio and order receipts are disallowed: they are worthless to an index and every hit builds a mesh.
+- JSON-LD in the layout describes a free `SoftwareApplication`, which is what an answer engine needs to cite the thing rather than paraphrase it.
+- Share cards are generated per handle at `/s/[login]/opengraph-image`, drawing that person's real contribution grid. The default card in `public/og.png` is rendered by Remotion from the actual mesh through an isometric projection, so `npm run og` re-renders the marketing image whenever the geometry changes.
+
 ## Running it
 
 ```bash
@@ -90,6 +97,7 @@ That is the whole setup. Every environment variable is optional:
 | `STRIPE_SECRET_KEY` | The print service runs in demo mode: real order records, nobody is charged, the UI says so. |
 | `MONOLITH_ADMIN_KEY` | `/studio` is open in development and 404s in production. It fails closed, so forgetting it never publishes the order queue. Visit `/studio?key=<value>` once; the key is exchanged for a signed 12-hour session cookie and dropped from the URL. |
 | `NEXT_PUBLIC_PROJECT_URL` | Links point at this repository. |
+| `NEXT_PUBLIC_SITE_URL` | Canonicals, sitemap and OG urls fall back to the deployed domain. |
 
 If GitHub cannot be reached at all, the app falls back to a deterministic synthetic year and labels it `sample data` rather than quietly faking someone's history.
 
@@ -132,6 +140,7 @@ A page this dark fails quietly, so the values are measured rather than eyeballed
 ```bash
 npm test               # geometry, exporters, pricing, the guard on /studio
 npm run verify:print   # the kit, against a real Bambu Studio install
+npm run og             # re-render the share card from the current geometry
 ```
 
 ## Contributing
