@@ -4,3 +4,8 @@ node_modules
 .data
 *.stl
 .DS_Store
+tsconfig.tsbuildinfo
+shots/*.png
+!shots/skyline.png
+!shots/ring.png
+!shots/spine-titanium.png
