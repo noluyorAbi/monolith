@@ -38,7 +38,7 @@ That is the whole setup. Every environment variable is optional:
 |---|---|
 | `GITHUB_TOKEN` | The public contributions calendar is parsed instead of the GraphQL API. Same numbers, GitHub's own rate limits. |
 | `STRIPE_SECRET_KEY` | Checkout runs in demo mode: real order records, nobody is charged, the UI says so. |
-| `MONOLITH_ADMIN_KEY` | `/studio` is open in development and **404s in production**. It fails closed, so forgetting it never publishes the order queue. Visit `/studio?key=<value>` once; the key is swapped for an httpOnly cookie and dropped from the URL. |
+| `MONOLITH_ADMIN_KEY` | `/studio` is open in development and **404s in production**. It fails closed, so forgetting it never publishes the order queue. Visit `/studio?key=<value>` once; the key is exchanged for a signed 12-hour session cookie and dropped from the URL. The cookie is an HMAC over its own expiry, so it never carries the key, cannot be extended by hand, and dies the moment you rotate the value. |
 
 If GitHub cannot be reached at all, the app falls back to a deterministic synthetic year and labels it `sample data` in the interface rather than quietly faking someone's history.
 

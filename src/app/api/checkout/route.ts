@@ -69,7 +69,6 @@ export async function POST(request: Request) {
       "line_items[0][price_data][product_data][name]": `MONOLITH ${product.name} — ${login} ${year}`,
       "line_items[0][price_data][product_data][description]": `${variant} · ${finish} · ${product.sizeMm}mm · ${product.material}`,
       "metadata[orderId]": order.id,
-      "metadata[orderToken]": order.token,
       ...(email ? { customer_email: email } : {}),
     },
     key,

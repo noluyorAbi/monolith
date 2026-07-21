@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { STUDIO_COOKIE, studioAccess, studioEnv } from "@/lib/admin";
+import { STUDIO_COOKIE, studioEnv, verifyStudioSession } from "@/lib/admin";
 import { listOrders } from "@/lib/orders";
 import { formatPrice, productById } from "@/lib/products";
 import { ProductionTool } from "@/components/ProductionTool";
@@ -12,7 +12,7 @@ export default async function Studio() {
   // Middleware already gated this route. Checking again here means a bad
   // matcher or a direct render can never expose the queue on its own.
   const cookie = (await cookies()).get(STUDIO_COOKIE)?.value;
-  if (!studioAccess(cookie, studioEnv())) notFound();
+  if (!(await verifyStudioSession(cookie, studioEnv(), Date.now()))) notFound();
 
   const orders = await listOrders();
   const revenue = orders.filter((o) => o.status !== "demo").reduce((a, o) => a + o.price, 0);
