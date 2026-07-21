@@ -69,6 +69,14 @@ export function Hud({
               sample data
             </span>
           )}
+          {/* A year still being written is not a weak year. Without the tag,
+            the current year's half-filled plate reads as someone slowing
+            down rather than as a calendar that has not finished. */}
+          {data.year === new Date().getUTCFullYear() && (
+            <span className="hairline rounded-full px-2 py-[3px] text-[0.55rem] tracking-[0.16em] uppercase text-dim">
+              year to date
+            </span>
+          )}
         </div>
         <div className="mt-1.5 text-[0.66rem] tracking-[0.2em] uppercase text-dim">
           {data.year} · {variant}

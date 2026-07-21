@@ -66,3 +66,21 @@ export interface BuiltMesh {
     gapMm: number | null;
   };
 }
+
+/**
+ * Which of the studio's lights are switched on. The viewer exposes these as
+ * controls, so the object can be studied under the key alone, by its own
+ * emissive glow, or however else the hand on the switches likes it.
+ */
+export interface StudioLights {
+  /** The main light, and the only one that casts the shadow. */
+  key: boolean;
+  /** The cool fill from the left. */
+  fill: boolean;
+  /** The kicker from behind that separates the far edge. */
+  rim: boolean;
+  /** A flat lamp from the camera side. Off by default: it flattens the form. */
+  front: boolean;
+  /** The emissive light the busy days carry on their own. */
+  glow: boolean;
+}

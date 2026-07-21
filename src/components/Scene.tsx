@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { Canvas } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, Grid, Lightformer } from "@react-three/drei";
 import * as THREE from "three";
 import { Framing, Monolith, Presenter } from "./SceneObject";
 import { Rig } from "./Rig";
-import type { BuiltMesh } from "@/lib/types";
+import type { BuiltMesh, StudioLights } from "@/lib/types";
 import type { Palette } from "@/lib/palettes";
+
+const STUDIO_ALL_ON: StudioLights = {
+  key: true,
+  fill: true,
+  rim: true,
+  front: false,
+  glow: true,
+};
 
 /**
  * A pool of light on the ground. The object is nearly as dark as the page, so
@@ -23,10 +31,13 @@ function StudioFloor({ radius, y }: { radius: number; y: number }) {
     if (!ctx) return null;
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, s, s);
+    // Bright enough that a shadow has something to take away. At the old
+    // levels the floor was near black, and a shadow on near black is a
+    // rumour rather than a shape.
     const pool = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-    pool.addColorStop(0, "rgba(255,255,255,0.17)");
-    pool.addColorStop(0.4, "rgba(255,255,255,0.08)");
-    pool.addColorStop(0.75, "rgba(255,255,255,0.015)");
+    pool.addColorStop(0, "rgba(255,255,255,0.32)");
+    pool.addColorStop(0.4, "rgba(255,255,255,0.15)");
+    pool.addColorStop(0.75, "rgba(255,255,255,0.025)");
     pool.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = pool;
     ctx.fillRect(0, 0, s, s);
@@ -63,51 +74,86 @@ function ShadowCatcher({ radius, y }: { radius: number; y: number }) {
   return (
     <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]} renderOrder={-2}>
       <planeGeometry args={[radius * 2, radius * 2]} />
-      <shadowMaterial transparent opacity={0.78} depthWrite={false} />
+      <shadowMaterial transparent opacity={0.72} depthWrite={false} />
     </mesh>
   );
 }
 
 /**
- * Contact darkening right under the footprint.
+ * The three headline lights, with a hand on each switch.
  *
- * The cast shadow above is the real one and does the work; this is the bit a
- * shadow map is worst at, the near black seam where an object meets the
- * surface it stands on. Tight to the plate, and it thins out as the object is
- * lifted, which is what the presenter scales it for.
+ * Flipping a switch eases the intensity rather than cutting it: a lamp with a
+ * dimmer, not a breaker. The key at zero also takes its shadow with it, since
+ * a light that no longer reaches the object cannot darken the floor either.
  */
-function SoftShadow({ width, depth, y }: { width: number; depth: number; y: number }) {
-  const texture = useMemo(() => {
-    const s = 256;
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = s;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.filter = "blur(42px)";
-    ctx.fillStyle = "#ffffff";
-    const inset = s * 0.26;
-    ctx.beginPath();
-    ctx.roundRect(inset, inset, s - inset * 2, s - inset * 2, s * 0.12);
-    ctx.fill();
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }, []);
+function StudioRig({ span, studio }: { span: number; studio: StudioLights }) {
+  const key = useRef<THREE.DirectionalLight>(null);
+  const fill = useRef<THREE.DirectionalLight>(null);
+  const rim = useRef<THREE.DirectionalLight>(null);
+  const front = useRef<THREE.DirectionalLight>(null);
 
-  useEffect(() => () => texture?.dispose(), [texture]);
-  if (!texture) return null;
+  useFrame((_, delta) => {
+    const k = 1 - Math.pow(0.004, delta);
+    const ease = (light: THREE.DirectionalLight | null, on: boolean, full: number) => {
+      if (!light) return;
+      light.intensity += ((on ? full : 0) - light.intensity) * k;
+    };
+    ease(key.current, studio.key, 1.25);
+    ease(fill.current, studio.fill, 0.55);
+    ease(rim.current, studio.rim, 0.75);
+    ease(front.current, studio.front, 0.7);
+  });
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]} renderOrder={-1}>
-      <planeGeometry args={[width * 1.06, depth * 1.35]} />
-      <meshBasicMaterial
-        color="#000000"
-        alphaMap={texture}
-        transparent
-        opacity={0.5}
-        depthWrite={false}
+    <>
+      {/* The key light, and the only one that casts. Two shadows from one
+        object read as a mistake long before they read as a studio. The frustum
+        is fitted to the object rather than left at the default two units, which
+        would put the whole thing outside the shadow camera. Held lower than a
+        studio would hang it, because a low sun is what gives the towers a
+        shadow long enough to read as one. The frustum and the blur radius stay
+        modest: pushed wide, the sampling washed a faint grey over the whole
+        shadow camera's footprint, which showed up on a large screen as an
+        enormous rectangle no light ever drew. */}
+      <directionalLight
+        ref={key}
+        castShadow
+        position={[span * 0.58, span * 0.68, span * 0.45]}
+        intensity={1.25}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0002}
+        shadow-normalBias={span * 0.004}
+        shadow-radius={3.5}
+        shadow-camera-near={span * 0.1}
+        shadow-camera-far={span * 4}
+        shadow-camera-left={-span * 1.0}
+        shadow-camera-right={span * 1.0}
+        shadow-camera-top={span * 1.0}
+        shadow-camera-bottom={-span * 1.0}
       />
-    </mesh>
+      <directionalLight
+        ref={fill}
+        position={[-span * 0.8, span * 0.3, -span * 0.6]}
+        intensity={0.55}
+        color="#7fa4ff"
+      />
+      {/* Kicker from behind, so the far edge separates from the background. */}
+      <directionalLight
+        ref={rim}
+        position={[0, span * 0.22, -span * 1.1]}
+        intensity={0.75}
+        color="#cfe0ff"
+      />
+      {/* The frontal lamp, and the only one that starts switched off. It fills
+        the camera-facing walls evenly, which is exactly what flattens a relief;
+        worth having on the board for reading the colours, wrong as a default. */}
+      <directionalLight
+        ref={front}
+        position={[span * 0.1, span * 0.4, span * 1.2]}
+        intensity={0}
+        color="#ffffff"
+      />
+    </>
   );
 }
 
@@ -127,6 +173,8 @@ export interface SceneProps {
   /** Room around the ambient fit. Above 1 the object is read whole and small. */
   pad?: number;
   reduced?: boolean;
+  /** Which studio lights are on. Absent means all of them. */
+  studio?: StudioLights;
 }
 
 export default function Scene({
@@ -141,6 +189,7 @@ export default function Scene({
   shiftY = 0,
   pad = 1.72,
   reduced = false,
+  studio = STUDIO_ALL_ON,
 }: SceneProps) {
   const span = Math.max(mesh.size.x, mesh.size.z);
   const fogRange = ghost ? pad : 1;
@@ -176,32 +225,7 @@ export default function Scene({
         args={["#060708", span * 2.2 * fogRange, span * 7 * fogRange]}
       />
       <ambientLight intensity={0.26} />
-      {/* The key light, and the only one that casts. Two shadows from one
-        object read as a mistake long before they read as a studio. The frustum
-        is fitted to the object rather than left at the default two units, which
-        would put the whole thing outside the shadow camera. */}
-      <directionalLight
-        castShadow
-        position={[span * 0.55, span * 0.95, span * 0.45]}
-        intensity={1.15}
-        shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.0004}
-        shadow-normalBias={span * 0.004}
-        shadow-radius={3}
-        shadow-camera-near={span * 0.1}
-        shadow-camera-far={span * 4}
-        shadow-camera-left={-span * 0.9}
-        shadow-camera-right={span * 0.9}
-        shadow-camera-top={span * 0.9}
-        shadow-camera-bottom={-span * 0.9}
-      />
-      <directionalLight
-        position={[-span * 0.8, span * 0.3, -span * 0.6]}
-        intensity={0.55}
-        color="#7fa4ff"
-      />
-      {/* Kicker from behind, so the far edge separates from the background. */}
-      <directionalLight position={[0, span * 0.22, -span * 1.1]} intensity={0.75} color="#cfe0ff" />
+      <StudioRig span={span} studio={studio} />
 
       <Environment resolution={128}>
         <Lightformer intensity={2.4} position={[0, 6, -8]} scale={[14, 8, 1]} color="#ffffff" />
@@ -210,9 +234,6 @@ export default function Scene({
       </Environment>
 
       {ghost ? (
-        // The shadow turns with the object. It is the only thing that puts a
-        // floating skyline on a surface, and a footprint that stayed put while
-        // the object rotated above it would take that back.
         <Presenter
           spin={spin}
           reduced={reduced}
@@ -224,31 +245,20 @@ export default function Scene({
               finish={finish}
               offsetY={offsetY}
               revealToken={revealToken}
-            />
-          }
-          shadow={
-            <SoftShadow
-              width={mesh.size.x}
-              depth={mesh.size.z}
-              y={floorY + offsetY + span * 0.002}
+              glowOn={studio.glow}
             />
           }
         />
       ) : (
-        <>
-          <Monolith
-            mesh={mesh}
-            finish={finish}
-            offsetY={offsetY}
-            revealToken={revealToken}
-          />
-          <SoftShadow
-            width={mesh.size.x}
-            depth={mesh.size.z}
-            y={floorY + offsetY + span * 0.002}
-          />
-        </>
+        <Monolith
+          mesh={mesh}
+          finish={finish}
+          offsetY={offsetY}
+          revealToken={revealToken}
+          glowOn={studio.glow}
+        />
       )}
+
 
       <StudioFloor radius={span * 2.6} y={floorY + offsetY - span * 0.006} />
 

@@ -54,7 +54,9 @@ export default async function Image({ params }: { params: Promise<{ login: strin
             <div style={{ display: "flex", fontSize: 24, color: "#8b9096", marginTop: 4 }}>
               {data?.demo
                 ? `${year} · sample data, GitHub unreachable`
-                : `${year} · ${stats ? stats.total.toLocaleString("en-GB") : "no data"} contributions`}
+                : stats
+                  ? `${year} · ${stats.total.toLocaleString("en-GB")} contributions`
+                  : `${year} · profile unavailable`}
             </div>
           </div>
           <div

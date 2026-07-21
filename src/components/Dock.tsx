@@ -3,9 +3,60 @@
 import { AnimatePresence, motion } from "motion/react";
 import { SIZES, VARIANTS, sizeById, type SizeId } from "@/lib/build";
 import { PALETTES, type Palette } from "@/lib/palettes";
-import type { Variant } from "@/lib/types";
+import type { StudioLights, Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
 import { Hint } from "./Hint";
+
+/**
+ * The studio's switches, in the order a photographer would name them.
+ * Each entry is one light, so the map below stays honest about what exists.
+ */
+const STUDIO_SWITCHES: { id: keyof StudioLights; name: string; hint: string }[] = [
+  { id: "key", name: "Key", hint: "Key light · the one that casts the shadow" },
+  { id: "fill", name: "Fill", hint: "Fill light · cool blue from the left" },
+  { id: "rim", name: "Rim", hint: "Rim light · separates the far edge" },
+  { id: "front", name: "Front", hint: "Front light · flat, reads the colours" },
+  { id: "glow", name: "Glow", hint: "Emissive · busy days carry their own light" },
+];
+
+/**
+ * A switch rather than a pick: several can be on at once, so no shared
+ * layout highlight, just a lamp dot that takes the accent while it burns.
+ */
+function Toggle({
+  active,
+  onClick,
+  title,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Hint label={title}>
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={onClick}
+        className={`flex items-center gap-1.5 rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] ${
+          active
+            ? "border-edge text-fog"
+            : "border-line text-dim hover:border-edge hover:text-mute"
+        }`}
+      >
+        <span
+          aria-hidden
+          className={`h-1 w-1 rounded-full transition-colors duration-150 ${
+            active ? "bg-accent" : "bg-edge"
+          }`}
+        />
+        {children}
+      </button>
+    </Hint>
+  );
+}
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -70,6 +121,8 @@ export interface DockProps {
   onSpin: (next: boolean) => void;
   sound: boolean;
   onSound: (next: boolean) => void;
+  studio: StudioLights;
+  onStudio: (next: StudioLights) => void;
   visible: boolean;
 }
 
@@ -201,6 +254,22 @@ export function Dock(props: DockProps) {
                 >
                   {s.name}
                 </Pill>
+              ))}
+            </Group>
+
+            <Group label="Studio">
+              {STUDIO_SWITCHES.map((s) => (
+                <Toggle
+                  key={s.id}
+                  active={props.studio[s.id]}
+                  title={s.hint}
+                  onClick={() => {
+                    play("tick");
+                    props.onStudio({ ...props.studio, [s.id]: !props.studio[s.id] });
+                  }}
+                >
+                  {s.name}
+                </Toggle>
               ))}
             </Group>
 

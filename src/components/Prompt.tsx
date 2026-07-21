@@ -171,29 +171,50 @@ export function Prompt({
       >
         <div className="flex items-baseline gap-0 text-[clamp(1.05rem,3.4vw,1.6rem)]">
           <span className="select-none text-dim">github.com/</span>
-          <input
-            ref={field}
-            value={value}
-            onChange={(e) => {
-              const next = e.target.value;
-              if (next.length > value.length) play("tick");
-              setValue(next);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit();
-            }}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            // Between two examples the hint is empty for a beat. Falling back
-            // to the word "handle" there made it look like a third example
-            // being typed, so the empty beat shows only the cursor.
-            placeholder={`${hint}\u2588`}
-            spellCheck={false}
-            autoComplete="off"
-            autoCapitalize="off"
-            aria-label="GitHub handle"
-            className="min-w-0 flex-1 text-fog [caret-color:var(--color-accent)]"
-          />
+          <span className="relative min-w-0 flex-1">
+            <input
+              ref={field}
+              value={value}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (next.length > value.length) play("tick");
+                setValue(next);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              spellCheck={false}
+              autoComplete="off"
+              autoCapitalize="off"
+              aria-label="GitHub handle"
+              // While the field is empty the browser caret sits at position
+              // zero, in front of the hint being typed, which reads as two
+              // cursors arguing. The drawn caret rides the hint instead, and
+              // the real one takes over with the first character.
+              className={`w-full text-fog ${
+                value === ""
+                  ? "[caret-color:transparent]"
+                  : "[caret-color:var(--color-accent)]"
+              }`}
+            />
+            {/* The hint used to be a placeholder string ending in a block
+              character, which rendered as a dead grey slab. This is a drawn
+              caret instead: a thin accent bar that blinks like the real one
+              the field shows once focused, and steps aside for it on focus.
+              Between two examples the hint is empty for a beat, and the beat
+              shows only the caret, so it never reads as a third example. */}
+            {value === "" && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 left-0 flex items-center overflow-hidden whitespace-nowrap text-dim"
+              >
+                {hint}
+                <span className="caret ml-px inline-block h-[1.1em] w-[2px] shrink-0 bg-accent motion-reduce:animate-none" />
+              </span>
+            )}
+          </span>
         </div>
 
         <div className="relative mt-3 h-px w-full bg-edge">
@@ -292,14 +313,15 @@ export function Prompt({
               </li>
             ))}
           </ul>
-          {/* Bambu Studio's own numbers for the 180 mm skyline of a real year,
-            0.4 nozzle, 0.16 mm, PLA: 4h00 and 17.7 cm3 on the P1S it was
-            measured on, about five hours on the slower A1 the site quotes.
-            Not the estimator's output, and not an invented year, which is how
-            this line first came to read six hours. */}
+          {/* The spread, not one machine's midpoint. Bambu Studio's own slices
+            of the 180 mm skyline of a real year: about five hours on a stock
+            A1, 4h00 on a P1S, and a fast X1C profile lands near two. Quoting
+            only the A1 figure overstated a core-XY machine by roughly double.
+            The 22 g and sixty cents hold across all of them. */}
           <p className="text-[0.72rem] leading-relaxed text-mute">
-            A 180 mm shelf piece slices to about five hours and 22 g of filament
-            on a stock 0.4 mm A1 profile. Around sixty cents.
+            A 180 mm shelf piece uses about 22 g of filament, around sixty
+            cents. Printing takes two to six hours depending on the machine,
+            the nozzle and the layer height.
           </p>
         </motion.div>
       </motion.div>

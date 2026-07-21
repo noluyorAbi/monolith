@@ -12,5 +12,8 @@ export const PROJECT = {
   /** Where this is deployed. Drives canonicals, sitemap, robots and OG urls. */
   site: process.env.NEXT_PUBLIC_SITE_URL || "https://monolith-ebon-six.vercel.app",
   author: "noluyorAbi",
+  /** The person, as opposed to the account. */
+  authorSite: "https://adatepe.dev",
+  authorSiteName: "adatepe.dev",
   tagline: "Your commit year, cast as an object.",
 } as const;

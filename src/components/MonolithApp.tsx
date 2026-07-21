@@ -30,7 +30,14 @@ import {
 } from "@/lib/sound";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import type { SizeId } from "@/lib/build";
-import type { BuiltMesh, ContributionYear, Day, Stats, Variant } from "@/lib/types";
+import type {
+  BuiltMesh,
+  ContributionYear,
+  Day,
+  Stats,
+  StudioLights,
+  Variant,
+} from "@/lib/types";
 import frozen from "../../data/contributions-2025.json";
 
 const Scene = dynamic(() => import("./Scene"), { ssr: false });
@@ -67,6 +74,14 @@ export function MonolithApp({
   );
   const [printing, setPrinting] = useState(false);
   const [copied, setCopied] = useState(false);
+  /** The studio's light switches, all on until a hand reaches for them. */
+  const [studio, setStudio] = useState<StudioLights>({
+    key: true,
+    fill: true,
+    rim: true,
+    front: false,
+    glow: true,
+  });
   /** Whether the object has been taken hold of. The hint is owed until it is. */
   const [turned, setTurned] = useState(false);
   /** Whether the page has been scrolled at all. The cue is owed until it has. */
@@ -111,8 +126,10 @@ export function MonolithApp({
   const shownVariant = preview?.variant ?? storyVariant;
   const shownPaletteId = preview?.paletteId ?? storyPaletteId;
 
+  // Labelled like the kit itself: the landing object is the STL you would
+  // download, engraved handle and year included, not a bald stand-in for it.
   const ghostMesh = useMemo(
-    () => buildMonolith(ghost, { variant: shownVariant, sizeMm: 180, label: false }),
+    () => buildMonolith(ghost, { variant: shownVariant, sizeMm: 180, label: true }),
     [ghost, shownVariant],
   );
 
@@ -145,9 +162,28 @@ export function MonolithApp({
   }, [data, built, variant, sizeMm]);
 
   const forge = useCallback(
-    async (handle: string, forYear: number) => {
+    async (
+      handle: string,
+      forYear: number,
+      opts?: {
+        /**
+         * Keep the current object if this build fails. Set by the year
+         * switches in the live phase: a transient network error there used to
+         * throw the whole session back to the empty landing, discarding the
+         * rendered object and its share URL.
+         */
+        keep?: boolean;
+      },
+    ) => {
       const id = ++runId.current;
       const alive = () => runId.current === id;
+      const fail = (message: string) => {
+        setError(message);
+        setSteps([]);
+        setProgress(0);
+        setPhase(opts?.keep ? "live" : "idle");
+        play("error");
+      };
       setError(null);
       // A build owns the whole screen, so the page goes back to the top and the
       // story hands the object back. Without this, a handle typed after
@@ -180,14 +216,18 @@ export function MonolithApp({
         payload = await res.json();
       } catch (err) {
         if (!alive()) return;
-        setError(err instanceof Error ? err.message : "Something broke.");
-        setPhase("idle");
-        setSteps([]);
-        setProgress(0);
-        play("error");
+        fail(err instanceof Error ? err.message : "Something broke.");
         return;
       }
       if (!alive()) return;
+
+      // A year the account simply was not active in. GitHub answers it with a
+      // perfectly valid calendar of zeroes, and building that would present an
+      // empty plate as a finished object. Say what happened instead.
+      if (payload.data.total === 0) {
+        fail(`GitHub shows no contributions for ${payload.data.login} in ${forYear}.`);
+        return;
+      }
 
       await wait(Math.max(0, 320 - (Date.now() - started)));
       push(
@@ -243,6 +283,10 @@ export function MonolithApp({
       setData(payload.data);
       setStats(payload.stats);
       setLogin(payload.data.login);
+      // The year follows the build that actually landed, not the intent to
+      // build it: set upfront by the callers, a failed switch left the dock
+      // naming a year the object on screen never was.
+      setYear(forYear);
       setPhase("live");
       setSpin(!reduceMotion);
       play("thunk");
@@ -309,8 +353,7 @@ export function MonolithApp({
         const i = years.indexOf(year) + (e.key === "[" ? 1 : -1);
         if (years[i] !== undefined) {
           play("step");
-          setYear(years[i]);
-          void forge(login, years[i]);
+          void forge(login, years[i], { keep: true });
         }
       }
       if (e.key === "Escape") reset();
@@ -333,6 +376,15 @@ export function MonolithApp({
 
   const activeMesh = mesh ?? ghostMesh;
   const isGhost = phase !== "live" || !mesh;
+
+  // The live phase has no prompt row to carry an error, so one shown there is
+  // transient by design: it says what failed and gets out of the way, because
+  // the object still on screen is the thing that matters.
+  useEffect(() => {
+    if (phase !== "live" || !error) return;
+    const timer = window.setTimeout(() => setError(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [phase, error]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -369,8 +421,9 @@ export function MonolithApp({
             onGrab={() => setTurned(true)}
             shiftX={twoColumn ? 0.22 : 0}
             shiftY={twoColumn ? -0.02 : -0.19}
-            pad={twoColumn ? 2.55 : 2.0}
+            pad={twoColumn ? 2.2 : 1.85}
             reduced={reduceMotion}
+            studio={studio}
           />
         </div>
 
@@ -395,6 +448,28 @@ export function MonolithApp({
           >
             Monolith
           </button>
+
+          {/* The landing makes a noise on every keystroke, so the switch for
+            that noise cannot live only in the dock a build away. Whatever the
+            stored preference or the reduced-motion default decided, this is
+            where it becomes visible and reversible. */}
+          <AnimatePresence>
+            {phase === "idle" && (
+              <motion.button
+                type="button"
+                onClick={() => setSoundEnabled(!sound)}
+                aria-pressed={sound}
+                className="pointer-events-auto flex items-center gap-2 text-[0.62rem] tracking-[0.18em] uppercase text-mute transition-colors duration-150 hover:text-fog"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <span aria-hidden>{sound ? "◉" : "◎"}</span>
+                {sound ? "sound on" : "sound off"}
+              </motion.button>
+            )}
+          </AnimatePresence>
 
           <AnimatePresence>
             {phase === "live" && (
@@ -426,16 +501,30 @@ export function MonolithApp({
                 >
                   new
                 </button>
-                <span aria-hidden className="text-edge">
-                  /
-                </span>
+                {/* The two doors off a shared page, worn as chips so a visitor
+                  who just received someone's year can find the maker and the
+                  repository without hunting for a footer that is not there. */}
                 <a
                   href={PROJECT.url}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="text-mute transition-colors duration-150 hover:text-fog"
+                  className="hairline flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog"
                 >
-                  source ↗
+                  <span aria-hidden className="text-accent">
+                    ★
+                  </span>
+                  star on github
+                </a>
+                <a
+                  href={PROJECT.authorSite}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="hairline flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog"
+                >
+                  by {PROJECT.authorSiteName}
+                  <span aria-hidden className="text-accent">
+                    ↗
+                  </span>
                 </a>
               </motion.div>
             )}
@@ -540,14 +629,33 @@ export function MonolithApp({
                   Source available · the files are free · print it yourself
                 </span>
                 <span className="sm:hidden">The files are free</span>
-                <a
-                  href={PROJECT.url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="pointer-events-auto hidden transition-colors duration-150 hover:text-fog sm:inline"
-                >
-                  github.com/{PROJECT.repo} ↗
-                </a>
+                {/* The two ways off the page, worn as chips rather than muttered
+                  in the margin: the one person and the one repository behind
+                  the object deserve at least a border. */}
+                <span className="hidden items-center gap-2 sm:flex">
+                  <a
+                    href={PROJECT.authorSite}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="hairline pointer-events-auto flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog"
+                  >
+                    by {PROJECT.authorSiteName}
+                    <span aria-hidden className="text-accent">
+                      ↗
+                    </span>
+                  </a>
+                  <a
+                    href={PROJECT.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="hairline pointer-events-auto flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog"
+                  >
+                    github.com/{PROJECT.repo}
+                    <span aria-hidden className="text-accent">
+                      ↗
+                    </span>
+                  </a>
+                </span>
               </motion.footer>
             )}
           </AnimatePresence>
@@ -556,6 +664,8 @@ export function MonolithApp({
         {phase === "idle" && (
           <Story
             mesh={ghostMesh}
+            login={ghost.login}
+            year={ghost.year}
             state={{ variant: storyVariant, paletteId: storyPaletteId }}
             onState={onStoryState}
             onPreview={setPreview}
@@ -578,13 +688,26 @@ export function MonolithApp({
           </div>
         )}
 
+        <AnimatePresence>
+          {phase === "live" && error && (
+            <motion.p
+              className="pointer-events-none absolute left-1/2 top-16 z-40 -translate-x-1/2 whitespace-nowrap rounded-[4px] border border-danger/40 bg-ink/90 px-3 py-1.5 text-[0.62rem] tracking-[0.16em] uppercase text-danger backdrop-blur-sm"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {error}
+            </motion.p>
+          )}
+        </AnimatePresence>
+
         <Dock
           visible={phase === "live" && !!data}
           year={year}
           years={years}
           onYear={(y) => {
-            setYear(y);
-            void forge(login, y);
+            void forge(login, y, { keep: true });
           }}
           variant={variant}
           onVariant={setVariant}
@@ -598,6 +721,8 @@ export function MonolithApp({
           onSpin={setSpin}
           sound={sound}
           onSound={setSoundEnabled}
+          studio={studio}
+          onStudio={setStudio}
         />
 
         {mesh && (

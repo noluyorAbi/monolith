@@ -25,6 +25,12 @@ interface Uniforms {
   uRim: { value: number };
   uBase: { value: THREE.Color };
   uRamp: { value: THREE.Color[] };
+  /** Where the pointer meets the plate, in the mesh's own coordinates. */
+  uPoint: { value: THREE.Vector2 };
+  /** Radius of the lit pool around that point. */
+  uPointR: { value: number };
+  /** How much of the pool to show, eased so it breathes in and out. */
+  uTouch: { value: number };
 }
 
 function useMonolithMaterial(finish: Palette) {
@@ -34,6 +40,9 @@ function useMonolithMaterial(finish: Palette) {
     uRim: { value: finish.rim },
     uBase: { value: new THREE.Color(finish.base) },
     uRamp: { value: finish.ramp.map((c) => new THREE.Color(c)) },
+    uPoint: { value: new THREE.Vector2(1e6, 1e6) },
+    uPointR: { value: 1 },
+    uTouch: { value: 0 },
   });
 
   const material = useMemo(() => {
@@ -44,6 +53,9 @@ function useMonolithMaterial(finish: Palette) {
       shader.uniforms.uRim = uniforms.current.uRim;
       shader.uniforms.uBase = uniforms.current.uBase;
       shader.uniforms.uRamp = uniforms.current.uRamp;
+      shader.uniforms.uPoint = uniforms.current.uPoint;
+      shader.uniforms.uPointR = uniforms.current.uPointR;
+      shader.uniforms.uTouch = uniforms.current.uTouch;
 
       shader.vertexShader =
         `attribute float aLevel;
@@ -52,13 +64,19 @@ function useMonolithMaterial(finish: Palette) {
          uniform float uReveal;
          varying float vLevel;
          varying float vGrow;
+         varying vec2 vPlate;
         ` +
         shader.vertexShader.replace(
           "#include <begin_vertex>",
           `#include <begin_vertex>
            vLevel = aLevel;
+           vPlate = position.xz;
            float t = clamp((uReveal - aOrder * 0.72) / 0.28, 0.0, 1.0);
-           float e = 1.0 - pow(1.0 - t, 3.0);
+           // Smoothstep rather than a pure ease-out: ease-out is fastest at
+           // birth, so every frame a handful of towers snapped into motion and
+           // the build front read as jitter. Zero velocity at both ends keeps
+           // the wave sweeping without the pop.
+           float e = t * t * (3.0 - 2.0 * t);
            vGrow = e;
            transformed.y = mix(aBaseY, transformed.y, e);`,
         );
@@ -68,13 +86,22 @@ function useMonolithMaterial(finish: Palette) {
          uniform vec3 uRamp[5];
          uniform float uGlow;
          uniform float uRim;
+         uniform vec2 uPoint;
+         uniform float uPointR;
+         uniform float uTouch;
          varying float vLevel;
          varying float vGrow;
+         varying vec2 vPlate;
         ` +
         shader.fragmentShader
           .replace(
             "vec4 diffuseColor = vec4( diffuse, opacity );",
-            `vec3 mono = uBase;
+            `// The plinth's stated colour is nearly black, and a 6% albedo
+             // cannot show a lamp being switched: the studio controls read as
+             // affecting only the towers. Lifted here for the lighting maths
+             // only, the plate answers light while still reading dark, and the
+             // scaled term keeps pale bases like bone from blowing out.
+             vec3 mono = uBase * 1.6 + vec3(0.035);
              float lit = 0.0;
              if (vLevel > -0.5) {
                mono = uRamp[0];
@@ -84,8 +111,12 @@ function useMonolithMaterial(finish: Palette) {
                if (vLevel > 2.5) { mono = uRamp[3]; lit = 0.82; }
                if (vLevel > 3.5) { mono = uRamp[4]; lit = 1.0; }
              }
-             // Freshly risen geometry glows for a beat, so the build reads as heat.
-             float heat = (1.0 - vGrow) * step(0.001, vGrow);
+             // Freshly risen geometry glows for a beat, so the build reads as
+             // heat. The glow fades in over the first fifth of the rise rather
+             // than arriving at full strength on a tower's first frame: the
+             // instant version made every birth a white flash, and a plate of
+             // staggered births flickered like a faulty lamp.
+             float heat = smoothstep(0.0, 0.22, vGrow) * (1.0 - vGrow);
              mono = mix(mono, mono * 2.6 + vec3(0.06), heat);
              lit = mix(lit, 1.4, heat);
              vec4 diffuseColor = vec4( mono, opacity );`,
@@ -94,8 +125,9 @@ function useMonolithMaterial(finish: Palette) {
             "#include <roughnessmap_fragment>",
             `#include <roughnessmap_fragment>
              // The plinth is sandblasted, the blocks are not. One material, two
-             // surfaces, so the base never mirrors the studio lights.
-             roughnessFactor = mix(0.97, roughnessFactor, step(-0.5, vLevel));`,
+             // surfaces. Matte enough not to mirror the light formers, rough
+             // enough short of full that a switched lamp still lands on it.
+             roughnessFactor = mix(0.86, roughnessFactor, step(-0.5, vLevel));`,
           )
           .replace(
             "#include <emissivemap_fragment>",
@@ -103,6 +135,13 @@ function useMonolithMaterial(finish: Palette) {
              // Busy days carry their own light. Without this the plinth wins the
              // frame and the data reads as texture instead of as the subject.
              totalEmissiveRadiance += mono * uGlow * lit;
+
+             // A pool of warmth in the data under the pointer. Not a spotlight
+             // from outside but the days themselves brightening, the same way
+             // the build's heat works: the year noticing where you look.
+             float touchD = distance( vPlate, uPoint );
+             float touch = smoothstep( uPointR, uPointR * 0.18, touchD ) * uTouch * step( -0.5, vLevel );
+             totalEmissiveRadiance += ( mono * 1.7 + vec3( 0.05 ) ) * touch * ( 0.35 + 0.65 * lit );
 
              // A dark object on a dark page has no outline at all. This traces
              // every silhouette and every block edge, weighted up on the plinth,
@@ -118,7 +157,8 @@ function useMonolithMaterial(finish: Palette) {
   useEffect(() => {
     uniforms.current.uBase.value.set(finish.base);
     finish.ramp.forEach((c, i) => uniforms.current.uRamp.value[i].set(c));
-    uniforms.current.uGlow.value = finish.glow;
+    // uGlow is deliberately not written here: the frame loop owns it, easing
+    // finish.glow through the studio's glow switch.
     uniforms.current.uRim.value = finish.rim;
     material.roughness = finish.roughness;
     material.metalness = finish.metalness;
@@ -131,18 +171,38 @@ function useMonolithMaterial(finish: Palette) {
   return { material, uniforms: uniforms.current };
 }
 
+/** Scratch space for the per-frame pointer projection, allocated once. */
+const _inv = new THREE.Matrix4();
+const _origin = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+
 export function Monolith({
   mesh,
   finish,
   offsetY,
   revealToken,
+  glowOn = true,
 }: {
   mesh: BuiltMesh;
   finish: Palette;
   offsetY: number;
   revealToken: string;
+  /** The studio's emissive switch. Eased, so the days dim rather than cut. */
+  glowOn?: boolean;
 }) {
   const { material, uniforms } = useMonolithMaterial(finish);
+  const body = useRef<THREE.Mesh>(null);
+  /** How much of the finish's own glow is being shown, 0..1. */
+  const glowShown = useRef(1);
+  // Touch screens park the pointer wherever the last tap landed, which would
+  // leave a pool of light frozen into the object. The pool is for a pointer
+  // that can hover.
+  const fine = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: fine)").matches,
+    [],
+  );
 
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
@@ -160,14 +220,65 @@ export function Monolith({
     uniforms.uReveal.value = 0;
   }, [revealToken, uniforms]);
 
-  useFrame((_, delta) => {
+  useFrame(({ raycaster, pointer, camera }, delta) => {
     const u = uniforms.uReveal;
-    if (u.value < 1) u.value = Math.min(1, u.value + delta / 1.35);
+    // Scrolling the story re-renders panels on the main thread, and a long
+    // frame there arrives here as a delta spike; fed straight into the reveal
+    // it teleports the build wave forward. Capped, a hitch slows the wave for
+    // a frame instead of jumping it.
+    if (u.value < 1) u.value = Math.min(1, u.value + Math.min(delta, 1 / 30) / 1.35);
+
+    // The glow switch, eased here rather than stamped in an effect so turning
+    // the emissive off reads as the days cooling instead of a breaker trip.
+    const g = glowShown.current + ((glowOn ? 1 : 0) - glowShown.current) * (1 - Math.pow(0.004, delta));
+    glowShown.current = g;
+    uniforms.uGlow.value = finish.glow * g;
+
+    // Where the pointer's ray crosses the plate, found in the mesh's own
+    // coordinates so it stays correct however the presenter has turned or
+    // lifted the object. A plane test rather than a raycast against the
+    // geometry: the pool lights days by where you point across the plate, and
+    // an intersection against fifty thousand triangles every frame would buy
+    // no more than that.
+    const node = body.current;
+    const t = uniforms.uTouch;
+    let over = false;
+    if (fine && node) {
+      raycaster.setFromCamera(pointer, camera);
+      node.updateWorldMatrix(true, false);
+      _inv.copy(node.matrixWorld).invert();
+      _origin.copy(raycaster.ray.origin).applyMatrix4(_inv);
+      _dir.copy(raycaster.ray.direction).transformDirection(_inv);
+      const plateY = mesh.bounds.min[1];
+      const along = (plateY - _origin.y) / _dir.y;
+      if (Number.isFinite(along) && along > 0) {
+        const x = _origin.x + _dir.x * along;
+        const z = _origin.z + _dir.z * along;
+        const reach = Math.max(mesh.size.x, mesh.size.z) * 0.08;
+        over =
+          x > mesh.bounds.min[0] - reach &&
+          x < mesh.bounds.max[0] + reach &&
+          z > mesh.bounds.min[2] - reach &&
+          z < mesh.bounds.max[2] + reach;
+        if (over) uniforms.uPoint.value.set(x, z);
+      }
+    }
+    t.value += ((over ? 1 : 0) - t.value) * (1 - Math.pow(0.002, delta));
   });
+
+  useEffect(() => {
+    uniforms.uPointR.value = Math.max(mesh.size.x, mesh.size.z) * 0.14;
+  }, [mesh, uniforms]);
 
   return (
     <group position={[0, offsetY, 0]}>
-      <mesh castShadow receiveShadow geometry={geometry} material={material} />
+      <mesh
+        ref={body}
+        castShadow
+        receiveShadow
+        geometry={geometry}
+        material={material}
+      />
     </group>
   );
 }
@@ -188,7 +299,6 @@ export function Monolith({
  */
 export function Presenter({
   object,
-  shadow,
   /** Used to size the lift, so it is the same gesture at every object scale. */
   span,
   spin,
@@ -196,7 +306,6 @@ export function Presenter({
   onGrab,
 }: {
   object: React.ReactNode;
-  shadow: React.ReactNode;
   span: number;
   spin: boolean;
   reduced: boolean;
@@ -204,7 +313,6 @@ export function Presenter({
 }) {
   const group = useRef<THREE.Group>(null);
   const lift = useRef<THREE.Group>(null);
-  const cast = useRef<THREE.Group>(null);
   const { gl } = useThree();
 
   /**
@@ -332,24 +440,19 @@ export function Presenter({
     g.rotation.x = -point.current.y * 0.04 * drift;
     g.rotation.z = point.current.x * 0.012 * drift;
 
-    // Picked up, not just spun: the object rises a little out of its shadow
-    // while it is being held, and the shadow spreads and thins the way a real
-    // one does as the thing casting it leaves the surface.
+    // Picked up, not just spun: the object rises a little off the surface
+    // while it is being held. The shadows are real now, cast and re-rendered
+    // from the geometry itself, so they answer the lift on their own: the
+    // contact pool thins and the silhouette drifts without being told to.
     const wanted = dragging.current ? 1 : 0;
     held.current += (wanted - held.current) * (1 - Math.pow(0.02, delta));
     const l = lift.current;
-    const c = cast.current;
     if (l) l.position.y = held.current * span * 0.035;
-    if (c) {
-      const spread = 1 + held.current * 0.12;
-      c.scale.set(spread, 1, spread);
-    }
   });
 
   return (
     <group ref={group}>
       <group ref={lift}>{object}</group>
-      <group ref={cast}>{shadow}</group>
     </group>
   );
 }

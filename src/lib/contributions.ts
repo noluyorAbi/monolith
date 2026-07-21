@@ -31,22 +31,32 @@ export function yearRange(year: number): { from: string; to: string } {
   return { from: `${year}-01-01`, to: end };
 }
 
-/** GitHub launched in 2008, and a year we cannot render is not worth caching. */
+/**
+ * GitHub launched in 2008, and a year we cannot render is not worth caching.
+ * A numeric year outside that range clamps to the nearest end rather than
+ * silently swapping to the current year: someone asking for 2005 is closer to
+ * meaning 2008 than to meaning now. Only a non-year falls back to the present.
+ */
 export function parseYear(raw: string | null): number {
   const current = availableYears(1)[0];
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < 2008 || value > current) return current;
-  return value;
+  if (!Number.isInteger(value)) return current;
+  return Math.min(Math.max(value, 2008), current);
 }
 
 /** How far back the interface lets someone go. */
 export const SELECTABLE_YEARS = 7;
 
-/** Resolve a requested year against the window the UI actually offers. */
+/**
+ * Resolve a requested year against the window the UI actually offers, to the
+ * nearest end of it. A share link asking for a year further back than the
+ * window lands on the oldest selectable year, not on today.
+ */
 export function clampSelectableYear(raw: string | number | undefined | null): number {
   const years = availableYears(SELECTABLE_YEARS);
   const value = Number(raw);
-  return years.includes(value) ? value : years[0];
+  if (!Number.isInteger(value)) return years[0];
+  return Math.min(Math.max(value, years[years.length - 1]), years[0]);
 }
 
 export function availableYears(count = 6): number[] {

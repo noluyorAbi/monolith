@@ -103,7 +103,7 @@ Three findings came out of holding the project to that standard, and each one ch
 
 Raising the text is what fixed it. The widely repeated claim that this needs the arachne wall generator turned out to be false at the default size, where both generators print the lettering fine. Arachne is set because it recovers roughly three times more below the threshold, but as an improvement, not a rescue, and small sizes carry a warning rather than a promise.
 
-The filament and time estimates are fitted the same way, against three real slices of the same year at 0.12, 0.16 and 0.20 mm, on a P1S with the stock 0.4 mm nozzle. The site quotes an A1 by default, which is the machine most people printing one of these own; only the time band is scaled for it, from Bambu's own published acceleration figures, and the filament is identical on every machine. At 0.16 mm that object is 4h00 and 17.7 cm3 of PLA, about 22 g, and the estimator puts it at 17.8 cm3. The fit reproduces all three slices to within 0.3%, and `test/calib.test.ts` fails if it ever drifts. The year those slices used is committed at `data/contributions-2025.json`, and it is the same year the banner, the share card and the demo draw, so no image here shows a denser object than the one that was measured.
+The filament and time estimates are fitted the same way, against three real slices of the same year at 0.12, 0.16 and 0.20 mm, on a P1S with the stock 0.4 mm nozzle. The site quotes an A1 by default, which is the machine most people printing one of these own; only the time band is scaled for it, from Bambu's own published acceleration figures, and the filament is identical on every machine. At 0.16 mm that object is 4h00 and 17.7 cm3 of PLA, about 22 g, and the estimator puts it at 17.8 cm3. The landing therefore quotes the spread rather than one machine's midpoint: two to six hours depending on the printer, the nozzle and the layer height. The fit reproduces all three slices to within 0.3%, and `test/calib.test.ts` fails if it ever drifts. The year those slices used is committed at `data/contributions-2025.json`, and it is the same year the banner, the share card and the demo draw, so no image here shows a denser object than the one that was measured.
 
 ## <img src="assets/icons/code.svg" width="16" align="center"> How the geometry works
 
@@ -148,6 +148,10 @@ If GitHub cannot be reached at all, the app falls back to a deterministic synthe
 | `/api/contributions?login=&year=` | The parsed year plus derived statistics, as JSON. |
 | `/llms.txt` | Generated from the code, so an assistant reads the real forms, sizes and profile. |
 
+## <img src="assets/icons/layers.svg" width="16" align="center"> The viewer
+
+The object on the page is the STL you download, engraved handle included, not a lightweight stand-in. It turns under a drag and carries the throw when you let go, and the days under your pointer light up from within. The studio it stands in is yours too: key, fill, rim, a flat front lamp and the emissive glow each have their own switch in the dock, dimmed in and out rather than cut, and the shadow on the floor is cast by the real geometry, so it answers every switch. A year with no contributions refuses to build an empty plate and says so, and the current year is labelled `year to date` instead of posing as a weak one.
+
 ## <img src="assets/icons/printer.svg" width="16" align="center"> Legibility
 
 A page this dark fails quietly, so the values are measured rather than eyeballed. Every text colour clears WCAG AA against the page: the token carrying the smallest uppercase labels sits at 6.3:1, body copy at 8.3:1, and anything bounding a control at 3.4:1, above the 3:1 WCAG 1.4.11 asks for. Readouts sit over a live 3D canvas, so they carry their own gradient scrim; measured against a bright tower directly behind them, the worst row still reads at 7.2:1. The object is nearly as dark as the page, so a Fresnel term traces its silhouette and a pool of light on the floor gives the shape something to sit against. Portrait screens swing the camera down the object's long axis, so a phone gets the same object at usable size.
@@ -191,5 +195,5 @@ npm run assets         # re-render the banner, share card and demo
 ---
 
 <div align="center">
-<sub>Built by <a href="https://github.com/noluyorAbi">noluyorAbi</a>. If you print one, post it.</sub>
+<sub>Built by <a href="https://github.com/noluyorAbi">noluyorAbi</a> · <a href="https://adatepe.dev">adatepe.dev</a>. If you print one, post it.</sub>
 </div>

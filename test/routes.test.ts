@@ -144,10 +144,18 @@ test("a year we cannot render never reaches GitHub", async () => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
 
   // Every route clamps to the same window, so the same query string cannot
-  // mean one year on the preview and another on the download.
+  // mean one year on the preview and another on the download. Numeric years
+  // land on the nearest end of the renderable range; only a non-year falls
+  // back to the present.
   const current = new Date().getUTCFullYear();
-  for (const junk of ["99999", "1900", "1e21", "-5", "notayear"]) {
-    assert.equal(parseModelRequest(new URL(`${BASE}/kit?year=${junk}`)).year, current, junk);
+  for (const [junk, expected] of [
+    ["99999", current],
+    ["1900", 2008],
+    ["1e21", current],
+    ["-5", 2008],
+    ["notayear", current],
+  ] as const) {
+    assert.equal(parseModelRequest(new URL(`${BASE}/kit?year=${junk}`)).year, expected, junk);
   }
   await getContributions(new Request(`${BASE}/contributions?login=octocat&year=1e21`));
   const requested = String(fetchSpy.mock.calls.at(0)?.at(0) ?? "");

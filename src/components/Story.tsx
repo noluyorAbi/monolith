@@ -13,12 +13,51 @@ import {
   qualityById,
 } from "@/lib/print";
 import { printableParts } from "@/lib/parts";
+import { PROJECT } from "@/lib/project";
 import type { BuiltMesh, Variant } from "@/lib/types";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 /** The finishes the story walks through, in the order the dock lists them. */
 const FINISHES = PALETTES.slice(0, 4);
+
+/**
+ * What each panel says about its form, beyond the one-line blurb the dock
+ * shows. The fact line states only what the geometry does; anything about how
+ * it prints belongs to the print chapter, which has real numbers to back it.
+ */
+const FORM_COPY: Record<Variant, { body: string; fact: string }> = {
+  skyline: {
+    body: "The contribution graph stood up, one tower per day.",
+    fact: "365 towers · one per day",
+  },
+  ring: {
+    body: "The year curls until the last week lands beside the first and the loop closes. From above, twelve months in one glance.",
+    fact: "week 52 meets week 01",
+  },
+  wave: {
+    body: "The same days smoothed into a single terrain. Ridges where you shipped, valleys where you rested.",
+    fact: "one unbroken surface",
+  },
+  spine: {
+    body: "Each month collapsed into a single tower. The coarsest read of a year, and the boldest one across a room.",
+    fact: "one tower per month",
+  },
+};
+
+/**
+ * What each finish is like to live with. The ramp chips beside this copy are
+ * the palette's own level colours, so the claim that the object is sliced in
+ * four shades is shown rather than asserted.
+ */
+const FINISH_COPY: Record<string, string> = {
+  signal: "The colours the graph already taught you, poured into filament.",
+  obsidian:
+    "Matte black on black. The graph survives as relief: you read the year by its shadows, not its colours.",
+  bone: "Warm white over bone. The kind of object a museum shop would sell, except the shape is your year.",
+  titanium:
+    "Four greys under a brushed sheen, the closest a filament gets to machined metal.",
+};
 
 export interface SceneState {
   variant: Variant;
@@ -97,9 +136,12 @@ function Panel({
 
 function Step({ index, label }: { index: string; label: string }) {
   return (
-    <p className="mb-4 flex items-center gap-3 text-[0.6rem] tracking-[0.24em] uppercase text-dim">
+    <p className="mb-5 flex items-center gap-3 text-[0.6rem] tracking-[0.24em] uppercase text-dim">
       <span className="text-accent">{index}</span>
       {label}
+      {/* The rule runs to the column's edge, so a chapter head reads as a
+        heading with a margin rather than two words afloat in the void. */}
+      <span aria-hidden className="ml-1 h-px flex-1 bg-line" />
     </p>
   );
 }
@@ -117,6 +159,65 @@ function Body({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * A mid-chapter panel's copy, set like the engraved plate beside an exhibit:
+ * a counter, a name in the display face, a sentence or two, and a hairline
+ * holding the whole thing to a left edge. These panels used to be one caption
+ * in a corner, which read as an empty screen whenever the object was between
+ * two of them.
+ */
+function Plate({
+  index,
+  total,
+  name,
+  children,
+}: {
+  index: string;
+  total: string;
+  name: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-l border-line pl-6 min-[900px]:pl-8">
+      <p className="flex items-baseline gap-2 text-[0.58rem] tracking-[0.24em] uppercase">
+        <span className="text-accent">{index}</span>
+        <span className="text-dim">/ {total}</span>
+      </p>
+      <h3 className="mt-3 font-[family-name:var(--font-display)] text-[clamp(1.35rem,3vw,1.9rem)] leading-[1.1] tracking-[-0.025em] text-fog">
+        {name}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The four level colours of a finish, straight from the palette the mesh is
+ * actually sliced with. The finish chapter claims the colour is not a render
+ * trick; these are the four filaments of that claim, shown instead of stated.
+ */
+function Shades({ ramp }: { ramp: readonly string[] }) {
+  return (
+    <div className="mt-6 flex items-center gap-1.5">
+      {ramp.slice(1).map((shade, i) => (
+        <motion.span
+          key={shade}
+          aria-hidden
+          className="h-3.5 w-3.5 rounded-[2px]"
+          style={{ background: shade, border: "1px solid rgba(255,255,255,0.14)" }}
+          initial={{ opacity: 0, y: 5 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ amount: 0.6, once: false }}
+          transition={{ duration: 0.4, delay: 0.1 + i * 0.07, ease: EASE }}
+        />
+      ))}
+      <span className="ml-2 text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+        the four intensities
+      </span>
+    </div>
+  );
+}
+
+/**
  * The row of names for a set, with the one the object is wearing marked.
  *
  * These were labels. They are controls now: pointing at one puts it on the
@@ -131,7 +232,8 @@ function Marks({
   onPreview,
   onPick,
 }: {
-  items: { id: string; name: string }[];
+  /** A swatch makes the dot the material's own colour rather than the accent. */
+  items: { id: string; name: string; swatch?: string }[];
   activeId: string;
   onPreview: (id: string | null) => void;
   onPick: (id: string) => void;
@@ -162,7 +264,9 @@ function Marks({
                 aria-hidden
                 className="h-1 w-1 rounded-full"
                 animate={{
-                  backgroundColor: on ? "var(--color-accent)" : "var(--color-edge)",
+                  backgroundColor:
+                    item.swatch ?? (on ? "var(--color-accent)" : "var(--color-edge)"),
+                  opacity: item.swatch && !on ? 0.55 : 1,
                   scale: on ? 1.5 : 1,
                 }}
                 transition={{ duration: 0.32, ease: EASE }}
@@ -251,6 +355,8 @@ function Rail({ active }: { active: Chapter | null }) {
  */
 export function Story({
   mesh,
+  login,
+  year,
   state,
   onState,
   onPreview,
@@ -258,6 +364,9 @@ export function Story({
 }: {
   /** The object as currently built, so the print figures describe what is shown. */
   mesh: BuiltMesh;
+  /** Whose year the shown object is, so the kit manifest names real files. */
+  login: string;
+  year: number;
   state: SceneState;
   onState: (next: Partial<SceneState>) => void;
   /** A form or a finish held up to the object without committing to it. */
@@ -269,13 +378,29 @@ export function Story({
 
   const printer = printerById(DEFAULT_PRINTER_ID);
   const material = materialById("pla");
+  const quality = qualityById("standard");
 
   const numbers = useMemo(
-    () => estimate(printableParts(mesh), material, qualityById("standard"), printer),
-    [mesh, material, printer],
+    () => estimate(printableParts(mesh), material, quality, printer),
+    [mesh, material, quality, printer],
   );
 
   const shelf = SIZES.find((s) => s.id === "shelf") ?? SIZES[1];
+
+  // The same stem the download routes use, built from the object on screen, so
+  // picking a different form upstream renames the files down here.
+  const stem = `monolith-${login}-${year}-${state.variant}-${shelf.mm}mm`;
+  const kitFiles = [
+    { name: `${stem}.3mf`, role: "colours assigned" },
+    { name: `${stem}.stl`, role: "raw geometry" },
+    {
+      name: `presets/MONOLITH ${quality.layerHeightMm.toFixed(2)}mm @BBL ${printer.presetSuffix}.json`,
+      role: "slicer profile",
+    },
+    { name: "PRINT-ME.txt", role: "the numbers, on paper" },
+  ];
+
+  const finishOf = (id: string) => FINISHES.find((f) => f.id === id) ?? FINISHES[0];
 
   return (
     <div className="pointer-events-none relative z-20">
@@ -303,7 +428,7 @@ export function Story({
         />
       </Panel>
 
-      {VARIANTS.slice(1).map((form) => (
+      {VARIANTS.slice(1).map((form, i) => (
         <Panel
           key={form.id}
           chapter="form"
@@ -312,8 +437,14 @@ export function Story({
           onEnter={onState}
           className="min-[900px]:min-h-[72svh]"
         >
-          <p className="text-[0.62rem] tracking-[0.24em] uppercase text-dim">{form.name}</p>
-          <p className="mt-3 text-[0.95rem] text-mute">{form.blurb}.</p>
+          <Plate index={`0${i + 2}`} total={`0${VARIANTS.length}`} name={form.name}>
+            <p className="mt-3 max-w-[26rem] text-[0.85rem] leading-relaxed text-mute">
+              {FORM_COPY[form.id].body}
+            </p>
+            <p className="mt-5 text-[0.58rem] tracking-[0.22em] uppercase text-dim">
+              {FORM_COPY[form.id].fact}
+            </p>
+          </Plate>
         </Panel>
       ))}
 
@@ -321,6 +452,7 @@ export function Story({
         id="story-finish"
         chapter="finish"
         onChapter={setChapter}
+        applyVariant="skyline"
         applyPalette={FINISHES[0].id}
         onEnter={onState}
         className="min-[900px]:min-h-[88svh]"
@@ -332,25 +464,34 @@ export function Story({
           one you chose. The colour is not a render trick: the object is sliced
           in four shades, one per intensity of the graph.
         </Body>
+        <Shades ramp={finishOf(state.paletteId).ramp} />
         <Marks
-          items={FINISHES}
+          items={FINISHES.map((f) => ({ id: f.id, name: f.name, swatch: f.ramp[3] }))}
           activeId={state.paletteId}
           onPreview={(id) => onPreview(id ? { paletteId: id } : null)}
           onPick={(id) => onState({ paletteId: id })}
         />
       </Panel>
 
-      {FINISHES.slice(1).map((finish) => (
+      {FINISHES.slice(1).map((finish, i) => (
         <Panel
           key={finish.id}
           chapter="finish"
           onChapter={setChapter}
+          // Each finish arrives on a different form, so by the end of the
+          // chapter every colourway has been seen on more than the skyline
+          // and every form has been seen in more than green.
+          applyVariant={VARIANTS[i + 1].id}
           applyPalette={finish.id}
           onEnter={onState}
           className="min-[900px]:min-h-[72svh]"
         >
-          <p className="text-[0.62rem] tracking-[0.24em] uppercase text-dim">{finish.name}</p>
-          <p className="mt-3 text-[0.95rem] text-mute">{finish.note}.</p>
+          <Plate index={`0${i + 2}`} total={`0${FINISHES.length}`} name={finish.name}>
+            <p className="mt-3 max-w-[26rem] text-[0.85rem] leading-relaxed text-mute">
+              {FINISH_COPY[finish.id] ?? finish.note}
+            </p>
+            <Shades ramp={finish.ramp} />
+          </Plate>
         </Panel>
       ))}
 
@@ -365,16 +506,19 @@ export function Story({
         <Title>It is a real print, with real numbers.</Title>
         <Body>
           Sliced in Bambu Studio on the profile the kit ships: {shelf.mm} mm,{" "}
-          {material.name}, a 0.4 mm nozzle at 0.16 mm layers, on a{" "}
-          {printer.name}. Nothing here is a placeholder.
+          {material.name}, a 0.4 mm nozzle at {quality.layerHeightMm} mm layers,
+          on a {printer.name}. That is the slow end: a core-XY machine like the
+          P1S or X1 Carbon takes hours off these numbers. Nothing here is a
+          placeholder.
         </Body>
 
-        <dl className="mt-8 flex flex-wrap gap-x-8 gap-y-6">
+        <dl className="mt-9 grid max-w-[27rem] grid-cols-2 border-y border-line tabular-nums">
           {[
             {
               // The same span the print sheet quotes. A single figure would be
-              // the estimator's low end presented as a promise.
-              term: "Print time",
+              // the estimator's low end presented as a promise, and the machine
+              // is named because the number is only true of it.
+              term: `Print time · ${printer.presetSuffix}`,
               value: (
                 <span className="whitespace-nowrap">
                   <Ticker value={numbers.hoursLow} format={(n) => n.toFixed(1)} />
@@ -400,20 +544,40 @@ export function Story({
               term: "Triangles",
               value: <Ticker value={mesh.triangles} />,
             },
-          ].map((row) => (
-            <div key={row.term}>
+          ].map((row, i) => (
+            <div
+              key={row.term}
+              className={`flex flex-col gap-2 py-5 ${
+                i % 2 === 1 ? "border-l border-line pl-6" : "pr-6"
+              } ${i >= 2 ? "border-t border-line" : ""}`}
+            >
               <dt className="text-[0.58rem] tracking-[0.2em] uppercase text-dim">{row.term}</dt>
-              <dd className="mt-2 font-[family-name:var(--font-display)] text-[clamp(1.2rem,2.6vw,1.7rem)] tracking-[-0.02em] text-fog">
+              <dd className="font-[family-name:var(--font-display)] text-[clamp(1.2rem,2.6vw,1.7rem)] tracking-[-0.02em] text-fog">
                 {row.value}
               </dd>
             </div>
           ))}
         </dl>
 
-        <p className="mt-8 text-[0.72rem] leading-relaxed text-dim">
-          Downloads a 3MF with the colours already assigned, an STL, and a
-          preset for {printer.name} and Orca.
-        </p>
+        {/* The kit by name rather than by promise. The stem is the one the
+          download routes actually use, so the form chosen a few screens up
+          renames these files in place. */}
+        <div className="mt-9 max-w-[27rem]">
+          <p className="text-[0.58rem] tracking-[0.2em] uppercase text-dim">In the kit</p>
+          <ul className="mt-3 border-t border-line">
+            {kitFiles.map((file) => (
+              <li
+                key={file.role}
+                className="flex items-baseline justify-between gap-4 border-b border-line py-2.5"
+              >
+                <span className="min-w-0 truncate text-[0.72rem] text-mute">{file.name}</span>
+                <span className="shrink-0 text-[0.55rem] tracking-[0.18em] uppercase text-dim">
+                  {file.role}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </Panel>
 
       <Panel onEnter={onState} className="min-[900px]:min-h-[95svh]">
@@ -430,8 +594,43 @@ export function Story({
             Type a handle
           </span>
         </button>
+        <p className="mt-5 text-[0.6rem] tracking-[0.2em] uppercase text-dim">
+          or press{" "}
+          <kbd className="hairline mx-1 rounded-[3px] px-1.5 py-0.5 font-[inherit] text-fog">
+            /
+          </kbd>{" "}
+          anywhere on this page
+        </p>
         <p className="mt-8 text-[0.62rem] tracking-[0.18em] uppercase text-dim">
           No account · no upload · no charge
+        </p>
+
+        {/* The colophon: who made this and where it lives. The last panel is
+          the one place on the landing the reader has finished with, which is
+          exactly where a signature belongs. */}
+        <p className="mt-12 flex flex-wrap items-center gap-2 border-t border-line pt-5 text-[0.6rem] tracking-[0.18em] uppercase">
+          <a
+            href={PROJECT.authorSite}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="hairline pointer-events-auto flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog"
+          >
+            created by {PROJECT.authorSiteName}
+            <span aria-hidden className="text-accent">
+              ↗
+            </span>
+          </a>
+          <a
+            href={PROJECT.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="hairline pointer-events-auto flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog"
+          >
+            source on github
+            <span aria-hidden className="text-accent">
+              ↗
+            </span>
+          </a>
         </p>
       </Panel>
     </div>
