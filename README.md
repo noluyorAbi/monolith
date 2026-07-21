@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/banner.png" width="100%" alt="MONOLITH, your commit year cast as an object">
+<img src="assets/banner.png?v=2" width="100%" alt="MONOLITH, your commit year cast as an object">
 
 <b>Turn any GitHub contribution year into a thing you can hold. Type a handle, watch it build, download a 3MF, an STL and a slicer preset that is already dialled in.</b>
 
@@ -20,7 +20,7 @@
 
 <br>
 
-<a href="assets/demo.mp4"><img src="assets/demo.gif" alt="Typing a GitHub handle, the build log counting up, the object rising out of its base plate, the four forms, the three sizes, the finishes, the print estimate and the kit" width="100%"></a>
+<a href="assets/demo.mp4"><img src="assets/demo.gif?v=2" alt="Typing a GitHub handle, the build log counting up, the object rising out of its base plate, the four forms, the three sizes, the finishes, the print estimate and the kit" width="100%"></a>
 
 <sub>The GIF is a downsampled loop. Full quality: <a href="assets/demo.mp4"><code>assets/demo.mp4</code></a>.</sub>
 
