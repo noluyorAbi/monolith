@@ -25,10 +25,35 @@ function shade(hex: string, factor: number): string {
   return `rgb(${Math.round(((n >> 16) & 255) * factor)},${Math.round(((n >> 8) & 255) * factor)},${Math.round((n & 255) * factor)})`;
 }
 
+/**
+ * Flat light for one triangle, from the wall it belongs to.
+ *
+ * One factor for every wall made the two visible sides of a bar the same
+ * value, and on a light finish that value landed on the plate's own colour:
+ * a short bar sank into the plate and only its lit top read as a stray
+ * triangle. Separating the two walls gives every bar a corner to be seen by.
+ */
+function lightOn(p: Float32Array, i: number): number {
+  const ux = p[i + 3] - p[i];
+  const uy = p[i + 4] - p[i + 1];
+  const uz = p[i + 5] - p[i + 2];
+  const vx = p[i + 6] - p[i];
+  const vy = p[i + 7] - p[i + 1];
+  const vz = p[i + 8] - p[i + 2];
+  const nx = uy * vz - uz * vy;
+  const ny = uz * vx - ux * vz;
+  const nz = ux * vy - uy * vx;
+  const max = Math.max(Math.abs(nx), Math.abs(ny), Math.abs(nz));
+  if (max === Math.abs(ny)) return 1;
+  return max === Math.abs(nx) ? 0.74 : 0.52;
+}
+
 interface Face {
   points: string;
   depth: number;
   fill: string;
+  /** Plate and engraving. Everything a bar stands on, so it is painted first. */
+  structural: boolean;
 }
 
 function faces(mesh: BuiltMesh, reveal: number, palette: Palette): Face[] {
@@ -51,15 +76,24 @@ function faces(mesh: BuiltMesh, reveal: number, palette: Palette): Face[] {
     const [cx, cy] = project(p[i + 6], lift(p[i + 7]), p[i + 8]);
     if ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax) <= 0) continue;
 
-    const flat = p[i + 1] === p[i + 4] && p[i + 4] === p[i + 7];
     const base = level < 0 ? palette.base : palette.ramp[Math.max(0, Math.min(4, level))];
     out.push({
       points: `${ax},${ay} ${bx},${by} ${cx},${cy}`,
       depth: p[i + 2] + p[i + 5] + p[i + 8] + p[i] + p[i + 3] + p[i + 6],
-      fill: flat ? base : shade(base, 0.62),
+      fill: shade(base, lightOn(p, i)),
+      structural: level < 0,
     });
   }
-  return out.sort((a, b) => a.depth - b.depth);
+  // A painter's sort on x+z alone is exact between bars, because each bar is a
+  // column on the grid and a larger x+z column stands wholly in front of a
+  // smaller one. It is not exact for the plate: its top is two triangles the
+  // size of the whole object, so their centre depth put half the grid behind
+  // the plate and the grey top painted over the bars at the back. The plate
+  // and its engraving carry nothing above them, so they can be laid down
+  // first unconditionally and the bars sorted on top of them.
+  return out.sort((a, b) =>
+    a.structural === b.structural ? a.depth - b.depth : a.structural ? -1 : 1,
+  );
 }
 
 /**
