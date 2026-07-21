@@ -172,7 +172,17 @@ export function Monolith({
   );
 }
 
-export function Framing({ mesh, offsetY }: { mesh: BuiltMesh; offsetY: number }) {
+export function Framing({
+  mesh,
+  offsetY,
+  /** Extra room around the fit. The landing wants the object read whole and
+      small rather than filling the frame the way the viewer does. */
+  pad = 1,
+}: {
+  mesh: BuiltMesh;
+  offsetY: number;
+  pad?: number;
+}) {
   const { camera, size } = useThree();
   const goal = useRef(new THREE.Vector3());
   const settled = useRef(false);
@@ -182,7 +192,7 @@ export function Framing({ mesh, offsetY }: { mesh: BuiltMesh; offsetY: number })
   useEffect(() => {
     const perspective = camera as THREE.PerspectiveCamera;
     const aspect = Math.max(0.3, size.width / Math.max(1, size.height));
-    const dist = fitDistance(mesh, offsetY, perspective.fov, aspect);
+    const dist = fitDistance(mesh, offsetY, perspective.fov, aspect) * pad;
     // Re-framing keeps whatever angle the user has orbited to and moves only
     // the distance, so switching forms never yanks the view back to default.
     const dir = settled.current ? camera.position.clone().normalize() : viewDirection(aspect);
@@ -195,7 +205,7 @@ export function Framing({ mesh, offsetY }: { mesh: BuiltMesh; offsetY: number })
     perspective.near = dist / 80;
     perspective.far = dist * 14;
     perspective.updateProjectionMatrix();
-  }, [camera, mesh, offsetY, size.width, size.height]);
+  }, [camera, mesh, offsetY, pad, size.width, size.height]);
 
   useFrame((_, delta) => {
     // Only the arrival is animated. After that the orbit controls own the

@@ -90,16 +90,21 @@ export const PALETTES: Palette[] = [
  * The landing backdrop. Unlit graphite rather than a dimmed copy of the real
  * palette, so the object reads as raw stock and the reveal is the moment it
  * gains colour.
+ *
+ * The ramp used to top out at #1d2429, which against a #060708 page left the
+ * object as a smudge: you could not tell where it began or ended. It is still
+ * colourless, but each step now separates against the void and against the
+ * one below it.
  */
 export const GHOST_PALETTE: Palette = {
   id: "ghost",
   name: "Ghost",
-  base: "#0b0d0f",
-  ramp: ["#0d0f11", "#101315", "#14181b", "#181d21", "#1d2429"],
-  roughness: 0.94,
-  metalness: 0.04,
-  glow: 0.04,
-  rim: 0.34,
+  base: "#0f1215",
+  ramp: ["#15191d", "#1d2329", "#272f36", "#333d46", "#414d58"],
+  roughness: 0.9,
+  metalness: 0.05,
+  glow: 0.1,
+  rim: 0.5,
 };
 
 export const DEFAULT_PALETTE_ID = "signal";
