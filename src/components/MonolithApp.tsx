@@ -7,7 +7,6 @@ import { Prompt } from "./Prompt";
 import { Forge, type ForgeStep } from "./Forge";
 import { Hud } from "./Hud";
 import { Dock } from "./Dock";
-import { OrderSheet } from "./OrderSheet";
 import { PrintSheet } from "./PrintSheet";
 import { PROJECT } from "@/lib/project";
 import { SIZES, VARIANTS, buildMonolith, computeStats } from "@/lib/build";
@@ -39,7 +38,6 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
   const [spin, setSpin] = useState(true);
   const [sound, setSound] = useState(true);
   const [printing, setPrinting] = useState(false);
-  const [ordering, setOrdering] = useState(false);
   const [copied, setCopied] = useState(false);
   const runId = useRef(0);
 
@@ -287,7 +285,6 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
         onSize={setSizeId}
         total={stats?.total ?? 0}
         onPrint={() => setPrinting(true)}
-        onOrder={() => setOrdering(true)}
         spin={spin}
         onSpin={setSpin}
         sound={sound}
@@ -302,16 +299,6 @@ export function MonolithApp({ initialLogin, initialYear }: { initialLogin?: stri
           <PrintSheet
             open={printing}
             onClose={() => setPrinting(false)}
-            login={login}
-            year={year}
-            variant={variant}
-            sizeMm={sizeMm}
-            paletteId={paletteId}
-            mesh={mesh}
-          />
-          <OrderSheet
-            open={ordering}
-            onClose={() => setOrdering(false)}
             login={login}
             year={year}
             variant={variant}

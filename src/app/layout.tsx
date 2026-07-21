@@ -18,7 +18,7 @@ const grotesk = Space_Grotesk({
 });
 
 const DESCRIPTION =
-  "Turn a GitHub contribution year into a 3D printable object. Free 3MF, STL and a Bambu Studio and OrcaSlicer preset, no account and no upload. Open source.";
+  "Turn a GitHub contribution year into a 3D printable object. Free 3MF, STL and a Bambu Studio and OrcaSlicer preset. No account, no upload, no sign-up.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(PROJECT.site),

@@ -74,7 +74,7 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
     `${options.login} · ${options.year} · ${options.variant} · ${options.sizeMm} mm`,
     ``,
     `${options.sourceUrl}`,
-    `Model licensed ${options.modelLicence}. Print it, sell it, remix it, just say where it came from.`,
+    `Model licensed ${options.modelLicence}. It is your year: print it, remix it, put it on a shelf.`,
     ``,
     `-------------------------------------------------------------------`,
     `WHAT IS IN THIS KIT`,

@@ -5,14 +5,6 @@ import { buildMonolith, computeStats } from "@/lib/build";
 import { toBinarySTL } from "@/lib/stl";
 import { syntheticYear } from "@/lib/github";
 import { measureText, rasterise } from "@/lib/font5x7";
-import {
-  STUDIO_TTL_MS,
-  constantTimeEqual,
-  mintStudioSession,
-  studioOpenWithoutKey,
-  verifyStudioKey,
-  verifyStudioSession,
-} from "@/lib/admin";
 import type { Variant } from "@/lib/types";
 
 const VARIANTS: Variant[] = ["skyline", "ring", "wave", "spine"];
@@ -175,59 +167,4 @@ test("every variant closes its surface", () => {
     const residual = Math.hypot(...sum) / area;
     assert.ok(residual < 1e-4, `${variant} leaks area: residual ${residual}`);
   }
-});
-
-test("the studio guard fails closed", () => {
-  const key = "s3cret-key";
-  assert.equal(verifyStudioKey(key, { key, production: true }), true);
-  assert.equal(verifyStudioKey("s3cret-ke", { key, production: true }), false);
-  assert.equal(verifyStudioKey("s3cret-keZ", { key, production: true }), false);
-  assert.equal(verifyStudioKey("", { key, production: true }), false);
-  assert.equal(verifyStudioKey(undefined, { key, production: true }), false);
-
-  // Unset in production must lock the queue rather than publish it.
-  assert.equal(studioOpenWithoutKey({ production: true }), false);
-  assert.equal(verifyStudioKey("anything", { production: true }), false);
-
-  // Unset locally stays open so the bench needs no ceremony.
-  assert.equal(studioOpenWithoutKey({ production: false }), true);
-});
-
-test("the studio session never carries the key it proves", async () => {
-  const env = { key: "s3cret-key", production: true };
-  const now = 1_700_000_000_000;
-  const session = await mintStudioSession(env, now);
-  assert.ok(session);
-  assert.ok(!session.includes(env.key), "the session leaks the admin key");
-  assert.equal(await verifyStudioSession(session, env, now), true);
-});
-
-test("a studio session expires, and cannot be forged or replayed", async () => {
-  const env = { key: "s3cret-key", production: true };
-  const now = 1_700_000_000_000;
-  const session = (await mintStudioSession(env, now))!;
-
-  assert.equal(await verifyStudioSession(session, env, now + STUDIO_TTL_MS + 1), false);
-  // Rotating the key has to invalidate every session already handed out.
-  assert.equal(await verifyStudioSession(session, { ...env, key: "rotated" }, now), false);
-  // The signature covers the expiry, so extending it by hand is rejected.
-  const [, signature] = session.split(".");
-  assert.equal(
-    await verifyStudioSession(`${now + STUDIO_TTL_MS * 9}.${signature}`, env, now),
-    false,
-  );
-
-  for (const junk of ["", ".", "abc", "abc.def", `${now + 1000}.`, `.${signature}`]) {
-    assert.equal(await verifyStudioSession(junk, env, now), false, `accepted ${junk}`);
-  }
-  assert.equal(await verifyStudioSession(undefined, env, now), false);
-  // The admin key itself is not a session.
-  assert.equal(await verifyStudioSession(env.key, env, now), false);
-});
-
-test("constant time compare still answers correctly", () => {
-  assert.equal(constantTimeEqual("abc", "abc"), true);
-  assert.equal(constantTimeEqual("abc", "abd"), false);
-  assert.equal(constantTimeEqual("abc", "abcd"), false);
-  assert.equal(constantTimeEqual("", ""), true);
 });

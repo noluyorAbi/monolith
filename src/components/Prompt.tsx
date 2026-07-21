@@ -8,26 +8,54 @@ import { play } from "@/lib/sound";
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 /** Real accounts, so the example is something you can actually press. */
-const EXAMPLES = ["noluyorAbi", "torvalds", "sindresorhus"];
+const EXAMPLES = ["noluyorAbi", "mvritz"];
+
+const TYPE_MS = 90;
+const DELETE_MS = 45;
+const HOLD_MS = 1800;
 
 /**
- * Types the first example into the placeholder and leaves it there. People do
- * not know what belongs in an empty box; watching it fill in answers that
- * without spending the field itself, which stays yours to type into.
+ * Types an example handle into the placeholder, holds it, deletes it and moves
+ * to the next. An empty box does not tell you what belongs in it; watching one
+ * fill itself in does, without spending the field, which stays yours to type
+ * into the moment you touch it.
  */
 function useTypedHint(active: boolean): string {
   const [shown, setShown] = useState("");
+
   useEffect(() => {
     if (!active) return;
-    const target = EXAMPLES[0];
-    let i = 0;
-    const start = window.setTimeout(function step() {
-      i += 1;
-      setShown(target.slice(0, i));
-      if (i < target.length) window.setTimeout(step, 55 + (i % 3) * 25);
-    }, 650);
-    return () => window.clearTimeout(start);
+    let timer = 0;
+    let word = 0;
+    let count = 0;
+    let deleting = false;
+
+    const tick = () => {
+      const target = EXAMPLES[word];
+      if (!deleting) {
+        count += 1;
+        setShown(target.slice(0, count));
+        if (count === target.length) {
+          deleting = true;
+          timer = window.setTimeout(tick, HOLD_MS);
+          return;
+        }
+        timer = window.setTimeout(tick, TYPE_MS);
+        return;
+      }
+      count -= 1;
+      setShown(target.slice(0, count));
+      if (count === 0) {
+        deleting = false;
+        word = (word + 1) % EXAMPLES.length;
+      }
+      timer = window.setTimeout(tick, count === 0 ? 420 : DELETE_MS);
+    };
+
+    timer = window.setTimeout(tick, 700);
+    return () => window.clearTimeout(timer);
   }, [active]);
+
   return shown;
 }
 
@@ -101,7 +129,7 @@ export function Prompt({
             }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
-            placeholder={hint || "handle"}
+            placeholder={hint ? `${hint}\u2588` : "handle"}
             spellCheck={false}
             autoComplete="off"
             autoCapitalize="off"
@@ -197,7 +225,7 @@ export function Prompt({
           {[
             "3MF, STL and a slicer preset",
             "no account, no upload",
-            "MIT licensed",
+            "source available, noncommercial",
           ].map((item) => (
             <li key={item} className="flex items-center gap-2">
               <span aria-hidden className="h-1 w-1 rounded-full bg-accent" />

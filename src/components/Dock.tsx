@@ -65,7 +65,6 @@ export interface DockProps {
   onSize: (id: SizeId) => void;
   total: number;
   onPrint: () => void;
-  onOrder: () => void;
   spin: boolean;
   onSpin: (next: boolean) => void;
   sound: boolean;
@@ -210,16 +209,6 @@ export function Dock(props: DockProps) {
                 className={`h-8 w-8 rounded-[5px] border border-line text-[0.85rem] transition-colors duration-150 hover:border-edge hover:text-fog ${props.sound ? "text-fog" : "text-dim"}`}
               >
                 {props.sound ? "◉" : "◎"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  play("tick");
-                  props.onOrder();
-                }}
-                className="hairline rounded-[5px] px-3 py-2 text-[0.68rem] tracking-[0.12em] uppercase text-mute transition-colors duration-150 hover:border-mute hover:text-fog active:scale-[0.97]"
-              >
-                Print for me
               </button>
               <button
                 type="button"

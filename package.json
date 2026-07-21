@@ -11,7 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:print": "./scripts/verify-print-kit.sh",
-    "og": "remotion still remotion/index.ts OgCard public/og.png --overwrite"
+    "og": "remotion still remotion/index.ts OgCard public/og.png --overwrite",
+    "banner": "remotion still remotion/index.ts Banner assets/banner.png --overwrite",
+    "demo": "remotion render remotion/index.ts Demo assets/demo.mp4 --overwrite",
+    "assets": "npm run og && npm run banner && npm run demo"
   },
   "dependencies": {
     "@react-three/drei": "10.7.7",
@@ -36,8 +39,8 @@
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   },
-  "license": "MIT",
-  "description": "Turn a GitHub year into a printable object. Open source, files free.",
+  "license": "LicenseRef-PolyForm-Noncommercial-1.0.0",
+  "description": "Turn any GitHub contribution year into a 3D printable object. Free 3MF, STL and a slicer preset, no account and no upload.",
   "repository": {
     "type": "git",
     "url": "https://github.com/noluyorAbi/monolith.git"

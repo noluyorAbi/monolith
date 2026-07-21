@@ -7,7 +7,6 @@ import { splitByLevel, wholeObject, signedVolume } from "@/lib/parts";
 import { buildThreeMf } from "@/lib/threemf";
 import { bambuPreset, printCard } from "@/lib/kit";
 import { bambuOverrides, materialById, printerById, qualityById } from "@/lib/print";
-import { quote } from "@/lib/products";
 import { slotForLevel } from "@/lib/slots";
 import { syntheticYear } from "@/lib/github";
 
@@ -163,24 +162,4 @@ test("four slots map to a base plus a three step ramp", () => {
     assert.ok(slotForLevel(level, 2) <= 2);
     assert.ok(slotForLevel(level, 4) <= 4);
   }
-});
-
-test("the quote is the sum of its stated parts and nothing else", () => {
-  const bill = quote({ grams: 22.4, hours: 3.9, slots: 1 }, "de");
-  const lineSum = bill.lines.reduce((a, l) => a + l.amount, 0);
-  assert.ok(Math.abs(lineSum - bill.subtotal) < 1e-9, "subtotal does not match the lines");
-  // Rounded to the nearest 50 cents, so allow exactly that and no more.
-  assert.ok(Math.abs(bill.total - (bill.subtotal + bill.shipping)) <= 0.25);
-
-  // Four colours cost more in two distinct ways, and both must show up.
-  const four = quote({ grams: 22.4, hours: 3.9, slots: 4 }, "de");
-  assert.ok(four.grams > bill.grams, "purge waste is not counted");
-  assert.ok(four.hours > bill.hours, "tool change time is not counted");
-  assert.ok(four.subtotal > bill.subtotal);
-
-  // Postage is the only thing that varies by destination.
-  const world = quote({ grams: 22.4, hours: 3.9, slots: 1 }, "world");
-  assert.equal(world.subtotal, bill.subtotal);
-  assert.ok(world.shipping > bill.shipping);
-  assert.ok(world.shippingDetail.length > 0);
 });
