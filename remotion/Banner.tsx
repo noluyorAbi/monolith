@@ -48,7 +48,7 @@ export const Banner: React.FC = () => (
         justifyContent: "center",
       }}
     >
-      <Monolith seed="banner" width={700} height={324} />
+      <Monolith width={700} height={324} />
     </div>
   </AbsoluteFill>
 );

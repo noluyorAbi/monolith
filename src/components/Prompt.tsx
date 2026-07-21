@@ -283,11 +283,13 @@ export function Prompt({
               </li>
             ))}
           </ul>
-          {/* The numbers the print sheet reports for the default object, so the
-            promise on the landing is the one the download keeps. */}
+          {/* Bambu Studio's own numbers for the 180 mm skyline of a real year,
+            0.4 nozzle, 0.16 mm, PLA: 4h00 and 17.7 cm3. Not the estimator's
+            output, and not an invented year, which is how this line first came
+            to read six hours. */}
           <p className="text-[0.72rem] leading-relaxed text-mute">
-            A 180 mm shelf piece is about six hours on a stock Bambu profile and
-            roughly one euro of filament.
+            A 180 mm shelf piece slices to about four hours and 22 g of filament
+            on a stock 0.4 mm Bambu profile. Roughly fifty cents.
           </p>
         </motion.div>
       </motion.div>

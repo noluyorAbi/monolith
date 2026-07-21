@@ -5,7 +5,7 @@ import { splitByLevel } from "@/lib/parts";
 import { estimate, materialById, qualityById } from "@/lib/print";
 import { yearFromDays } from "@/lib/contributions";
 import type { ContributionYear, Day } from "@/lib/types";
-import fixture from "./fixtures/contributions-2025.json";
+import fixture from "../data/contributions-2025.json";
 
 /**
  * Measured with Bambu Studio 02.00.03.54 slicing the frozen year below at

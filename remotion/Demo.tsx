@@ -1,8 +1,8 @@
 import React, { useMemo } from "react";
 import { AbsoluteFill, Sequence, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { Monolith } from "./Monolith";
+import { Monolith, assetYear } from "./Monolith";
 import { buildMonolith, SIZES } from "../src/lib/build";
-import { syntheticYear } from "../src/lib/contributions";
+import { computeStats } from "../src/lib/contributions";
 import { printableParts } from "../src/lib/parts";
 import {
   estimate,
@@ -24,7 +24,6 @@ import type { Variant } from "../src/lib/types";
  * behaviour the app does not have.
  */
 
-const HANDLE = "noluyorAbi";
 const FPS = 30;
 const s = (seconds: number) => Math.round(seconds * FPS);
 
@@ -42,13 +41,21 @@ const FORMS: { variant: Variant; label: string; note: string }[] = [
   { variant: "spine", label: "SPINE", note: "weeks stacked along a rib" },
 ];
 
+/** Read off the object the video actually draws, never typed by hand. */
+const YEAR = assetYear();
+const HANDLE = YEAR.login;
+const MESH = buildMonolith(YEAR, { variant: "skyline", sizeMm: 180, label: true });
+const STATS = computeStats(YEAR);
+const NUM = (n: number) => n.toLocaleString("en-GB");
+const DIMS = `${MESH.size.x.toFixed(0)} x ${MESH.size.y.toFixed(0)} mm`;
+
 const LOG: [string, string][] = [
   ["resolving", HANDLE],
-  ["fetching", "365 days of 2025"],
-  ["found", "1,745 contributions"],
-  ["extruding", "4,608 triangles"],
+  ["fetching", `${YEAR.days.length} days of ${YEAR.year}`],
+  ["found", `${NUM(STATS.total)} contributions`],
+  ["extruding", `${NUM(MESH.triangles)} triangles`],
   ["welding", "base plate and signature"],
-  ["ready", "180 x 29 mm"],
+  ["ready", DIMS],
 ];
 
 /** The chrome every scene shares: wordmark, and a caption for what is on show. */
@@ -173,11 +180,10 @@ const Reveal: React.FC = () => {
   });
 
   return (
-    <Frame step="03 · OBJECT" caption="1,745 contributions · 365 days · 180 x 29 mm">
+    <Frame step="03 · OBJECT" caption={`${NUM(STATS.total)} contributions · ${YEAR.days.length} days · ${DIMS}`}>
       <div style={{ fontSize: 40, letterSpacing: -1 }}>{HANDLE}</div>
       <div style={{ marginTop: 8, fontSize: 15, letterSpacing: 4, color: DIM }}>2025 · SKYLINE</div>
       <Monolith
-        seed={HANDLE}
         reveal={reveal}
         width={width - 180}
         height={380}
@@ -198,7 +204,6 @@ const Forms: React.FC = () => {
       <Chips items={FORMS.map((f) => f.label)} activeIndex={index} />
       <Monolith
         key={form.variant}
-        seed={HANDLE}
         variant={form.variant}
         width={width - 200}
         height={400}
@@ -231,7 +236,7 @@ const Sizes: React.FC = () => {
           const tall = (size.mm / 260) * 250;
           return (
             <div key={size.id} style={{ opacity: i === index ? 1 : 0.24, textAlign: "center" }}>
-              <Monolith seed={HANDLE} width={tall * 1.7} height={tall} />
+              <Monolith width={tall * 1.7} height={tall} />
               <div style={{ fontSize: 14, letterSpacing: 3, color: i === index ? FOG : GHOST }}>
                 {size.mm} MM
               </div>
@@ -255,7 +260,6 @@ const Finishes: React.FC = () => {
       <Chips items={shown.map((p) => p.name.toUpperCase())} activeIndex={index} />
       <Monolith
         key={palette.id}
-        seed={HANDLE}
         palette={palette}
         width={width - 200}
         height={380}
@@ -267,11 +271,7 @@ const Finishes: React.FC = () => {
 
 const PrintSheet: React.FC = () => {
   const numbers = useMemo(() => {
-    const mesh = buildMonolith(syntheticYear(HANDLE, 2025), {
-      variant: "skyline",
-      sizeMm: 180,
-      label: true,
-    });
+    const mesh = MESH;
     const material = materialById("pla");
     const quality = qualityById("standard");
     const est = estimate(printableParts(mesh), material, quality);
@@ -373,7 +373,7 @@ const Close: React.FC = () => {
   return (
     <Frame step="09 · YOURS" caption="source available under PolyForm Noncommercial · models CC BY 4.0">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
-        <Monolith seed={HANDLE} width={width - 320} height={300} />
+        <Monolith width={width - 320} height={300} />
       </div>
       <div style={{ fontSize: 30, letterSpacing: -0.5, marginBottom: 14 }}>
         Your commit year, <span style={{ color: DIM }}>cast as an object.</span>

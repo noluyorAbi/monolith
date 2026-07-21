@@ -1,6 +1,8 @@
 import React, { useMemo } from "react";
 import { buildMonolith } from "../src/lib/build";
-import { syntheticYear } from "../src/lib/contributions";
+import { yearFromDays } from "../src/lib/contributions";
+import type { Day } from "../src/lib/types";
+import frozen from "../data/contributions-2025.json";
 import type { BuiltMesh, Variant } from "../src/lib/types";
 
 /**
@@ -60,8 +62,17 @@ function faces(mesh: BuiltMesh, reveal: number, palette: Palette): Face[] {
   return out.sort((a, b) => a.depth - b.depth);
 }
 
+/**
+ * The year every asset draws: noluyorAbi's real 2025, frozen in data/ and
+ * shared with the calibration test. Rendering an invented year here would put
+ * a denser object and a longer print time in front of people than the one the
+ * slicer was measured against.
+ */
+export function assetYear() {
+  return yearFromDays(frozen.login, frozen.year, frozen.days as Day[]);
+}
+
 export const Monolith: React.FC<{
-  seed: string;
   width: number;
   height: number;
   variant?: Variant;
@@ -70,11 +81,11 @@ export const Monolith: React.FC<{
   /** Defaults to the finish the viewer opens with. */
   palette?: Palette;
   style?: React.CSSProperties;
-}> = ({ seed, width, height, variant = "skyline", reveal = 1, palette, style }) => {
+}> = ({ width, height, variant = "skyline", reveal = 1, palette, style }) => {
   const finish = palette ?? defaultPalette();
   const mesh = useMemo(
-    () => buildMonolith(syntheticYear(seed, 2025), { variant, sizeMm: 180, label: false }),
-    [seed, variant],
+    () => buildMonolith(assetYear(), { variant, sizeMm: 180, label: false }),
+    [variant],
   );
 
   // The viewBox is fixed to the fully grown object so a rising animation does

@@ -25,7 +25,6 @@ export const OgCard: React.FC = () => {
     >
       {/* The object gets the right two thirds and is never behind the type. */}
       <Monolith
-        seed="monolith-og"
         width={720}
         height={430}
         style={{ position: "absolute", right: 24, top: 108 }}

@@ -103,7 +103,7 @@ Three findings came out of holding the project to that standard, and each one ch
 
 Raising the text is what fixed it. The widely repeated claim that this needs the arachne wall generator turned out to be false at the default size, where both generators print the lettering fine. Arachne is set because it recovers roughly three times more below the threshold, but as an improvement, not a rescue, and small sizes carry a warning rather than a promise.
 
-The filament and time estimates are fitted the same way, against three real slices at 0.12, 0.16 and 0.20 mm. The fit reproduces all three to within 0.3%, and `test/calib.test.ts` fails if it ever drifts.
+The filament and time estimates are fitted the same way, against three real slices of the same year at 0.12, 0.16 and 0.20 mm, on a P1S with the stock 0.4 mm nozzle. At 0.16 mm that object is 4h00 and 17.7 cm3 of PLA, about 22 g, and the estimator puts it at 17.8 cm3. The fit reproduces all three slices to within 0.3%, and `test/calib.test.ts` fails if it ever drifts. The year those slices used is committed at `data/contributions-2025.json`, and it is the same year the banner, the share card and the demo draw, so no image here shows a denser object than the one that was measured.
 
 ## <img src="assets/icons/code.svg" width="16" align="center"> How the geometry works
 
@@ -151,6 +151,26 @@ If GitHub cannot be reached at all, the app falls back to a deterministic synthe
 ## <img src="assets/icons/printer.svg" width="16" align="center"> Legibility
 
 A page this dark fails quietly, so the values are measured rather than eyeballed. Every text colour clears WCAG AA against the page: the token carrying the smallest uppercase labels sits at 6.3:1, body copy at 8.3:1, and anything bounding a control at 3.4:1, above the 3:1 WCAG 1.4.11 asks for. Readouts sit over a live 3D canvas, so they carry their own gradient scrim; measured against a bright tower directly behind them, the worst row still reads at 7.2:1. The object is nearly as dark as the page, so a Fresnel term traces its silhouette and a pool of light on the floor gives the shape something to sit against. Portrait screens swing the camera down the object's long axis, so a phone gets the same object at usable size.
+
+## <img src="assets/icons/sliders.svg" width="16" align="center"> Roadmap, and what is honestly still broken
+
+Ordered by how much it costs you today.
+
+**Multi colour is only half wired.** The 3MF arrives split into one solid per contribution level, which is what makes a per slot assignment possible at all, but the file carries no colour and no filament data. `basematerials` is inert in every slicer checked, and a hand written Bambu project file segfaults Bambu Studio, so nothing in the file says "peak days go in slot 2". Two colour and four colour are therefore a manual assignment in the object list, and the slot choice in the interface only reaches the printed card and the preset, never the model. Next: emit a real Bambu and Orca project 3MF, `model_settings.config` with a per object extruder plus the production extension UUIDs, behind a test that loads it through the CLI, and fall back to the plain 3MF when it cannot be produced.
+
+**Estimates are fitted on one shape.** The shell, bulk and flow constants come from three slices of the 180 mm skyline at 0.12, 0.16 and 0.20 mm, 0.4 mm nozzle. Ring, wave and spine have a different surface to volume ratio, so for them the numbers are extrapolation wearing a band. Next: slice every form at every size and fit per form, or say per form how far the fit was tested.
+
+**Nothing slices in CI.** `npm run verify:print` needs Bambu Studio installed locally, so the strongest test in the repository only ever runs on a machine that happens to have it. Next: pin a headless slicer in the workflow, or at minimum assert the 3MF against a schema.
+
+**Only Bambu and Orca get a preset.** PrusaSlicer, Cura and everything else get the geometry and a text card listing every setting by hand. Next: generate a PrusaSlicer `.ini` from the same source list.
+
+**The engraved handle is size dependent.** Below roughly 150 mm the font pixel drops under the 0.42 mm line a 0.4 mm nozzle lays down, and the interface warns instead of solving it. Next: scale the lettering with the object so it stays above one line width at every size.
+
+**Without a token the data path is fragile.** No `GITHUB_TOKEN` means an HTML scrape that GitHub rate limits, and the app then serves a clearly labelled sample year rather than failing. Correct, but a fallback is not a feature.
+
+**Portrait is tolerated, not designed.** The camera swings down the object's long axis so a phone gets a usable object, but the dock crowds and the idle object is small. Next: a layout that is native to the aspect rather than the same one bent.
+
+**There is no end to end test.** Geometry, exporters and estimates are covered; the flow from typing a handle to a downloaded zip is not.
 
 ## <img src="assets/icons/scale.svg" width="16" align="center"> Licence
 
