@@ -13,6 +13,7 @@ import {
   QUALITIES,
   estimate,
   fitsBed,
+  formatPrice,
   materialById,
   overrides,
   printerById,
@@ -22,7 +23,6 @@ import { modelQuery } from "@/lib/request";
 import { SLOT_CHOICES, type ColourSlots } from "@/lib/slots";
 import { splitByLevel } from "@/lib/parts";
 import { PROJECT } from "@/lib/project";
-import { formatPrice } from "@/lib/products";
 import type { BuiltMesh, Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -71,7 +71,6 @@ export interface PrintSheetProps {
   year: number;
   variant: Variant;
   sizeMm: number;
-  paletteId: string;
   mesh: BuiltMesh;
 }
 
@@ -309,9 +308,9 @@ export function PrintSheet(props: PrintSheetProps) {
                       props.mesh.print.engravePixelMm < NOZZLE_LINE_MM && (
                         <p className="mt-1 text-[0.66rem] leading-relaxed text-danger">
                           At {props.sizeMm} mm the engraved handle is{" "}
-                          {props.mesh.print.engravePixelMm.toFixed(2)} mm per pixel, under the
-                          {NOZZLE_LINE_MM} mm line a 0.4 mm nozzle lays down. It will come out faint. 180 mm or
-                          larger reads properly.
+                          {props.mesh.print.engravePixelMm.toFixed(2)} mm per pixel, under the{" "}
+                          {NOZZLE_LINE_MM} mm line a 0.4 mm nozzle lays down. It will come out
+                          faint. 180 mm or larger reads properly.
                         </p>
                       )}
                     {props.mesh.print.gapMm !== null && props.mesh.print.gapMm < MIN_TOWER_GAP_MM && (
@@ -383,7 +382,7 @@ export function PrintSheet(props: PrintSheetProps) {
                         .3mf only
                       </a>
                       <a
-                        href={`/api/stl?login=${encodeURIComponent(props.login)}&year=${props.year}&variant=${props.variant}&mm=${props.sizeMm}`}
+                        href={`/api/stl?${query}`}
                         download
                         onClick={() => play("tick")}
                         className="hairline flex-1 rounded-[5px] px-3 py-2 text-center text-[0.66rem] tracking-[0.12em] uppercase text-fog transition-colors duration-150 hover:border-mute active:scale-[0.97]"

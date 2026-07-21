@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { BadLoginError, NotFoundError, fetchContributionYear } from "@/lib/github";
+import { fetchContributionYear } from "@/lib/github";
+import { modelErrorResponse } from "@/lib/responses";
 import { buildMonolith } from "@/lib/build";
 import { printableParts } from "@/lib/parts";
 import { buildKitThreeMf } from "@/lib/kit";
@@ -42,8 +43,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (err) {
-    if (err instanceof BadLoginError) return NextResponse.json({ error: "invalid_login" }, { status: 400 });
-    if (err instanceof NotFoundError) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    return NextResponse.json({ error: "upstream" }, { status: 502 });
+    return modelErrorResponse(err);
   }
 }

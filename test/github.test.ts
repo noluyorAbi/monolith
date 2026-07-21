@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
-import {
-  BadLoginError,
-  LOGIN_RE,
-  NotFoundError,
-  availableYears,
-  fetchContributionYear,
-  normaliseLogin,
-  syntheticYear,
-} from "@/lib/github";
+import { BadLoginError, NotFoundError, fetchContributionYear } from "@/lib/github";
+import { LOGIN_RE, availableYears, normaliseLogin, syntheticYear } from "@/lib/contributions";
 
 /**
  * The handle is the only user input the whole app takes, and it reaches an
@@ -17,6 +10,7 @@ import {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -38,7 +32,7 @@ test("the login gate matches GitHub's own rules", () => {
   for (const good of ["a", "a-b", "octocat", "a".repeat(39), "0", "a-1-b"]) {
     assert.ok(LOGIN_RE.test(good), `${good} should be accepted`);
   }
-  for (const bad of ["", "-a", "a-", "a--b".replace("--", "- -"), "a".repeat(40), "a_b", "a.b", "a/b", "../etc"]) {
+  for (const bad of ["", "-a", "a-", "a--b", "a".repeat(40), "a_b", "a.b", "a/b", "../etc", "a b"]) {
     assert.ok(!LOGIN_RE.test(bad), `${bad} should be rejected`);
   }
 });
@@ -119,4 +113,55 @@ test("available years run backwards from the current one", () => {
   assert.equal(years.length, 4);
   assert.equal(years[0], new Date().getUTCFullYear());
   for (let i = 1; i < years.length; i++) assert.equal(years[i], years[i - 1] - 1);
+});
+
+test("the GraphQL path maps levels, sorts days and reports a missing account", async () => {
+  vi.stubEnv("GITHUB_TOKEN", "test-token");
+  const payload = {
+    data: {
+      user: {
+        login: "octocat",
+        name: "The Octocat",
+        contributionsCollection: {
+          contributionCalendar: {
+            weeks: [
+              {
+                contributionDays: [
+                  { date: "2025-03-02", contributionCount: 9, contributionLevel: "FOURTH_QUARTILE" },
+                  { date: "2025-01-01", contributionCount: 0, contributionLevel: "NONE" },
+                  { date: "2025-02-01", contributionCount: 2, contributionLevel: "SECOND_QUARTILE" },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+  vi.stubGlobal("fetch", async () => new Response(JSON.stringify(payload), { status: 200 }));
+
+  const year = await fetchContributionYear("octocat", 2025);
+  assert.equal(year.source, "graphql");
+  assert.equal(year.demo, false);
+  assert.equal(year.name, "The Octocat");
+  assert.deepEqual(
+    year.days.map((d) => d.date),
+    ["2025-01-01", "2025-02-01", "2025-03-02"],
+    "days must come back in calendar order",
+  );
+  assert.deepEqual(
+    year.days.map((d) => d.level),
+    [0, 2, 4],
+    "quartile names must map onto the 0..4 ramp the geometry reads",
+  );
+  assert.equal(year.total, 11);
+});
+
+test("GraphQL reporting a missing account is not answered with invented data", async () => {
+  vi.stubEnv("GITHUB_TOKEN", "test-token");
+  vi.stubGlobal(
+    "fetch",
+    async () => new Response(JSON.stringify({ errors: [{ type: "NOT_FOUND", message: "no" }] }), { status: 200 }),
+  );
+  await assert.rejects(() => fetchContributionYear("ghost", 2025), NotFoundError);
 });

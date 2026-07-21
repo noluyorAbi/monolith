@@ -17,8 +17,8 @@ import { Dock } from "./Dock";
 import { PrintSheet } from "./PrintSheet";
 import { PROJECT } from "@/lib/project";
 import { SIZES, VARIANTS, buildMonolith } from "@/lib/build";
-import { availableYears, syntheticYear } from "@/lib/github";
-import { GHOST_PALETTE, paletteById } from "@/lib/products";
+import { availableYears, syntheticYear } from "@/lib/contributions";
+import { DEFAULT_PALETTE_ID, GHOST_PALETTE, paletteById } from "@/lib/palettes";
 import {
   play,
   setSoundEnabled,
@@ -26,6 +26,7 @@ import {
   soundServerSnapshot,
   subscribeSound,
 } from "@/lib/sound";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import type { SizeId } from "@/lib/build";
 import type { BuiltMesh, ContributionYear, Stats, Variant } from "@/lib/types";
 
@@ -47,13 +48,14 @@ export function MonolithApp({
   const [login, setLogin] = useState(initialLogin ?? "");
   const [year, setYear] = useState(initialYear ?? years[0]);
   const [variant, setVariant] = useState<Variant>("skyline");
-  const [paletteId, setPaletteId] = useState("signal");
+  const [paletteId, setPaletteId] = useState(DEFAULT_PALETTE_ID);
   const [sizeId, setSizeId] = useState<SizeId>("shelf");
   const [data, setData] = useState<ContributionYear | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [steps, setSteps] = useState<ForgeStep[]>([]);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [spin, setSpin] = useState(true);
   const sound = useSyncExternalStore(
     subscribeSound,
@@ -194,7 +196,7 @@ export function MonolithApp({
       setStats(payload.stats);
       setLogin(payload.data.login);
       setPhase("live");
-      setSpin(true);
+      setSpin(!reduceMotion);
       play("thunk");
       window.history.replaceState(
         null,
@@ -202,7 +204,7 @@ export function MonolithApp({
         `/s/${payload.data.login}?year=${forYear}`,
       );
     },
-    [variant, sizeMm],
+    [variant, sizeMm, reduceMotion],
   );
 
   // Deep-link boot. The guard is what makes this run once, rather than an
@@ -278,7 +280,7 @@ export function MonolithApp({
             finish={isGhost ? GHOST_PALETTE : palette}
             ghost={isGhost}
             revealToken={`${login}:${year}:${variant}`}
-            spin={spin}
+            spin={spin && !reduceMotion}
             onInteract={() => setSpin(false)}
           />
         </div>
@@ -381,7 +383,7 @@ export function MonolithApp({
           onSize={setSizeId}
           total={stats?.total ?? 0}
           onPrint={() => setPrinting(true)}
-          spin={spin}
+          spin={spin && !reduceMotion}
           onSpin={setSpin}
           sound={sound}
           onSound={setSoundEnabled}
@@ -396,8 +398,7 @@ export function MonolithApp({
               year={year}
               variant={variant}
               sizeMm={sizeMm}
-              paletteId={paletteId}
-              mesh={mesh}
+                mesh={mesh}
             />
           </>
         )}
@@ -411,7 +412,7 @@ export function MonolithApp({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4, delay: 0.3 }}
             >
-              <span>Open source · the files are free · print it yourself</span>
+              <span>Source available · the files are free · print it yourself</span>
               <a
                 href={PROJECT.url}
                 target="_blank"

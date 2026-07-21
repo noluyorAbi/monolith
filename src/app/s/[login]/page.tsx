@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { MonolithApp } from "@/components/MonolithApp";
-import { LOGIN_RE, availableYears } from "@/lib/github";
+import { LOGIN_RE, availableYears } from "@/lib/contributions";
 import { notFound } from "next/navigation";
 
 interface Props {

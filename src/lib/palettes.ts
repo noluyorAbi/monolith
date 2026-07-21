@@ -102,15 +102,13 @@ export const GHOST_PALETTE: Palette = {
   rim: 0.34,
 };
 
+export const DEFAULT_PALETTE_ID = "signal";
+
 export function paletteById(id: string): Palette {
-  return PALETTES.find((f) => f.id === id) ?? PALETTES[0];
+  return PALETTES.find((p) => p.id === id) ?? defaultPalette();
 }
 
-export function formatPrice(euros: number): string {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(euros);
+/** The palette the viewer opens with, and the one the artwork must match. */
+export function defaultPalette(): Palette {
+  return PALETTES.find((p) => p.id === DEFAULT_PALETTE_ID) ?? PALETTES[0];
 }

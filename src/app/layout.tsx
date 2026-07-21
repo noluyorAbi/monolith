@@ -45,7 +45,7 @@ export const metadata: Metadata = {
     "OrcaSlicer profile",
     "commit history 3D print",
     "developer desk trophy",
-    "open source GitHub skyline generator",
+    "GitHub skyline generator",
     "GitHub contributions to STL",
   ],
   category: "technology",

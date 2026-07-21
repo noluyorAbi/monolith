@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { LOGIN_RE, normaliseLogin } from "@/lib/github";
+import { LOGIN_RE, normaliseLogin } from "@/lib/contributions";
 import { play } from "@/lib/sound";
 
 const EASE = [0.16, 1, 0.3, 1] as const;

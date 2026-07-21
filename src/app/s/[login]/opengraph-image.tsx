@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
-import { LOGIN_RE, fetchContributionYear, availableYears } from "@/lib/github";
+import { fetchContributionYear } from "@/lib/github";
+import { LOGIN_RE, availableYears } from "@/lib/contributions";
 import { notFound } from "next/navigation";
-import { PALETTES } from "@/lib/products";
+import { defaultPalette } from "@/lib/palettes";
 import { computeStats } from "@/lib/build";
 import { PROJECT } from "@/lib/project";
 
@@ -11,7 +12,7 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 /** The palette the viewer uses, rather than a third hand-copied ramp. */
-const RAMP = PALETTES[0].ramp;
+const RAMP = defaultPalette().ramp;
 
 /**
  * A share card built from the person's own year rather than a generic logo.

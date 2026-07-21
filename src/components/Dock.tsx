@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { SIZES, VARIANTS, type SizeId } from "@/lib/build";
-import { PALETTES, type Palette } from "@/lib/products";
+import { PALETTES, type Palette } from "@/lib/palettes";
 import type { Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
 
@@ -195,18 +195,22 @@ export function Dock(props: DockProps) {
                   play("tick");
                   props.onSpin(!props.spin);
                 }}
+                aria-label="Turntable"
+                aria-pressed={props.spin}
                 title={props.spin ? "Stop turntable" : "Start turntable"}
                 className={`h-8 w-8 rounded-[5px] border border-line text-[0.9rem] transition-colors duration-150 hover:border-edge hover:text-fog ${props.spin ? "text-fog" : "text-dim"}`}
               >
-                ⟳
+                <span aria-hidden>⟳</span>
               </button>
               <button
                 type="button"
                 onClick={() => props.onSound(!props.sound)}
+                aria-label="Sound"
+                aria-pressed={props.sound}
                 title={props.sound ? "Mute" : "Unmute"}
                 className={`h-8 w-8 rounded-[5px] border border-line text-[0.85rem] transition-colors duration-150 hover:border-edge hover:text-fog ${props.sound ? "text-fog" : "text-dim"}`}
               >
-                {props.sound ? "◉" : "◎"}
+                <span aria-hidden>{props.sound ? "◉" : "◎"}</span>
               </button>
               <button
                 type="button"

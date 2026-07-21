@@ -75,10 +75,16 @@ export function presetName(printer: Printer, quality: Quality): string {
   return `MONOLITH ${quality.layerHeightMm.toFixed(2)}mm @BBL ${printer.presetSuffix}`;
 }
 
+/** The stem every file in the kit shares, so the card can name them exactly. */
+export function kitStem(options: KitOptions): string {
+  return `monolith-${options.login}-${options.year}-${options.variant}-${options.sizeMm}mm`;
+}
+
 export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): string {
   const { material, quality, printer, slots } = options;
   const est = estimate(parts, material, quality);
   const preset = presetName(printer, quality);
+  const stem = kitStem(options);
   const pad = (s: string, n: number) => s.padEnd(n);
 
   const lines: string[] = [
@@ -106,17 +112,21 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
     `-------------------------------------------------------------------`,
     `WHAT IS IN THIS KIT`,
     `-------------------------------------------------------------------`,
-    `  monolith.3mf          The object. One part per contribution level.`,
-    `  monolith.stl          The same object as a single solid, for anything`,
-    `                        that does not read 3MF.`,
-    `  presets/*.json        Bambu Studio and OrcaSlicer process preset.`,
-    `  PRINT-ME.txt          This file.`,
+    `  ${stem}.3mf`,
+    `      The object. One part per contribution level.`,
+    `  ${stem}.stl`,
+    `      The same object as a single solid, for anything that does not`,
+    `      read 3MF.`,
+    `  presets/${preset}.json`,
+    `      Bambu Studio and OrcaSlicer process preset.`,
+    `  PRINT-ME.txt`,
+    `      This file.`,
     ``,
     `-------------------------------------------------------------------`,
     `BAMBU STUDIO / ORCASLICER`,
     `-------------------------------------------------------------------`,
     `  1. File > Import > Import Configs...  and pick the json in presets/.`,
-    `  2. Open monolith.3mf.`,
+    `  2. Open ${stem}.3mf.`,
     `  3. Select the "${preset}" process preset.`,
     `  4. Slice. There is nothing else to set.`,
     ``,
@@ -230,7 +240,7 @@ export function buildKitThreeMf(parts: Part[], mesh: BuiltMesh, options: KitOpti
 export function buildKit(parts: Part[], mesh: BuiltMesh, options: KitOptions): Buffer {
   const encoder = new TextEncoder();
   const card = printCard(parts, mesh, options);
-  const stem = `monolith-${options.login}-${options.year}-${options.variant}-${options.sizeMm}mm`;
+  const stem = kitStem(options);
 
   const threeMf = buildKitThreeMf(parts, mesh, options);
 

@@ -5,7 +5,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Grid, Lightformer, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import type { BuiltMesh } from "@/lib/types";
-import type { Palette } from "@/lib/products";
+import type { Palette } from "@/lib/palettes";
 
 interface Uniforms {
   uReveal: { value: number };
@@ -124,16 +124,13 @@ function Monolith({
   finish,
   offsetY,
   revealToken,
-  onRevealed,
 }: {
   mesh: BuiltMesh;
   finish: Palette;
   offsetY: number;
   revealToken: string;
-  onRevealed?: () => void;
 }) {
   const { material, uniforms } = useMonolithMaterial(finish);
-  const fired = useRef(false);
 
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
@@ -149,18 +146,11 @@ function Monolith({
 
   useEffect(() => {
     uniforms.uReveal.value = 0;
-    fired.current = false;
   }, [revealToken, uniforms]);
 
   useFrame((_, delta) => {
     const u = uniforms.uReveal;
-    if (u.value < 1) {
-      u.value = Math.min(1, u.value + delta / 1.35);
-      if (u.value >= 1 && !fired.current) {
-        fired.current = true;
-        onRevealed?.();
-      }
-    }
+    if (u.value < 1) u.value = Math.min(1, u.value + delta / 1.35);
   });
 
   return (
@@ -362,7 +352,6 @@ export interface SceneProps {
   revealToken: string;
   spin: boolean;
   onInteract: () => void;
-  onRevealed?: () => void;
 }
 
 export default function Scene({
@@ -372,7 +361,6 @@ export default function Scene({
   revealToken,
   spin,
   onInteract,
-  onRevealed,
 }: SceneProps) {
   const span = Math.max(mesh.size.x, mesh.size.z);
   const floorY = mesh.bounds.min[1];
@@ -415,7 +403,6 @@ export default function Scene({
         finish={finish}
         offsetY={offsetY}
         revealToken={revealToken}
-        onRevealed={onRevealed}
       />
 
       <StudioFloor radius={span * 2.6} y={floorY + offsetY - span * 0.006} />

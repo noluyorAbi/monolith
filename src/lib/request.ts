@@ -1,4 +1,5 @@
 import { SIZES, VARIANTS } from "./build";
+import { availableYears } from "./contributions";
 import { materialById, printerById, qualityById, type Material, type Printer, type Quality } from "./print";
 import type { ColourSlots } from "./slots";
 import type { Variant } from "./types";
@@ -26,12 +27,20 @@ export interface ModelRequest {
   slots: ColourSlots;
 }
 
+/** GitHub launched in 2008, and a year we cannot render is not worth caching. */
+function parseYear(raw: string | null): number {
+  const years = availableYears(1);
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 2008 || value > years[0]) return years[0];
+  return value;
+}
+
 export function parseModelRequest(url: URL): ModelRequest {
   const variant = url.searchParams.get("variant") ?? "";
   const slots = Number(url.searchParams.get("slots"));
   return {
     login: url.searchParams.get("login") ?? "",
-    year: Number(url.searchParams.get("year")) || new Date().getUTCFullYear(),
+    year: parseYear(url.searchParams.get("year")),
     variant: (VARIANTS.some((v) => v.id === variant) ? variant : "skyline") as Variant,
     sizeMm: Math.min(
       MAX_SIZE_MM,

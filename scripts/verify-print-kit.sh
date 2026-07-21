@@ -58,15 +58,20 @@ check() {
     fail=1
   fi
 }
+# Every key bambuOverrides() emits, in the same order. If you add one there,
+# add it here: the line above claims completeness.
 check layer_height 0.16
 check wall_loops 3
 check top_shell_layers 5
 check bottom_shell_layers 3
 check sparse_infill_density "15%"
 check sparse_infill_pattern gyroid
+check wall_generator arachne
+check detect_thin_wall 1
 check enable_support 0
 check seam_position back
 check brim_type no_brim
+check brim_width 0
 
 echo "4. slicer's own mesh verdict"
 grep -m1 -oE 'edges_fixed="[0-9]+" degenerate_facets="[0-9]+"[^/]*' "$WORK/slice.log" || true

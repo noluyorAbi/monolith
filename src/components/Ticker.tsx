@@ -7,10 +7,12 @@ import { animate, useReducedMotion } from "motion/react";
  * Counts to a value instead of snapping to it. Writes straight to the DOM so a
  * row of these does not push sixty re-renders a second through React.
  */
+const wholeNumber = (n: number) => Math.round(n).toLocaleString("en-GB");
+
 export function Ticker({
   value,
   duration = 0.9,
-  format = (n: number) => Math.round(n).toLocaleString("en-GB"),
+  format = wholeNumber,
   className,
 }: {
   value: number;
@@ -40,7 +42,12 @@ export function Ticker({
         from.current = value;
       },
     });
-    return () => controls.stop();
+    return () => {
+      // Resume from wherever the interrupted run got to. Without this, any
+      // parent re-render during the count-up sends every figure back to zero.
+      from.current = Number(node.textContent?.replace(/[^\d.-]/g, "")) || from.current;
+      controls.stop();
+    };
   }, [value, duration, format, reduced]);
 
   return <span ref={ref} className={className} suppressHydrationWarning />;

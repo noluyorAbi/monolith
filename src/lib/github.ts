@@ -1,22 +1,22 @@
+import "server-only";
+
+import {
+  BadLoginError,
+  LOGIN_RE,
+  NotFoundError,
+  normaliseLogin,
+  pack,
+  syntheticYear,
+  yearRange,
+} from "./contributions";
 import type { ContributionYear, Day, Level } from "./types";
 
-export const LOGIN_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/;
-
-export class BadLoginError extends Error {}
-
 /**
- * Accepts what people actually paste: a bare handle, an @handle, or the whole
- * profile URL. Exported because the browser validates the same string before
- * sending it, and two copies of this had already drifted apart.
+ * Reaching GitHub. Server only: it reads GITHUB_TOKEN and scrapes a page, and
+ * neither belongs anywhere near a browser bundle.
  */
-export function normaliseLogin(raw: string): string {
-  return raw
-    .trim()
-    .replace(/^@/, "")
-    .replace(/^https?:\/\/github\.com\//i, "")
-    .replace(/\/+$/, "");
-}
-export class NotFoundError extends Error {}
+
+export { BadLoginError, NotFoundError } from "./contributions";
 
 const LEVELS: Record<string, Level> = {
   NONE: 0,
@@ -25,68 +25,6 @@ const LEVELS: Record<string, Level> = {
   THIRD_QUARTILE: 3,
   FOURTH_QUARTILE: 4,
 };
-
-export function yearRange(year: number): { from: string; to: string } {
-  const today = new Date();
-  const isCurrent = year === today.getUTCFullYear();
-  const end = isCurrent ? today.toISOString().slice(0, 10) : `${year}-12-31`;
-  return { from: `${year}-01-01`, to: end };
-}
-
-export function availableYears(count = 6): number[] {
-  const now = new Date().getUTCFullYear();
-  return Array.from({ length: count }, (_, i) => now - i);
-}
-
-/** Lay a chronological day list out as GitHub does: columns of weeks, Sunday first. */
-function toWeeks(days: Day[]): (Day | null)[][] {
-  if (days.length === 0) return [];
-  const first = new Date(`${days[0].date}T00:00:00Z`);
-  const gridStart = new Date(first);
-  gridStart.setUTCDate(gridStart.getUTCDate() - gridStart.getUTCDay());
-  const weeks: (Day | null)[][] = [];
-  for (const day of days) {
-    const d = new Date(`${day.date}T00:00:00Z`);
-    const offset = Math.floor((d.getTime() - gridStart.getTime()) / 86_400_000);
-    const w = Math.floor(offset / 7);
-    while (weeks.length <= w) weeks.push(new Array(7).fill(null));
-    weeks[w][d.getUTCDay()] = day;
-  }
-  return weeks;
-}
-
-function pack(
-  login: string,
-  name: string,
-  year: number,
-  days: Day[],
-  source: ContributionYear["source"],
-): ContributionYear {
-  return {
-    login,
-    name,
-    year,
-    total: days.reduce((a, d) => a + d.count, 0),
-    days,
-    weeks: toWeeks(days),
-    demo: source === "synthetic",
-    source,
-  };
-}
-
-/**
- * Rebuild a full year from a bare day list. The week grid is derived, not
- * stored, so a fixture only has to carry the days and still exercises the same
- * calendar layout the live paths use.
- */
-export function yearFromDays(
-  login: string,
-  year: number,
-  days: Day[],
-  source: ContributionYear["source"] = "html",
-): ContributionYear {
-  return pack(login, login, year, days, source);
-}
 
 const GQL = `query($login:String!,$from:DateTime!,$to:DateTime!){
   user(login:$login){
@@ -192,47 +130,6 @@ async function viaHTML(login: string, year: number): Promise<ContributionYear | 
   if (days.length === 0) return null;
   days.sort((a, b) => a.date.localeCompare(b.date));
   return pack(login, login, year, days, "html");
-}
-
-function hash(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function mulberry32(seed: number): () => number {
-  let a = seed;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/**
- * Deterministic stand-in when GitHub cannot be reached. Always flagged in the
- * payload so the UI can say so out loud rather than quietly faking a year.
- */
-export function syntheticYear(login: string, year: number): ContributionYear {
-  const rnd = mulberry32(hash(`${login}:${year}`));
-  const { from, to } = yearRange(year);
-  const start = new Date(`${from}T00:00:00Z`);
-  const end = new Date(`${to}T00:00:00Z`);
-  const days: Day[] = [];
-  let momentum = rnd();
-  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-    momentum = momentum * 0.86 + rnd() * 0.14;
-    const weekend = d.getUTCDay() === 0 || d.getUTCDay() === 6 ? 0.35 : 1;
-    const raw = Math.max(0, momentum * 2 - 0.55) * weekend * 26 * (0.4 + rnd());
-    const count = rnd() < 0.13 ? 0 : Math.round(raw);
-    const level = (count === 0 ? 0 : count < 3 ? 1 : count < 7 ? 2 : count < 14 ? 3 : 4) as Level;
-    days.push({ date: d.toISOString().slice(0, 10), count, level });
-  }
-  return pack(login, login, year, days, "synthetic");
 }
 
 export async function fetchContributionYear(

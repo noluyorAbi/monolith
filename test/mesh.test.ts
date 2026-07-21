@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { MeshBuilder, scaleToSize } from "@/lib/mesh";
 import { buildMonolith, computeStats } from "@/lib/build";
 import { toBinarySTL } from "@/lib/stl";
-import { syntheticYear } from "@/lib/github";
+import { syntheticYear } from "@/lib/contributions";
 import { measureText, rasterise } from "@/lib/font5x7";
 import type { Variant } from "@/lib/types";
 

@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { buildMonolith } from "@/lib/build";
 import { splitByLevel } from "@/lib/parts";
 import { estimate, materialById, qualityById } from "@/lib/print";
-import { yearFromDays } from "@/lib/github";
+import { yearFromDays } from "@/lib/contributions";
 import type { ContributionYear, Day } from "@/lib/types";
 import fixture from "./fixtures/contributions-2025.json";
 

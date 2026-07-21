@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
-import { inflateRawSync } from "node:zlib";
+import { unzip } from "./helpers/zip";
 import { GET as getKit } from "@/app/api/kit/route";
 import { GET as getStl } from "@/app/api/stl/route";
 import { GET as get3mf } from "@/app/api/3mf/route";
 import { MAX_SIZE_MM, MIN_SIZE_MM, modelQuery, parseModelRequest } from "@/lib/request";
 import { DEFAULT_MATERIAL_ID, DEFAULT_PRINTER_ID, DEFAULT_QUALITY_ID } from "@/lib/print";
-import { yearFromDays } from "@/lib/github";
+import { yearFromDays } from "@/lib/contributions";
 import type { Day } from "@/lib/types";
 import fixture from "./fixtures/contributions-2025.json";
 
@@ -85,7 +85,7 @@ test("the kit endpoint returns a zip carrying all four files", async () => {
   assert.equal(res.headers.get("X-Monolith-Sample-Data"), "false");
 
   const buffer = Buffer.from(await res.arrayBuffer());
-  const names = zipEntryNames(buffer);
+  const names = [...unzip(buffer).keys()];
   assert.ok(names.some((n) => n.endsWith(".3mf")), `no 3mf in ${names}`);
   assert.ok(names.some((n) => n.endsWith(".stl")), `no stl in ${names}`);
   assert.ok(names.some((n) => n.startsWith("presets/") && n.endsWith(".json")), `no preset in ${names}`);
@@ -137,42 +137,11 @@ test("sample data is announced in the response, not shipped quietly", async () =
   assert.equal(res.headers.get("X-Monolith-Sample-Data"), "true");
 
   const buffer = Buffer.from(await res.arrayBuffer());
-  const card = readZipEntry(buffer, "PRINT-ME.txt")?.toString() ?? "";
+  const card = unzip(buffer).get("PRINT-ME.txt")?.toString() ?? "";
   assert.match(card, /SAMPLE DATA/, "the print card does not warn that the year is invented");
 
   vi.restoreAllMocks();
 });
-
-/** Minimal central-directory reader, so the assertions do not depend on our writer. */
-function zipEntries(buffer: Buffer): Map<string, Buffer> {
-  const out = new Map<string, Buffer>();
-  const eocd = buffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-  const count = buffer.readUInt16LE(eocd + 10);
-  let p = buffer.readUInt32LE(eocd + 16);
-  for (let i = 0; i < count; i++) {
-    const method = buffer.readUInt16LE(p + 10);
-    const compSize = buffer.readUInt32LE(p + 20);
-    const nameLen = buffer.readUInt16LE(p + 28);
-    const extraLen = buffer.readUInt16LE(p + 30);
-    const commentLen = buffer.readUInt16LE(p + 32);
-    const offset = buffer.readUInt32LE(p + 42);
-    const name = buffer.subarray(p + 46, p + 46 + nameLen).toString("utf8");
-    const dataStart =
-      offset + 30 + buffer.readUInt16LE(offset + 26) + buffer.readUInt16LE(offset + 28);
-    const raw = buffer.subarray(dataStart, dataStart + compSize);
-    out.set(name, method === 8 ? inflateRawSync(raw) : Buffer.from(raw));
-    p += 46 + nameLen + extraLen + commentLen;
-  }
-  return out;
-}
-
-function zipEntryNames(buffer: Buffer): string[] {
-  return [...zipEntries(buffer).keys()];
-}
-
-function readZipEntry(buffer: Buffer, name: string): Buffer | undefined {
-  return zipEntries(buffer).get(name);
-}
 
 test("the fixture year survives a round trip through the parser", () => {
   const year = yearFromDays(fixture.login, fixture.year, fixture.days as Day[]);

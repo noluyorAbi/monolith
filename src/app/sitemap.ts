@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { PROJECT } from "@/lib/project";
-import { availableYears } from "@/lib/github";
+import { availableYears } from "@/lib/contributions";
 
 /**
  * Share pages are generated per handle, so there is no finite set to list.

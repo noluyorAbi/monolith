@@ -43,7 +43,7 @@ export const OgCard: React.FC = () => {
             letterSpacing: 2,
           }}
         >
-          FREE · OPEN SOURCE
+          FREE · SOURCE AVAILABLE
         </div>
       </div>
 
@@ -68,7 +68,7 @@ export const OgCard: React.FC = () => {
           color: "#5f656c",
         }}
       >
-        <div>No account · no upload · MIT licensed</div>
+        <div>No account · no upload · source available</div>
         <div>{PROJECT.site.replace("https://", "")}</div>
       </div>
     </AbsoluteFill>

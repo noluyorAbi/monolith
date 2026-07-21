@@ -1,45 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { inflateRawSync } from "node:zlib";
-import { crc32, zip } from "@/lib/zip";
+import { zip } from "@/lib/zip";
+import { unzip } from "./helpers/zip";
 import { buildMonolith } from "@/lib/build";
 import { splitByLevel, wholeObject, signedVolume } from "@/lib/parts";
 import { buildThreeMf } from "@/lib/threemf";
 import { bambuPreset, printCard } from "@/lib/kit";
 import { bambuOverrides, materialById, printerById, qualityById } from "@/lib/print";
 import { slotForLevel } from "@/lib/slots";
-import { syntheticYear } from "@/lib/github";
-
-/** Independent reader, so the writer is checked against something other than itself. */
-function unzip(buffer: Buffer): Map<string, Buffer> {
-  const out = new Map<string, Buffer>();
-  const eocd = buffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-  assert.ok(eocd > 0, "no end of central directory");
-  const count = buffer.readUInt16LE(eocd + 10);
-  let p = buffer.readUInt32LE(eocd + 16);
-  for (let i = 0; i < count; i++) {
-    assert.equal(buffer.readUInt32LE(p), 0x02014b50, "bad central directory signature");
-    const method = buffer.readUInt16LE(p + 10);
-    const storedCrc = buffer.readUInt32LE(p + 16);
-    const compSize = buffer.readUInt32LE(p + 20);
-    const nameLen = buffer.readUInt16LE(p + 28);
-    const extraLen = buffer.readUInt16LE(p + 30);
-    const commentLen = buffer.readUInt16LE(p + 32);
-    const offset = buffer.readUInt32LE(p + 42);
-    const name = buffer.subarray(p + 46, p + 46 + nameLen).toString("utf8");
-
-    assert.equal(buffer.readUInt32LE(offset), 0x04034b50, "bad local header signature");
-    const localNameLen = buffer.readUInt16LE(offset + 26);
-    const localExtraLen = buffer.readUInt16LE(offset + 28);
-    const dataStart = offset + 30 + localNameLen + localExtraLen;
-    const raw = buffer.subarray(dataStart, dataStart + compSize);
-    const data = method === 8 ? inflateRawSync(raw) : Buffer.from(raw);
-    assert.equal(crc32(data), storedCrc, `${name}: crc mismatch`);
-    out.set(name, data);
-    p += 46 + nameLen + extraLen + commentLen;
-  }
-  return out;
-}
+import { syntheticYear } from "@/lib/contributions";
 
 const DATA = syntheticYear("octocat", 2025);
 const MESH = buildMonolith(DATA, { variant: "skyline", sizeMm: 180, label: true });

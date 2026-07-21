@@ -237,7 +237,7 @@ export function overrides(material: Material, quality: Quality): PrintSpec[] {
     {
       key: "wall_generator",
       label: "Wall generator",
-      value: "arachne",
+      value: WALL_GENERATOR,
       why: "Recovers about three times more of the engraved handle at small sizes.",
     },
     {
@@ -334,7 +334,7 @@ const FLOW_SLOPE = 5.2887;
  * so treat the numbers as a band, which is how they are presented.
  */
 export function estimate(parts: Part[], material: Material, quality: Quality): Estimate {
-  const lineWidth = 0.42;
+  const lineWidth = NOZZLE_LINE_MM;
   const wallThickness = WALL_LOOPS * lineWidth;
   let solid = 0;
   let used = 0;
@@ -358,4 +358,13 @@ export function estimate(parts: Part[], material: Material, quality: Quality): E
     hoursLow: (seconds / 3600) * 0.85,
     hoursHigh: (seconds / 3600) * 1.25,
   };
+}
+
+export function formatPrice(euros: number): string {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(euros);
 }

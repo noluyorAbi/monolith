@@ -6,6 +6,9 @@ import type { BuiltMesh, ContributionYear, Stats, Variant } from "@/lib/types";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
+/** Module scope, so its identity does not change the Ticker effect every render. */
+const oneDecimal = (n: number) => n.toFixed(1);
+
 function Row({
   value,
   label,
@@ -90,7 +93,7 @@ export function Hud({
           value={stats.averagePerActiveDay}
           label={`per active day · ${stats.busiestWeekday.slice(0, 3).toLowerCase()} heaviest`}
           delay={0.34}
-          format={(n) => n.toFixed(1)}
+          format={oneDecimal}
         />
         <motion.div
           className="mt-3 flex flex-col gap-1 border-t border-line pt-3 text-[0.6rem] tracking-[0.14em] uppercase text-dim"
