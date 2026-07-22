@@ -33,6 +33,12 @@
   html {
     background: var(--color-void);
     color-scheme: dark;
+    /* Nothing on this page is meant to be reached by scrolling sideways. A
+       single overhanging chip used to let a phone pan the whole layout, fixed
+       overlays included, which reads as the page having come loose. `clip`
+       rather than `hidden`, which would make the html box a scroll container
+       and break the sticky and fixed positioning inside it. */
+    overflow-x: clip;
   }
 
   body {

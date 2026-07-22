@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useDragControls } from "motion/react";
 import {
   DEFAULT_MATERIAL_ID,
   DEFAULT_PRINTER_ID,
@@ -47,7 +47,7 @@ function Choice({
       title={title}
       aria-pressed={active}
       onClick={onClick}
-      className={`rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.08em] transition-colors duration-150 active:scale-[0.97] ${
+      className={`min-h-10 rounded-[5px] border px-3 py-1.5 text-[0.68rem] tracking-[0.08em] transition-colors duration-150 active:scale-[0.97] sm:min-h-0 sm:px-2.5 ${
         active ? "border-accent bg-accent/[0.08] text-fog" : "border-edge text-mute hover:text-fog"
       }`}
     >
@@ -81,6 +81,13 @@ export function PrintSheet(props: PrintSheetProps) {
   const [qualityId, setQualityId] = useState(DEFAULT_QUALITY_ID);
   const [slots, setSlots] = useState<ColourSlots>(1);
   const wide = useMediaQuery("(min-width: 640px)");
+  /**
+   * Swipe to dismiss, from the handle only. A drag listener on the whole sheet
+   * makes Motion set touch-action on it, which on a phone took the vertical
+   * gesture away from the list of choices inside and left the sheet unable to
+   * scroll to its own download button.
+   */
+  const drag = useDragControls();
 
   const { open, onClose } = props;
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -195,6 +202,8 @@ export function PrintSheet(props: PrintSheetProps) {
             animate={{ y: 0, height: wide ? "auto" : "min(40rem, 90svh)" }}
             exit={{ y: "100%" }}
             drag="y"
+            dragListener={false}
+            dragControls={drag}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.4 }}
             onDragEnd={(_, info) => {
@@ -202,7 +211,10 @@ export function PrintSheet(props: PrintSheetProps) {
             }}
             transition={{ duration: 0.5, ease: EASE }}
           >
-            <div className="flex items-center justify-between px-5 pt-4 sm:px-7">
+            <div
+              onPointerDown={(e) => drag.start(e)}
+              className="flex touch-none items-center justify-between px-5 pt-4 sm:px-7"
+            >
               <div className="mx-auto h-1 w-9 rounded-full bg-edge sm:hidden" />
             </div>
 
@@ -219,7 +231,7 @@ export function PrintSheet(props: PrintSheetProps) {
                 type="button"
                 onClick={props.onClose}
                 aria-label="Close"
-                className="hairline grid h-7 w-7 shrink-0 place-items-center rounded-[5px] text-mute transition-colors duration-150 hover:text-fog active:scale-[0.95]"
+                className="hairline grid h-9 w-9 shrink-0 place-items-center rounded-[5px] text-mute sm:h-7 sm:w-7 transition-colors duration-150 hover:text-fog active:scale-[0.95]"
               >
                 ✕
               </button>
@@ -355,11 +367,14 @@ export function PrintSheet(props: PrintSheetProps) {
                   </div>
 
                   <div className="flex flex-col gap-2">
+                    {/* Narrow, this button lives in the bar pinned to the
+                      bottom of the sheet instead, so it is reachable without
+                      scrolling past four rows of choices to find it. */}
                     <a
                       href={`/api/kit?${query}`}
                       download
                       onClick={() => play("lock")}
-                      className="rounded-[5px] bg-accent px-4 py-3 text-center text-[0.7rem] font-medium tracking-[0.12em] uppercase text-void transition-all duration-150 hover:brightness-110 active:scale-[0.985]"
+                      className="hidden rounded-[5px] bg-accent px-4 py-3 text-center text-[0.7rem] font-medium tracking-[0.12em] uppercase text-void transition-all duration-150 hover:brightness-110 active:scale-[0.985] sm:block"
                     >
                       Download print kit · zip
                     </a>
@@ -398,17 +413,41 @@ export function PrintSheet(props: PrintSheetProps) {
                         .stl only
                       </a>
                     </div>
-                    <a
-                      href={PROJECT.url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="mt-2 text-center text-[0.6rem] tracking-[0.14em] uppercase text-mute transition-colors duration-150 hover:text-fog"
-                    >
-                      source on github ↗
-                    </a>
+                    <div className="mt-2 flex items-center justify-center gap-4 text-[0.6rem] tracking-[0.14em] uppercase text-mute">
+                      <a
+                        href={PROJECT.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="transition-colors duration-150 hover:text-fog"
+                      >
+                        source on github ↗
+                      </a>
+                      {/* The maker's link, which the narrow header drops. */}
+                      <a
+                        href={PROJECT.authorSite}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="transition-colors duration-150 hover:text-fog sm:hidden"
+                      >
+                        by {PROJECT.authorSiteName} ↗
+                      </a>
+                    </div>
                   </div>
                 </div>
               </motion.div>
+            </div>
+
+            {/* The one action this sheet exists for, held at the bottom of a
+              phone screen rather than at the bottom of its scroll. */}
+            <div className="shrink-0 border-t border-line bg-ink px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:hidden">
+              <a
+                href={`/api/kit?${query}`}
+                download
+                onClick={() => play("lock")}
+                className="block rounded-[5px] bg-accent px-4 py-3.5 text-center text-[0.7rem] font-medium tracking-[0.12em] uppercase text-void transition-all duration-150 active:scale-[0.985]"
+              >
+                Download print kit · zip
+              </a>
             </div>
           </motion.div>
         </>

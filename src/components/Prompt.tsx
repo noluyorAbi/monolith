@@ -103,6 +103,12 @@ export function Prompt({
   const ownRef = useRef<HTMLInputElement>(null);
   const field = inputRef ?? ownRef;
   const hint = useTypedHint(!hidden);
+  /**
+   * The proof under the field: what it costs, what you get. It is the first
+   * thing to go on a phone held sideways, where the hero has about 390 px of
+   * height and the headline, the field and this block do not all fit in it.
+   */
+  const tall = useMediaQuery("(min-height: 520px)");
 
   useEffect(() => {
     if (!hidden) field.current?.focus();
@@ -122,7 +128,7 @@ export function Prompt({
 
   return (
     <motion.div
-      className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-end px-6 pb-[14vh] min-[900px]:items-start min-[900px]:justify-center min-[900px]:px-[max(3rem,6vw)] min-[900px]:pb-0"
+      className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-end px-6 pb-[9vh] min-[900px]:items-start min-[900px]:justify-center min-[900px]:px-[max(3rem,6vw)] min-[900px]:pb-0"
       animate={{ opacity: hidden ? 0 : 1, filter: hidden ? "blur(6px)" : "blur(0px)" }}
       transition={{ duration: hidden ? 0.32 : 0.5, ease: EASE }}
       style={{ pointerEvents: hidden ? "none" : undefined }}
@@ -144,7 +150,7 @@ export function Prompt({
           className="pointer-events-none absolute -inset-x-16 -inset-y-12 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(6,7,8,0.94)_38%,rgba(6,7,8,0.62)_66%,transparent_100%)] min-[900px]:opacity-45"
         />
         <motion.p
-          className="mb-5 text-[0.62rem] tracking-[0.24em] uppercase text-dim"
+          className="mb-3 text-[0.62rem] tracking-[0.24em] uppercase text-dim sm:mb-5"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
@@ -153,7 +159,7 @@ export function Prompt({
         </motion.p>
 
         <motion.h1
-          className="mb-9 font-[family-name:var(--font-display)] text-[clamp(1.9rem,5.2vw,3.1rem)] leading-[1.04] tracking-[-0.035em] text-fog"
+          className="mb-6 font-[family-name:var(--font-display)] text-[clamp(1.9rem,5.2vw,3.1rem)] leading-[1.04] tracking-[-0.035em] text-fog sm:mb-9"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: EASE, delay: 0.05 }}
@@ -299,8 +305,9 @@ export function Prompt({
             )}
           </AnimatePresence>
         </div>
+        {tall && (
         <motion.div
-          className="mt-9 flex flex-col gap-3 border-t border-line pt-5"
+          className="mt-6 flex flex-col gap-2.5 border-t border-line pt-4 sm:mt-9 sm:gap-3 sm:pt-5"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: EASE, delay: 0.28 }}
@@ -324,6 +331,7 @@ export function Prompt({
             the nozzle and the layer height.
           </p>
         </motion.div>
+        )}
       </motion.div>
       </div>
     </motion.div>

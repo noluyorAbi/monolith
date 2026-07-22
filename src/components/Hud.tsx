@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import { Ticker } from "./Ticker";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import type { BuiltMesh, ContributionYear, Stats, Variant } from "@/lib/types";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -53,6 +54,14 @@ export function Hud({
   mesh: BuiltMesh;
   variant: Variant;
 }) {
+  /**
+   * The full readout is seven lines tall. It needs a screen with the height to
+   * hold them as much as the width: on a phone turned sideways the column ran
+   * straight through the object and out under the dock. Height as well as
+   * width, so a short landscape window gets the two-figure row instead.
+   */
+  const roomy = useMediaQuery("(min-width: 640px) and (min-height: 600px)");
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-6 px-5 pb-5 pt-14 sm:px-7 sm:pb-7 sm:pt-16">
       <motion.div
@@ -83,7 +92,8 @@ export function Hud({
         </div>
       </motion.div>
 
-      <div className="hidden w-fit max-w-[20rem] flex-col gap-2 sm:flex">
+      {roomy && (
+      <div className="flex w-fit max-w-[20rem] flex-col gap-2">
         <Row value={stats.total} label="contributions" delay={0.1} />
         <Row value={stats.activeDays} label="active days" delay={0.16} />
         <Row value={stats.longestStreak} label="longest streak" delay={0.22} />
@@ -115,9 +125,11 @@ export function Hud({
           <span className="tabular-nums">{mesh.triangles.toLocaleString("en-GB")} triangles</span>
         </motion.div>
       </div>
+      )}
 
+      {!roomy && (
       <motion.div
-        className="flex gap-5 text-[0.6rem] tracking-[0.14em] uppercase text-dim sm:hidden"
+        className="flex gap-5 text-[0.6rem] tracking-[0.14em] uppercase text-dim"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.12 }}
@@ -129,6 +141,7 @@ export function Hud({
           <Ticker value={stats.longestStreak} className="text-fog tabular-nums" /> streak
         </span>
       </motion.div>
+      )}
     </div>
   );
 }

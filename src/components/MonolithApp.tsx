@@ -74,6 +74,7 @@ export function MonolithApp({
   );
   const [printing, setPrinting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [stars, setStars] = useState<number | null>(null);
   /** The studio's light switches, all on until a hand reaches for them. */
   const [studio, setStudio] = useState<StudioLights>({
     key: true,
@@ -310,6 +311,24 @@ export function MonolithApp({
     void forge(initialLogin, initialYear ?? years[0]);
   }, [initialLogin, initialYear, years, forge]);
 
+  // The "star on github" chip earns its keep by showing a real count rather
+  // than just being a link. One unauthenticated call, once, and silence on
+  // failure: a missing star count is not worth an error state over.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`https://api.github.com/repos/${PROJECT.repo}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { stargazers_count?: number } | null) => {
+        if (!cancelled && typeof json?.stargazers_count === "number") {
+          setStars(json.stargazers_count);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const reset = useCallback(() => {
     runId.current++;
     setPhase("idle");
@@ -397,6 +416,10 @@ export function MonolithApp({
   // object goes back to sitting under the copy, because a 34 rem column beside
   // an object on a phone leaves neither of them readable.
   const twoColumn = useMediaQuery("(min-width: 900px)");
+  /** A phone, where the dock is two rows deep and covers more of the stage. */
+  const phone = useMediaQuery("(max-width: 639px)");
+  /** A window with no vertical room to spare, typically a phone held sideways. */
+  const shortScreen = useMediaQuery("(max-height: 520px)");
 
   return (
     <MotionConfig reducedMotion="user">
@@ -420,8 +443,15 @@ export function MonolithApp({
             onInteract={() => setSpin(false)}
             onGrab={() => setTurned(true)}
             shiftX={twoColumn ? 0.22 : 0}
-            shiftY={twoColumn ? -0.02 : -0.19}
+            shiftY={twoColumn ? -0.02 : -0.23}
             pad={twoColumn ? 2.2 : 1.85}
+            // The viewer fits the object to the frame, which is right on a
+            // wide screen and wrong on a phone: the dock covers the bottom
+            // fifth of it, and a turn to broadside pushes a 365-day skyline
+            // off both edges. Stand back a little and lift it clear.
+            livePad={twoColumn ? 1 : 1.06}
+            liveShiftY={phone ? -0.07 : 0}
+            liveTurnSafe={!twoColumn}
             reduced={reduceMotion}
             studio={studio}
           />
@@ -459,6 +489,7 @@ export function MonolithApp({
                 type="button"
                 onClick={() => setSoundEnabled(!sound)}
                 aria-pressed={sound}
+                aria-label={sound ? "Sound on" : "Sound off"}
                 className="pointer-events-auto flex items-center gap-2 text-[0.62rem] tracking-[0.18em] uppercase text-mute transition-colors duration-150 hover:text-fog"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -466,7 +497,10 @@ export function MonolithApp({
                 transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               >
                 <span aria-hidden>{sound ? "◉" : "◎"}</span>
-                {sound ? "sound on" : "sound off"}
+                {/* "sound off" at this tracking is 78 px, which ran off the
+                  right edge of a 393 px screen. The state is the word. */}
+                <span className="sm:hidden">{sound ? "on" : "off"}</span>
+                <span className="hidden sm:inline">{sound ? "sound on" : "sound off"}</span>
               </motion.button>
             )}
           </AnimatePresence>
@@ -474,32 +508,46 @@ export function MonolithApp({
           <AnimatePresence>
             {phase === "live" && (
               <motion.div
-                className="pointer-events-auto flex items-center gap-3 text-[0.6rem] tracking-[0.18em] uppercase"
+                className="pointer-events-auto flex min-w-0 items-center gap-1.5 text-[0.6rem] tracking-[0.18em] uppercase sm:gap-3"
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
               >
+                {/* Every control here wears the same chip, share and new
+                  included, so the row reads as one family rather than two
+                  plain links bolted onto two branded ones. */}
+                {/* Narrow, every word here is dropped and the glyph carries
+                  the control. Four labelled chips came to about 470 px on a
+                  393 px phone, so the last of them was off the screen and
+                  pressing any of them panned the whole page sideways. */}
                 <button
                   type="button"
                   onClick={share}
-                  className="text-mute transition-colors duration-150 hover:text-fog"
+                  aria-label="Copy link to this year"
+                  className="hairline flex h-9 items-center gap-1.5 rounded-[3px] px-2.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog sm:h-auto sm:py-1.5"
                 >
+                  <span aria-hidden className="text-accent">
+                    {copied ? "✓" : "⇪"}
+                  </span>
                   {copied ? (
-                    <span className="text-accent">link copied</span>
+                    <span className="text-accent">
+                      link copied
+                    </span>
                   ) : (
-                    "share ↗"
+                    <span className="hidden sm:inline">share</span>
                   )}
                 </button>
-                <span aria-hidden className="text-edge">
-                  /
-                </span>
                 <button
                   type="button"
                   onClick={reset}
-                  className="text-mute transition-colors duration-150 hover:text-fog"
+                  aria-label="Build another year"
+                  className="hairline flex h-9 items-center gap-1.5 rounded-[3px] px-2.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog sm:h-auto sm:py-1.5"
                 >
-                  new
+                  <span aria-hidden className="text-accent">
+                    +
+                  </span>
+                  <span className="hidden sm:inline">new</span>
                 </button>
                 {/* The two doors off a shared page, worn as chips so a visitor
                   who just received someone's year can find the maker and the
@@ -508,18 +556,27 @@ export function MonolithApp({
                   href={PROJECT.url}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="hairline flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog"
+                  aria-label="Star this project on GitHub"
+                  className="hairline flex h-9 items-center gap-1.5 rounded-[3px] px-2.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog sm:h-auto sm:py-1.5"
                 >
                   <span aria-hidden className="text-accent">
                     ★
                   </span>
-                  star on github
+                  <span className="hidden sm:inline">star on github</span>
+                  {stars !== null && (
+                    <span className="tabular-nums text-dim">
+                      {stars.toLocaleString("en-GB")}
+                    </span>
+                  )}
                 </a>
+                {/* The maker's door. Narrow it would be the fifth chip in a row
+                  that has no space for four, and the print sheet carries the
+                  same link a tap away. */}
                 <a
                   href={PROJECT.authorSite}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="hairline flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog"
+                  className="hairline hidden items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-mute transition-colors duration-150 hover:border-accent hover:text-fog sm:flex"
                 >
                   by {PROJECT.authorSiteName}
                   <span aria-hidden className="text-accent">
@@ -587,7 +644,9 @@ export function MonolithApp({
         </AnimatePresence>
 
           <AnimatePresence>
-            {phase === "idle" && (
+            {/* Sideways on a phone there is no band left under the field to
+              put this in, and it landed on the row of examples. */}
+            {phase === "idle" && !shortScreen && (
               <motion.button
                 type="button"
                 onClick={() =>
@@ -596,7 +655,7 @@ export function MonolithApp({
                     behavior: reduceMotion ? "auto" : "smooth",
                   })
                 }
-                className="pointer-events-auto absolute bottom-[3.4rem] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 text-[0.56rem] tracking-[0.24em] uppercase text-dim transition-colors duration-150 hover:text-fog"
+                className="pointer-events-auto absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 sm:bottom-[3.4rem] text-[0.56rem] tracking-[0.24em] uppercase text-dim transition-colors duration-150 hover:text-fog"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: scrolled ? 0 : 1 }}
                 exit={{ opacity: 0 }}
@@ -617,18 +676,15 @@ export function MonolithApp({
           </AnimatePresence>
 
           <AnimatePresence>
-            {phase === "idle" && (
+            {phase === "idle" && !shortScreen && (
               <motion.footer
-                className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-between px-5 pb-5 text-[0.58rem] tracking-[0.18em] uppercase text-dim sm:px-7 sm:pb-7"
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-20 hidden items-center justify-between px-5 pb-5 text-[0.58rem] tracking-[0.18em] uppercase text-dim sm:flex sm:px-7 sm:pb-7"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.4, delay: 0.3 }}
               >
-                <span className="hidden sm:inline">
-                  Source available · the files are free · print it yourself
-                </span>
-                <span className="sm:hidden">The files are free</span>
+                <span>Source available · the files are free · print it yourself</span>
                 {/* The two ways off the page, worn as chips rather than muttered
                   in the margin: the one person and the one repository behind
                   the object deserve at least a border. */}

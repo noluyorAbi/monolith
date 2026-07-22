@@ -172,6 +172,11 @@ export interface SceneProps {
   shiftY?: number;
   /** Room around the ambient fit. Above 1 the object is read whole and small. */
   pad?: number;
+  /** The same two, for the viewer. A phone needs both; a wide screen neither. */
+  livePad?: number;
+  liveShiftY?: number;
+  /** Fit the viewer's object so a turn never crops it. Narrow screens only. */
+  liveTurnSafe?: boolean;
   reduced?: boolean;
   /** Which studio lights are on. Absent means all of them. */
   studio?: StudioLights;
@@ -188,6 +193,9 @@ export default function Scene({
   shiftX = 0,
   shiftY = 0,
   pad = 1.72,
+  livePad = 1,
+  liveShiftY = 0,
+  liveTurnSafe = false,
   reduced = false,
   studio = STUDIO_ALL_ON,
 }: SceneProps) {
@@ -280,10 +288,11 @@ export default function Scene({
       <Framing
         mesh={mesh}
         offsetY={offsetY}
-        pad={ghost ? pad : 1}
+        pad={ghost ? pad : livePad}
         shiftX={ghost ? shiftX : 0}
-        shiftY={ghost ? shiftY : 0}
+        shiftY={ghost ? shiftY : liveShiftY}
         aim={ghost}
+        turnSafe={!ghost && liveTurnSafe}
       />
       {!ghost && <Rig spin={spin} onInteract={onInteract} />}
     </Canvas>
