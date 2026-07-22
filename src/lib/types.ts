@@ -44,6 +44,39 @@ export interface ContributionYear {
   firstRepoAt?: string;
 }
 
+/**
+ * Several years of one account, fetched and stacked as a single object.
+ * Drives the multi-year / lifetime / arbitrary date-range models (marktanalyse
+ * section 5.4 / 6.1). `years` is ordered oldest-first so the stack reads left
+ * to right; `days`/`weeks` are the concatenation used by the single-year
+ * geometry builders after they have been re-gridded onto one timeline.
+ */
+export interface MultiYearData {
+  login: string;
+  name: string;
+  /** Oldest first. */
+  years: ContributionYear[];
+  /** Inclusive span actually covered. */
+  fromYear: number;
+  toYear: number;
+  /** True when any constituent year was synthesised (GitHub unreachable). */
+  demo: boolean;
+  source: ContributionYear["source"];
+  contributionYears?: number[];
+  colors?: string[];
+  isHalloween?: boolean;
+  /** Summed composition across every year. */
+  totalCommits: number;
+  totalIssues: number;
+  totalPullRequests: number;
+  totalReviews: number;
+  totalRepos: number;
+  joinedAt?: string;
+  firstPrAt?: string;
+  firstIssueAt?: string;
+  firstRepoAt?: string;
+}
+
 export interface Stats {
   total: number;
   activeDays: number;

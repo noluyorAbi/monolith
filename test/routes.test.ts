@@ -231,6 +231,35 @@ test("the 3MF arrives split into one object per contribution level", async () =>
   assert.match(model, /Peak days|Busy days|Quiet days|Plinth/);
 });
 
+test("multi-colour 3MF binds each part to a filament slot via model_settings.config", async () => {
+  stubGitHub();
+  // slots=4 asks for four filaments; the config must tag every object.
+  const res = await get3mf(
+    new Request(`${BASE}/3mf?login=noluyorAbi&year=2025&variant=skyline&mm=180&slots=4`),
+  );
+  const files = unzip(Buffer.from(await res.arrayBuffer()));
+  const cfg = files.get("Metadata/model_settings.config");
+  assert.ok(cfg, "multi-colour 3MF is missing Metadata/model_settings.config");
+  const xml = cfg!.toString();
+  // M6 / marktanalyse 4.13: Bambu + Orca read this blob on import, so the
+  // intensities land pre-assigned. Every object gets an extruder metadata row.
+  assert.match(xml, /<metadata key="extruder" value="\d+"\/>/);
+  const extruders = [...xml.matchAll(/<metadata key="extruder" value="(\d+)"\/>/g)].map((m) => Number(m[1]));
+  const objects = (files.get("3D/3dmodel.model")!.toString().match(/<object /g) ?? []).length;
+  assert.equal(extruders.length, objects, "every 3MF object must carry one extruder binding");
+  // With slots=4 the busiest part must reach a higher slot than the plinth.
+  assert.ok(Math.max(...extruders) > 1, "highest-intensity part should map above the base slot");
+});
+
+test("single-colour 3MF does not emit a model_settings.config", async () => {
+  stubGitHub();
+  const res = await get3mf(
+    new Request(`${BASE}/3mf?login=noluyorAbi&year=2025&variant=skyline&mm=180&slots=1`),
+  );
+  const files = unzip(Buffer.from(await res.arrayBuffer()));
+  assert.equal(files.get("Metadata/model_settings.config"), undefined, "single colour needs no extruder config");
+});
+
 test("a missing account is a 404 rather than an invented year", async () => {
   vi.stubGlobal("fetch", async () => new Response("", { status: 404 }));
   const res = await getKit(new Request(`${BASE}/kit?login=definitelynotarealaccount&year=2025`));

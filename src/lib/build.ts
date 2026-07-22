@@ -1,6 +1,6 @@
 import { MeshBuilder, scaleToSize, type Attribs } from "./mesh";
 import { GLYPH_H, measureText, rasterise } from "./font5x7";
-import type { BuildOptions, BuiltMesh, ContributionYear, Day, Variant } from "./types";
+import type { BuildOptions, BuiltMesh, ContributionYear, Day, MultiYearData, Variant } from "./types";
 import type { Printer } from "./print";
 
 /** Millimetres. Chosen so a default skyline lands close to a 210mm desk piece. */
@@ -169,6 +169,33 @@ function buildSkyline(data: ContributionYear, label: boolean, dampening = 0): Me
     z: z0 + plateD,
     align: "right",
   });
+  // M4 / marktanalyse 5.4: engrave the account's real milestones on the base
+  // plate so the object carries its own origin story. Only when the data has
+  // them (the GraphQL path; the HTML fallback does not), and only on the
+  // front face so the signature and the year keep the back.
+  const yearOf = (iso?: string) => (iso ? iso.slice(0, 4) : undefined);
+  const joined = yearOf(data.joinedAt);
+  if (joined) {
+    engraveWall(mb, `JOINED ${joined}`, {
+      x: x0 + plateW / 2 - (measureText(`JOINED ${joined}`) * px) / 2,
+      y: textY,
+      px: px * 0.8,
+      z: z0,
+      align: "left",
+      face: "front",
+    });
+  }
+  const firstPr = yearOf(data.firstPrAt);
+  if (firstPr) {
+    engraveWall(mb, `1ST PR ${firstPr}`, {
+      x: x0 + plateW / 2 - (measureText(`1ST PR ${firstPr}`) * px) / 2,
+      y: textY,
+      px: px * 0.8,
+      z: z0,
+      align: "left",
+      face: "front",
+    });
+  }
   return mb;
 }
 
@@ -419,4 +446,73 @@ export function biggestSizeFor(printer: Printer): SizeDef {
 /** The offered sizes with a flag for whether the printer can print them. */
 export function sizesForPrinter(printer: Printer): Array<SizeDef & { fits: boolean }> {
   return SIZES.map((s) => ({ ...s, fits: fitsBed(printer, s.mm) }));
+}
+
+/**
+ * Stack several years into one object, oldest on the left. Each year is built
+ * at the same `sizeMm` and placed beside the previous one with a fixed gutter,
+ * so the multi-year model reads as a skyline of skylines (marktanalyse 5.4 / 6.1).
+ * The total footprint grows with the year count; the caller is responsible for
+ * checking `fitsBed` against the chosen printer for the resulting width.
+ */
+export function buildMultiYear(
+  multi: MultiYearData,
+  options: BuildOptions,
+): BuiltMesh {
+  const per = buildMonolith(multi.years[0], { ...options, label: false });
+  const gutter = per.size.x * 0.12;
+  const stride = per.size.x + gutter;
+  const positions: number[] = [];
+  const levels: number[] = [];
+  const order: number[] = [];
+  const baseY: number[] = [];
+
+  multi.years.forEach((year, i) => {
+    const mesh = buildMonolith(year, { ...options, label: i === multi.years.length - 1 });
+    const dx = i * stride;
+    for (let v = 0; v < mesh.positions.length; v += 3) {
+      positions.push(mesh.positions[v] + dx, mesh.positions[v + 1], mesh.positions[v + 2]);
+      levels.push(mesh.levels[v / 3]);
+      order.push(mesh.order[v / 3]);
+      baseY.push(mesh.baseY[v / 3]);
+    }
+  });
+
+  const pos = new Float32Array(positions);
+  const bounds = { min: [Infinity, Infinity, Infinity] as [number, number, number], max: [-Infinity, -Infinity, -Infinity] as [number, number, number] };
+  for (let i = 0; i < pos.length; i += 3) {
+    for (let a = 0; a < 3; a++) {
+      bounds.min[a] = Math.min(bounds.min[a], pos[i + a]);
+      bounds.max[a] = Math.max(bounds.max[a], pos[i + a]);
+    }
+  }
+  const size = {
+    x: bounds.max[0] - bounds.min[0],
+    y: bounds.max[1] - bounds.min[1],
+    z: bounds.max[2] - bounds.min[2],
+  };
+  // Re-centre on X so the object sits in the middle of the build plate, and
+  // lift so the base sits at y=0.
+  const cx = (bounds.min[0] + bounds.max[0]) / 2;
+  for (let i = 0; i < pos.length; i += 3) {
+    pos[i] -= cx;
+    pos[i + 1] -= bounds.min[1];
+  }
+  const print = {
+    engravePixelMm: options.label ? (ENGRAVE_TEXT_MM / GLYPH_H) * (options.sizeMm / Math.max(size.x, size.z)) : 0,
+    gapMm: GAPPED.includes(options.variant) ? GAP * (options.sizeMm / Math.max(size.x, size.z)) : null,
+  };
+  return {
+    positions: pos,
+    levels: new Float32Array(levels),
+    order: new Float32Array(order),
+    baseY: new Float32Array(baseY),
+    triangles: pos.length / 9,
+    bounds: {
+      min: [-size.x / 2, 0, bounds.min[2]],
+      max: [size.x / 2, size.y, bounds.max[2]],
+    },
+    size,
+    print,
+  };
 }
