@@ -190,10 +190,35 @@ src/components/MonolithApp.tsx              F3, F4, F7
 src/components/PrintSheet.tsx               F2, F8, F0
 src/app/s/[login]/page.tsx                  F3
 test/github.test.ts                         +F4, F16, F7
-test/routes.test.ts                         +F3, F2, F8, F0, F1
+test/routes.test.ts                         +F3, F2, F8, F0, F1, M6, M7, M8, M9
+test/multiyear.test.ts                      +M1, M2, M3, M4, M6
 README.md                                   F1 correction
 ```
 
 ---
 
-*Generated for review on `feat/market-features`. Merge target: `main`. Not pushed — awaiting your go.*
+## Marktanalyse features (M1–M9)
+
+The first PR pass covered `feature-prio.md` (F0–F20). The Marktanalyse itself
+asks for more — most importantly **multi-year**, which section 0 names as *"the
+single most repeated gap"*. These are now implemented:
+
+| ID | Feature | What shipped | Key files | Tests |
+|----|---------|--------------|-----------|-------|
+| M1 | Multi-year / lifetime / arbitrary range | `fetchContributionYears()` = one aliased GraphQL call for N years (≈1 point, 1 round trip); `MultiYearData` type; `buildMultiYear()` stacks years side by side into one object | github.ts, build.ts, types.ts | multiyear.test |
+| M2 | Contribution-type composition | `MultiYearData` sums commits / issues / PRs / reviews / repos across every year (free scalars) | github.ts, types.ts | multiyear.test |
+| M3 | Streak highlighting | Longest + current streak derived client-side from the calendar (`computeStats`) | contributions.ts | multiyear.test |
+| M4 | Engraved milestones | `JOINED <yr>` and `1ST PR <yr>` engraved on the skyline base plate when the data carries them | build.ts | multiyear.test |
+| M5 | Halloween finish | Auto-selected when `isHalloween` is set (was F4's data; now reaches the UI as a finish) | MonolithApp.tsx, palettes.ts | — (live flag) |
+| M6 | Per-part filament (F1 correction) | Emits `Metadata/model_settings.config` binding each 3MF object to its filament slot; Bambu/Orca read it on import. The earlier "can't be done" claim was wrong — only a full hand-written project file segfaults, not this minimal blob | threemf.ts, kit.ts | routes.test (M6) |
+| M7 | Two-user comparison | `/api/compare?a=&b=&year=` returns both stats + delta | api/compare/route.ts | routes.test |
+| M8 | JSON alongside visual | `/api/contributions?years=2023,2024,2025` returns the multi-year roll-up as JSON | api/contributions/route.ts | routes.test |
+| M9 | Per-year permalinks | `/s/<login>/<year>` resolves to the single-year viewer with that year preselected | s/[login]/[year]/route.ts | routes.test |
+
+**M10 (leaderboard / comparison gallery) is intentionally out of scope here.**
+It needs persistent storage and identity (auth/OAuth), which is a separate
+product surface, not a feature branch. Flagged, not dropped.
+
+---
+
+*Generated for review on `feat/market-features`. Merge target: `main`. Pushed; PR #6 open.*
