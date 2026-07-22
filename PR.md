@@ -28,7 +28,7 @@ flowchart TD
     I -->|contributionYears, colors,<br/>isHalloween, totals| C
     J[Chosen printer] -->|bedMm| K[fitsBed / biggestSizeFor<br/>build.ts F16]
     K -->|mark impossible sizes| L[Dock UI]
-    M[Open in Bambu Studio] -->|buildBambuLink F0| N[only http(s) origin accepted]
+    M[Open in Bambu Studio] -->|buildBambuLink F0| N["only http(s) origin accepted"]
 ```
 
 The single most important design decision: **one parser (`parseModelRequest`) feeds the app, the downloads, the share link, the OG image, and the card.** Adding a field (like `paletteId`) meant touching the parser once, not five endpoints.
@@ -42,10 +42,10 @@ quadrantChart
     title Reach vs Effort
     x-axis Low Effort --> High Effort
     y-axis Low Reach --> High Reach
-    quadrant-1 "Ship now": F2, F3, F8
-    quadrant-2 "Strategic": F4, F1
-    quadrant-3 "Cheap & safe": F16, F7, F0
-    quadrant-4 "Deferred risk": F1-auto
+    quadrant-1 "Ship now"
+    quadrant-2 "Strategic"
+    quadrant-3 "Cheap and safe"
+    quadrant-4 "Deferred risk"
     F2: [0.85, 0.95]
     F3: [0.80, 0.80]
     F8: [0.70, 0.75]
@@ -121,11 +121,11 @@ The 3MF already splits into **one named object per contribution level** (Plinth,
 
 ```mermaid
 flowchart LR
-    A[typecheck<br/>tsc --noEmit] -->|✅| B[lint<br/>0 errors]
-    B -->|✅| C[test<br/>58 passed]
-    C -->|✅| D[build<br/>next build]
-    D -->|✅| E[verify:print<br/>needs local Bambu]
-    E -. gated: needs local Bambu Studio .-> F[manual / CI-skip]
+    A[typecheck<br/>tsc --noEmit] -->|pass| B[lint<br/>0 errors]
+    B -->|pass| C[test<br/>58 passed]
+    C -->|pass| D[build<br/>next build]
+    D -->|pass| E["verify:print<br/>needs local Bambu"]
+    E -. gated .-> F[manual / CI-skip]
 ```
 
 | Gate | Result |
