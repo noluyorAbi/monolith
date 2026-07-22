@@ -7,7 +7,7 @@
 <br>
 <br>
 
-<a href="https://monolith-ebon-six.vercel.app"><b>Open MONOLITH</b></a>
+<a href="https://monolith.adatepe.dev"><b>Open MONOLITH</b></a>
 
 <code>github.com/</code><b>your-handle</b>&nbsp;&nbsp;then&nbsp;&nbsp;<code>Get the files</code>
 
