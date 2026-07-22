@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { fitDistance, viewDirection } from "./framing";
+import { fitDistance, fitDistanceAnyTurn, viewDirection } from "./framing";
 import type { BuiltMesh } from "@/lib/types";
 import type { Palette } from "@/lib/palettes";
 
@@ -476,6 +476,13 @@ export function Framing({
    * object left the frame completely.
    */
   aim = false,
+  /**
+   * Stand far enough back that the object stays whole through a full turn,
+   * rather than only from the angle it was framed at. Wanted where the frame
+   * is tight and the turntable is running; a wide screen has the margin to
+   * spare and looks better with the object filling it.
+   */
+  turnSafe = false,
 }: {
   mesh: BuiltMesh;
   offsetY: number;
@@ -483,6 +490,7 @@ export function Framing({
   shiftX?: number;
   shiftY?: number;
   aim?: boolean;
+  turnSafe?: boolean;
 }) {
   const { camera, size } = useThree();
   const goal = useRef(new THREE.Vector3());
@@ -499,7 +507,8 @@ export function Framing({
     // low three quarter view. So the landing keeps the landscape angle at
     // every width and lets the presenter's own turn supply the diagonal.
     const angle = aim ? viewDirection(1.7) : viewDirection(aspect);
-    const dist = fitDistance(mesh, offsetY, perspective.fov, aspect, angle) * pad;
+    const fit = turnSafe ? fitDistanceAnyTurn : fitDistance;
+    const dist = fit(mesh, offsetY, perspective.fov, aspect, angle) * pad;
     // Re-framing keeps whatever angle the user has orbited to and moves only
     // the distance, so switching forms never yanks the view back to default.
     const dir = settled.current && !aim ? camera.position.clone().normalize() : angle;
@@ -530,7 +539,7 @@ export function Framing({
     }
     perspective.updateProjectionMatrix();
     if (aim) camera.lookAt(0, 0, 0);
-  }, [aim, camera, mesh, offsetY, pad, shiftX, shiftY, size.width, size.height]);
+  }, [aim, camera, mesh, offsetY, pad, shiftX, shiftY, turnSafe, size.width, size.height]);
 
   useFrame((_, delta) => {
     // Only the arrival is animated. After that the orbit controls own the

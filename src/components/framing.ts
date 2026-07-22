@@ -51,3 +51,35 @@ export function fitDistance(
   }
   return needed * 1.02;
 }
+
+/**
+ * The distance that contains the object at every azimuth, not just the one it
+ * is currently seen from.
+ *
+ * The viewer turns. A 365 day skyline is about seven times longer than it is
+ * deep, so a distance fitted to the three quarter view crops half the year off
+ * both edges a quarter turn later. On a wide screen there is enough margin to
+ * hide that; on a phone the object walked off the sides of the frame. Turning
+ * the camera direction around Y is the same as turning the object under a
+ * fixed one, so this just takes the worst of a full revolution.
+ */
+export function fitDistanceAnyTurn(
+  mesh: BuiltMesh,
+  offsetY: number,
+  fovDeg: number,
+  aspect: number,
+  dir: THREE.Vector3 = viewDirection(aspect),
+  steps = 16,
+): number {
+  let needed = 0;
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    const turned = new THREE.Vector3(
+      dir.x * Math.cos(a) - dir.z * Math.sin(a),
+      dir.y,
+      dir.x * Math.sin(a) + dir.z * Math.cos(a),
+    ).normalize();
+    needed = Math.max(needed, fitDistance(mesh, offsetY, fovDeg, aspect, turned));
+  }
+  return needed;
+}
