@@ -5,6 +5,7 @@ import { GET as getKit } from "@/app/api/kit/route";
 import { GET as getStl } from "@/app/api/stl/route";
 import { GET as get3mf } from "@/app/api/3mf/route";
 import { GET as getContributions } from "@/app/api/contributions/route";
+import { GET as getCompare } from "@/app/api/compare/route";
 import { GET as getCard } from "@/app/api/card/[login]/route";
 import { GET as getGlb } from "@/app/api/glb/route";
 import { MAX_SIZE_MM, MIN_SIZE_MM, modelQuery, buildBambuLink, parseModelRequest } from "@/lib/request";
@@ -351,4 +352,49 @@ test("the Bambu Studio hand-off only ever carries a clean http(s) origin", () =>
       `origin ${origin} should be refused`,
     );
   }
+});
+
+test("the contributions endpoint returns a multi-year roll-up as JSON", async () => {
+  stubGitHub();
+  const res = await getContributions(
+    new Request(`${BASE}/contributions?login=noluyorAbi&years=2023,2024,2025`),
+  );
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(body.multi, "multi-year JSON must carry a `multi` block");
+  assert.equal(body.multi.years.length, 3);
+  assert.equal(body.multi.fromYear, 2023);
+  assert.equal(body.multi.toYear, 2025);
+  assert.ok(body.stats.total >= 0);
+  assert.ok(body.stats.years === 3);
+});
+
+test("the compare endpoint returns both accounts and the delta", async () => {
+  stubGitHub();
+  const res = await getCompare(
+    new Request(`${BASE}/compare?a=noluyorAbi&b=octocat&year=2025`),
+  );
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.a.login, "noluyorAbi");
+  assert.equal(body.b.login, "octocat");
+  assert.ok(typeof body.delta.total === "number");
+  assert.ok(["tie", "noluyorAbi", "octocat"].includes(body.delta.winner));
+});
+
+test("the compare endpoint rejects a missing login", async () => {
+  stubGitHub();
+  const res = await getCompare(new Request(`${BASE}/compare?a=noluyorAbi&year=2025`));
+  assert.equal(res.status, 400);
+});
+
+test("a per-year permalink resolves to the single-year viewer", async () => {
+  const { GET } = await import("@/app/s/[login]/[year]/route");
+  // Next's redirect() throws a NEXT_REDIRECT control-flow error; catching it
+  // proves the permalink resolves and issues the redirect to the viewer.
+  await assert.rejects(async () =>
+    GET(new Request("https://x/s/octocat/2019"), {
+      params: Promise.resolve({ login: "octocat", year: "2019" }),
+    }),
+  );
 });
