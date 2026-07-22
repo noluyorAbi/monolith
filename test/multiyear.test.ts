@@ -1,7 +1,7 @@
 import { test, vi } from "vitest";
 import assert from "node:assert";
 
-import { fetchContributionYears, fetchContributionRange, fetchLifetime, repoActivityToYear, type RepoActivity } from "@/lib/github";
+import { fetchContributionYears, fetchContributionRange, fetchLifetime, repoActivityToYear, fetchCommitHours, type RepoActivity } from "@/lib/github";
 import { pack, syntheticYear, computeStats, BadLoginError } from "@/lib/contributions";
 import { buildMultiYear, buildMonolith, fitsBed } from "@/lib/build";
 import { printerById } from "@/lib/print";
@@ -142,5 +142,28 @@ test("a repo's commit histogram builds a faithful skyline", () => {
   const mesh = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true });
   assert.equal(year.days.length, 52 * 7, "every day of 52 weeks should be present");
   assert.ok(mesh.triangles > 0, "the repo skyline builds");
+});
+
+test("commit time-of-day is bucketed into 24 local hours (M16)", async () => {
+  vi.stubGlobal("fetch", async (input: Request) => {
+    const url = typeof input === "string" ? input : String(input.url);
+    if (url.includes("/search/commits")) {
+      // Two commits: one at 09:00Z, one at 22:00Z.
+      const items = [
+        { commit: { author: { date: "2025-03-01T09:00:00+00:00" } } },
+        { commit: { author: { date: "2025-06-01T22:00:00+05:30" } } },
+      ];
+      return new Response(JSON.stringify({ total_count: 2, items }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    throw new Error("unexpected fetch");
+  });
+  const hours = await fetchCommitHours("octocat", 2025);
+  assert.equal(hours.hours.length, 24);
+  assert.equal(hours.hours[9], 1, "the 09:00Z commit lands in bucket 9");
+  assert.equal(hours.hours[22], 1, "the +05:30 commit (22:00 local) lands in bucket 22");
+  assert.equal(hours.total, 2);
 });
 

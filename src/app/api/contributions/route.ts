@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchContributionYear, fetchContributionYears } from "@/lib/github";
+import { fetchContributionYear, fetchContributionYears, fetchCommitHours } from "@/lib/github";
 import { computeStats, parseYear } from "@/lib/contributions";
 import { modelErrorResponse } from "@/lib/responses";
 import type { MultiYearData } from "@/lib/types";
@@ -12,6 +12,16 @@ export async function GET(request: Request) {
   const year = parseYear(url.searchParams.get("year"));
 
   try {
+    // M16 / marktanalyse 5.1: commit time-of-day, the most valuable finding in
+    // the document. One bounded unauthenticated search returns the histogram.
+    const hoursLogin = url.searchParams.get("hours");
+    if (hoursLogin) {
+      const hours = await fetchCommitHours(hoursLogin, year);
+      return NextResponse.json(
+        { hours },
+        { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } },
+      );
+    }
     // M8 / marktanalyse 16 (JSON alongside visual) + M1: when `years` is given
     // the same endpoint returns the multi-year roll-up as JSON, so a machine
     // can read the lifetime composition without parsing the 3MF.

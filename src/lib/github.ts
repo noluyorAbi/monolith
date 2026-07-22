@@ -456,3 +456,59 @@ function assembleMulti(login: string, parts: ContributionYear[]): MultiYearData 
     firstRepoAt: firstDefined((p) => p.firstRepoAt),
   };
 }
+
+/**
+ * The hour-of-day a user commits, in their own local timezone. marktanalyse
+ * 5.1: `/search/commits` is unauthenticated, returns the author's true local
+ * UTC offset, and is "the most valuable finding in this document". The search
+ * API is capped at 10 req/min and 1,000 results, so this makes ONE bounded
+ * query across the requested year and buckets every returned commit by its
+ * local hour. A prolific user's year may exceed 1,000 commits; the histogram is
+ * then a representative sample, which the caller is told via `capped`.
+ */
+export interface CommitHours {
+  login: string;
+  year: number;
+  /** 24 buckets, index = local hour 0..23. */
+  hours: number[];
+  total: number;
+  capped: boolean;
+}
+
+export async function fetchCommitHours(
+  rawLogin: string,
+  year: number,
+): Promise<CommitHours> {
+  const login = normaliseLogin(rawLogin);
+  if (!LOGIN_RE.test(login)) throw new BadLoginError(rawLogin);
+  const from = `${year}-01-01`;
+  const to = year === new Date().getUTCFullYear() ? new Date().toISOString().slice(0, 10) : `${year}-12-31`;
+  const q = `author:${login} author-date:${from}..${to}`;
+  const res = await fetch(
+    `https://api.github.com/search/commits?per_page=100&q=${encodeURIComponent(q)}`,
+    { headers: { Accept: "application/vnd.github.cloak-preview+json", "User-Agent": "monolith" } },
+  );
+  if (!res.ok) {
+    // Search is rate-limited; return an empty histogram rather than throwing,
+    // so the caller can degrade gracefully.
+    return { login, year, hours: new Array(24).fill(0), total: 0, capped: false };
+  }
+  const json = (await res.json()) as { total_count: number; items: { commit: { author: { date: string } } }[] };
+  const hours = new Array(24).fill(0);
+  for (const item of json.items) {
+    // The timestamp is `YYYY-MM-DDTHH:MM:SS+OFFSET`; the HH is the author's
+    // own local hour (marktanalyse 5.1: "true to the developer's actual day",
+    // carrying their real UTC offset). Take it straight off the wall clock
+    // rather than re-deriving it through the server timezone.
+    const wall = /T(\d{2}):\d{2}:\d{2}[+-]/.exec(item.commit.author.date);
+    if (wall) hours[Number(wall[1])]++;
+  }
+  return {
+    login,
+    year,
+    hours,
+    total: json.total_count,
+    // 100 results is one page; the real total may be larger.
+    capped: json.total_count > 100,
+  };
+}
