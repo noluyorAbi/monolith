@@ -113,6 +113,18 @@ export interface DockProps {
   year: number;
   years: number[];
   onYear: (y: number) => void;
+  subject: "user" | "repo";
+  onSubject: (s: "user" | "repo") => void;
+  repoOwner: string;
+  onRepoOwner: (v: string) => void;
+  repoName: string;
+  onRepoName: (v: string) => void;
+  span: "year" | "lifetime" | "range";
+  onSpan: (s: "year" | "lifetime" | "range") => void;
+  rangeFrom: string;
+  onRangeFrom: (v: string) => void;
+  rangeTo: string;
+  onRangeTo: (v: string) => void;
   variant: Variant;
   onVariant: (v: Variant) => void;
   palette: Palette;
@@ -131,6 +143,15 @@ export interface DockProps {
   onSound: (next: boolean) => void;
   studio: StudioLights;
   onStudio: (next: StudioLights) => void;
+  /** Re-run the forge with the current subject/span/repo (repo inputs commit on Enter). */
+  onRebuild: (over?: {
+    subject?: "user" | "repo";
+    span?: "year" | "lifetime" | "range";
+    repoOwner?: string;
+    repoName?: string;
+    rangeFrom?: string;
+    rangeTo?: string;
+  }) => void;
   visible: boolean;
 }
 
@@ -165,33 +186,137 @@ export function Dock(props: DockProps) {
           <div className="flex flex-col sm:flex-row sm:items-stretch">
             <div className="relative min-w-0 flex-1">
               <div className="flex items-end gap-7 overflow-x-auto px-5 py-4 sm:px-7 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <Group label="Year">
-                  <Hint label="Earlier year">
-                  <button
-                    type="button"
-                    onClick={() => stepYear(1)}
-                    aria-label="Previous year"
-                    className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
-                    disabled={yearIndex >= props.years.length - 1}
+                <Group label="Subject">
+                  <Pill
+                    layoutGroup="dock-subject"
+                    active={props.subject === "user"}
+                    onClick={() => {
+                      props.onSubject("user");
+                      props.onRebuild({ subject: "user" });
+                    }}
                   >
-                    ‹
-                  </button>
-                  </Hint>
-                  <span className="w-[4ch] text-center text-[0.78rem] tabular-nums text-fog">
-                    {props.year}
-                  </span>
-                  <Hint label="Later year">
-                  <button
-                    type="button"
-                    onClick={() => stepYear(-1)}
-                    aria-label="Next year"
-                    className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
-                    disabled={yearIndex <= 0}
+                    user
+                  </Pill>
+                  <Pill
+                    layoutGroup="dock-subject"
+                    active={props.subject === "repo"}
+                    title="Render a repository's last-52-week commit skyline (M14)"
+                    onClick={() => {
+                      props.onSubject("repo");
+                      props.onRebuild({ subject: "repo", repoOwner: props.repoOwner, repoName: props.repoName });
+                    }}
                   >
-                    ›
-                  </button>
-                  </Hint>
+                    repo
+                  </Pill>
                 </Group>
+
+                {props.subject === "repo" ? (
+                  <Group label="Repository">
+                    <input
+                      type="text"
+                      value={props.repoOwner}
+                      placeholder="owner"
+                      onChange={(e) => props.onRepoOwner(e.target.value.replace(/[^A-Za-z0-9-]/g, ""))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && props.repoOwner && props.repoName) props.onRebuild({ subject: "repo", repoOwner: props.repoOwner, repoName: props.repoName });
+                      }}
+                      className="h-9 w-[7ch] rounded-[5px] border border-line bg-transparent px-2 text-[0.68rem] text-fog outline-none placeholder:text-dim focus:border-edge sm:h-auto"
+                    />
+                    <span className="text-mute">/</span>
+                    <input
+                      type="text"
+                      value={props.repoName}
+                      placeholder="repo"
+                      onChange={(e) => props.onRepoName(e.target.value.replace(/[^A-Za-z0-9-._]/g, ""))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && props.repoOwner && props.repoName) props.onRebuild({ subject: "repo", repoOwner: props.repoOwner, repoName: props.repoName });
+                      }}
+                      className="h-9 w-[9ch] rounded-[5px] border border-line bg-transparent px-2 text-[0.68rem] text-fog outline-none placeholder:text-dim focus:border-edge sm:h-auto"
+                    />
+                  </Group>
+                ) : (
+                  <Group label="Span">
+                    <Pill
+                      layoutGroup="dock-span"
+                      active={props.span === "year"}
+                      onClick={() => {
+                        props.onSpan("year");
+                        props.onRebuild({ span: "year" });
+                      }}
+                    >
+                      year
+                    </Pill>
+                    <Pill
+                      layoutGroup="dock-span"
+                      active={props.span === "lifetime"}
+                      title="Every year the account has, side by side (M12)"
+                      onClick={() => {
+                        props.onSpan("lifetime");
+                        props.onRebuild({ span: "lifetime" });
+                      }}
+                    >
+                      lifetime
+                    </Pill>
+                    <Pill
+                      layoutGroup="dock-span"
+                      active={props.span === "range"}
+                      title='An arbitrary window, e.g. "last 12 months" (M11)'
+                      onClick={() => {
+                        props.onSpan("range");
+                        props.onRebuild({ span: "range" });
+                      }}
+                    >
+                      range
+                    </Pill>
+                  </Group>
+                )}
+
+                {props.subject === "user" && props.span === "year" && (
+                  <>
+                    <Hint label="Earlier year">
+                    <button
+                      type="button"
+                      onClick={() => stepYear(1)}
+                      aria-label="Previous year"
+                      className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                      disabled={yearIndex >= props.years.length - 1}
+                    >
+                      ‹
+                    </button>
+                    </Hint>
+                    <span className="w-[4ch] text-center text-[0.78rem] tabular-nums text-fog">
+                      {props.year}
+                    </span>
+                    <Hint label="Later year">
+                    <button
+                      type="button"
+                      onClick={() => stepYear(-1)}
+                      aria-label="Next year"
+                      className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                      disabled={yearIndex <= 0}
+                    >
+                      ›
+                    </button>
+                    </Hint>
+                  </>
+                )}
+
+                {props.subject === "user" && props.span === "range" && (
+                  <Group label="From – to">
+                    <input
+                      type="date"
+                      value={props.rangeFrom}
+                      onChange={(e) => props.onRangeFrom(e.target.value)}
+                      className="h-9 rounded-[5px] border border-line bg-transparent px-2 text-[0.62rem] text-fog outline-none focus:border-edge sm:h-auto"
+                    />
+                    <input
+                      type="date"
+                      value={props.rangeTo}
+                      onChange={(e) => props.onRangeTo(e.target.value)}
+                      className="h-9 rounded-[5px] border border-line bg-transparent px-2 text-[0.62rem] text-fog outline-none focus:border-edge sm:h-auto"
+                    />
+                  </Group>
+                )}
 
                 <Group label="Form">
                   {VARIANTS.map((v) => (

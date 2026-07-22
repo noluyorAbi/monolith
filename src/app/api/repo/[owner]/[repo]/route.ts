@@ -3,6 +3,7 @@ import { fetchRepoActivity, repoActivityToYear } from "@/lib/github";
 import { buildMonolith } from "@/lib/build";
 import { printableParts } from "@/lib/parts";
 import { buildKitThreeMf, kitStem } from "@/lib/kit";
+import { computeStats } from "@/lib/contributions";
 import { parseModelRequest } from "@/lib/request";
 import { PROJECT } from "@/lib/project";
 import { modelErrorResponse } from "@/lib/responses";
@@ -20,10 +21,19 @@ export async function GET(
 ) {
   const { owner, repo } = await params;
   const options = parseModelRequest(new URL(request.url));
+  const url = new URL(request.url);
 
   try {
     const activity = await fetchRepoActivity(owner, repo);
     const data = repoActivityToYear(activity);
+    // JSON mode (M14): hand the viewer the year-shaped geometry source so it can
+    // render a repository's commit skyline without a 3MF round-trip.
+    if (url.searchParams.has("json")) {
+      return NextResponse.json(
+        { data, stats: computeStats(data), commits: activity.total },
+        { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } },
+      );
+    }
     const mesh = buildMonolith(data, { variant: options.variant, sizeMm: options.sizeMm, label: true, dampening: options.dampening });
     const parts = printableParts(mesh);
 

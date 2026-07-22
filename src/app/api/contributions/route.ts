@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchContributionYear, fetchContributionYears, fetchCommitHours } from "@/lib/github";
+import { fetchContributionYear, fetchContributionYears, fetchCommitHours, fetchLifetime, fetchContributionRange } from "@/lib/github";
 import { computeStats, parseYear } from "@/lib/contributions";
 import { modelErrorResponse } from "@/lib/responses";
 import type { MultiYearData } from "@/lib/types";
@@ -34,6 +34,24 @@ export async function GET(request: Request) {
       const multi = await fetchContributionYears(login, years);
       return NextResponse.json(
         { multi, stats: statsForMulti(multi) },
+        { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } },
+      );
+    }
+    // M12 / marktanalyse 5.4 lifetime view: stack every year the account has.
+    if (url.searchParams.has("lifetime")) {
+      const multi = await fetchLifetime(login);
+      return NextResponse.json(
+        { multi, stats: statsForMulti(multi) },
+        { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } },
+      );
+    }
+    // M11 / marktanalyse 6.1 arbitrary window ("last 12 months", "2014-2024").
+    const from = url.searchParams.get("from");
+    const to = url.searchParams.get("to");
+    if (from && to) {
+      const data = await fetchContributionRange(login, from, to);
+      return NextResponse.json(
+        { data, stats: computeStats(data) },
         { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } },
       );
     }

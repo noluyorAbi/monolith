@@ -48,11 +48,14 @@ export function Hud({
   stats,
   mesh,
   variant,
+  yearLabel,
 }: {
   data: ContributionYear;
   stats: Stats;
   mesh: BuiltMesh;
   variant: Variant;
+  /** Override for the year line: a range ("2019–2025") or "owner/repo". */
+  yearLabel?: string;
 }) {
   /**
    * The full readout is seven lines tall. It needs a screen with the height to
@@ -88,7 +91,7 @@ export function Hud({
           )}
         </div>
         <div className="mt-1.5 text-[0.66rem] tracking-[0.2em] uppercase text-dim">
-          {data.year} · {variant}
+          {yearLabel ?? data.year} · {variant}
         </div>
       </motion.div>
 
