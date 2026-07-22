@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       variant: req.variant,
       sizeMm: req.sizeMm,
       label: true,
+      dampening: req.dampening,
     });
     const glb = writeGlb(mesh, palette);
     const file = `${req.login}-${req.year}-${req.variant}-${req.sizeMm}mm.glb`;

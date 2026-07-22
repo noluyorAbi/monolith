@@ -18,6 +18,7 @@ export async function GET(request: Request) {
       variant: options.variant,
       sizeMm: options.sizeMm,
       label: true,
+      dampening: options.dampening,
     });
     const parts = printableParts(mesh);
 

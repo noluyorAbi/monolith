@@ -28,6 +28,8 @@ export interface ModelRequest {
   slots: ColourSlots;
   /** The finish the viewer chose. Optional: a shared link without it falls back to the default. */
   paletteId: string;
+  /** Outlier compression 0..1. Optional; a link without it defaults to 0. M13. */
+  dampening: number;
 }
 
 /** Bump this if the query shape changes, so a link built before the change still parses. */
@@ -37,6 +39,7 @@ export function parseModelRequest(url: URL): ModelRequest {
   const variant = url.searchParams.get("variant") ?? "";
   const slots = Number(url.searchParams.get("slots"));
   const paletteId = url.searchParams.get("palette") ?? "";
+  const dampening = Number(url.searchParams.get("dampening"));
   return {
     login: url.searchParams.get("login") ?? "",
     year: parseYear(url.searchParams.get("year")),
@@ -51,6 +54,9 @@ export function parseModelRequest(url: URL): ModelRequest {
     slots: (SLOT_CHOICES.some((c) => c.slots === slots) ? slots : 1) as ColourSlots,
     // A palette that does not exist degrades to the default rather than erroring.
     paletteId: PALETTES.some((p) => p.id === paletteId) ? paletteId : DEFAULT_PALETTE_ID,
+    // Dampening outside 0..1 is meaningless; clamp it so a hand-edited link cannot
+    // produce a broken object. M13.
+    dampening: Number.isFinite(dampening) ? Math.min(1, Math.max(0, dampening)) : 0,
   };
 }
 
@@ -64,6 +70,7 @@ export interface ModelQuery {
   qualityId?: string;
   slots?: number;
   paletteId?: string;
+  dampening?: number;
 }
 
 /** The other half of the contract, so the browser cannot invent a parameter. */
@@ -79,6 +86,7 @@ export function modelQuery(input: ModelQuery): string {
   if (input.qualityId) params.set("quality", input.qualityId);
   if (input.slots) params.set("slots", String(input.slots));
   if (input.paletteId) params.set("palette", input.paletteId);
+  if (input.dampening) params.set("dampening", String(input.dampening));
   return params.toString();
 }
 

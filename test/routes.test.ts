@@ -398,3 +398,37 @@ test("a per-year permalink resolves to the single-year viewer", async () => {
     }),
   );
 });
+
+test("the share state round-trips dampening (M13)", () => {
+  const url = new URL(`https://x/?login=octocat&year=2025&variant=skyline&mm=180&dampening=0.7`);
+  const req = parseModelRequest(url);
+  assert.equal(req.dampening, 0.7, "dampening should be read from the query");
+  const q = modelQuery({ login: req.login, year: req.year, variant: req.variant, sizeMm: req.sizeMm, dampening: req.dampening });
+  assert.match(q, /dampening=0\.7/, "dampening should be written back into the share query");
+  // Clamped: a wild value cannot produce a broken object.
+  const wild = parseModelRequest(new URL("https://x/?login=octocat&dampening=5"));
+  assert.equal(wild.dampening, 1, "dampening above 1 clamps to 1");
+});
+
+test("the repo route emits a 3MF from a repository's commit history", async () => {
+  vi.stubGlobal("fetch", async (input: Request) => {
+    const url = String(input?.url ?? input);
+    if (url.includes("/stats/commit_activity")) {
+      const rows = Array.from({ length: 52 }, (_, w) => ({
+        week: Math.floor(Date.UTC(2025, 0, 5 + w * 7) / 1000),
+        total: w % 7,
+        days: [0, 1, 2, 3, 4, 1, 0],
+      }));
+      return new Response(JSON.stringify(rows), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    throw new Error("unexpected fetch");
+  });
+  const { GET } = await import("@/app/api/repo/[owner]/[repo]/route");
+  const res = await GET(new Request("https://x/api/repo/vercel/next.js?variant=skyline&mm=180"), {
+    params: Promise.resolve({ owner: "vercel", repo: "next.js" }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Content-Type"), "model/3mf");
+  assert.ok(Number(res.headers.get("X-Monolith-Commits")) > 0, "the commit total should be reported");
+});
+

@@ -1,8 +1,8 @@
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import assert from "node:assert";
 
-import { fetchContributionYears } from "@/lib/github";
-import { pack, syntheticYear, computeStats } from "@/lib/contributions";
+import { fetchContributionYears, fetchContributionRange, fetchLifetime, repoActivityToYear, type RepoActivity } from "@/lib/github";
+import { pack, syntheticYear, computeStats, BadLoginError } from "@/lib/contributions";
 import { buildMultiYear, buildMonolith, fitsBed } from "@/lib/build";
 import { printerById } from "@/lib/print";
 import type { ContributionYear } from "@/lib/types";
@@ -91,3 +91,56 @@ test("milestone dates are engraved onto the base plate when present", () => {
   // Engraving JOINED <yr> and 1ST PR <yr> adds geometry to the base plate.
   assert.ok(b.positions.length > a.positions.length, "milestone engraving should add base-plate geometry");
 });
+
+test("fetchContributionRange returns an arbitrary window, not a calendar year", async () => {
+  vi.stubGlobal("fetch", async (input: Request) => {
+    const url = String(input?.url ?? input);
+    if (url.includes("/users/octocat/contributions")) {
+      // A tiny window 2019-06-01..2021-05-31 with two cells.
+      const html = [
+        `<td data-date="2019-06-01" id="d0" data-level="3" class="ContributionCalendar-day"></td>`,
+        `<td data-date="2021-05-31" id="d1" data-level="1" class="ContributionCalendar-day"></td>`,
+        `<tool-tip for="d0">5 contributions on June 1st, 2019.</tool-tip>`,
+        `<tool-tip for="d1">1 contribution on May 31st, 2021.</tool-tip>`,
+      ].join("");
+      return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
+    }
+    throw new Error("unexpected fetch");
+  });
+  const data = await fetchContributionRange("octocat", "2019-06-01", "2021-05-31");
+  assert.equal(data.year, 2019);
+  assert.ok(data.days.length >= 2, "the window should carry its days");
+  assert.ok(data.days[0].date >= "2019-06-01");
+  assert.ok(data.days[data.days.length - 1].date <= "2021-05-31");
+  const mesh = buildMonolith(data, { variant: "skyline", sizeMm: 180, label: true });
+  assert.ok(mesh.triangles > 0, "the arbitrary-range object builds");
+});
+
+test("fetchContributionRange rejects a malformed window", async () => {
+  await assert.rejects(() => fetchContributionRange("octocat", "not-a-date", "2021-05-31"), BadLoginError);
+});
+
+test("fetchLifetime stacks every contributed year the account has", async () => {
+  const data = await fetchLifetime("octocat");
+  assert.ok(data.years.length >= 1, "lifetime should cover at least the current year");
+  assert.ok(data.fromYear <= data.toYear, "fromYear must be <= toYear");
+  assert.ok(data.totalCommits >= 0);
+});
+
+test("a repo's commit histogram builds a faithful skyline", () => {
+  const activity: RepoActivity = {
+    owner: "vercel",
+    repo: "next.js",
+    total: 52,
+    weeks: Array.from({ length: 52 }, (_, w) => ({
+      week: new Date(Date.UTC(2025, 0, 5 + w * 7)).toISOString().slice(0, 10),
+      total: w % 7,
+      days: [0, 1, 2, 3, 4, 1, 0],
+    })),
+  };
+  const year = repoActivityToYear(activity);
+  const mesh = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true });
+  assert.equal(year.days.length, 52 * 7, "every day of 52 weeks should be present");
+  assert.ok(mesh.triangles > 0, "the repo skyline builds");
+});
+

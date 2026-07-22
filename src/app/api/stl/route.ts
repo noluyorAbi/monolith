@@ -17,6 +17,7 @@ export async function GET(request: Request) {
       variant: options.variant,
       sizeMm: options.sizeMm,
       label: true,
+      dampening: options.dampening,
     });
     // The header is the only place an STL can carry provenance, so say when
     // the year behind it was invented rather than read.

@@ -8,6 +8,7 @@ import {
   pack,
   syntheticYear,
   yearRange,
+  availableYears,
 } from "./contributions";
 import type { ContributionYear, Day, Level, MultiYearData } from "./types";
 
@@ -36,8 +37,11 @@ async function viaGraphQL(
   login: string,
   year: number,
   token: string,
+  range?: [string, string],
 ): Promise<ContributionYear | null> {
-  const { from, to } = yearRange(year);
+  const win = range ?? yearRange(year);
+  const from = Array.isArray(win) ? win[0] : win.from;
+  const to = Array.isArray(win) ? win[1] : win.to;
   const res = await fetch("https://api.github.com/graphql", {
     method: "POST",
     headers: {
@@ -121,8 +125,10 @@ function dateOf(node: { occurredAt: string } | null | undefined): string | undef
  * The public calendar fragment. No token, no rate-limit headaches, and it is
  * exactly what the profile page renders, so it always matches what people see.
  */
-async function viaHTML(login: string, year: number): Promise<ContributionYear | null> {
-  const { from, to } = yearRange(year);
+async function viaHTML(login: string, year: number, range?: [string, string]): Promise<ContributionYear | null> {
+  const win = range ?? yearRange(year);
+  const from = Array.isArray(win) ? win[0] : win.from;
+  const to = Array.isArray(win) ? win[1] : win.to;
   const url = `https://github.com/users/${encodeURIComponent(login)}/contributions?from=${from}&to=${to}`;
   const res = await fetch(url, {
     headers: {
@@ -183,6 +189,42 @@ export async function fetchContributionYear(
   }
   console.warn(`[monolith] serving synthetic data for ${login} ${year}`);
   return syntheticYear(login, year);
+}
+
+/**
+ * An arbitrary window, not a calendar year. marktanalyse 6.1 / 5.4: "my last
+ * twelve months" or "2014 to 2024". GraphQL and the HTML fallback both accept
+ * `from`/`to`, so this is one fetcher swap away from `fetchContributionYear`.
+ * The packed `year` is the start year so the week grid lines up; the build
+ * path is identical to a single year (the builders grid from the first day).
+ */
+export async function fetchContributionRange(
+  rawLogin: string,
+  from: string,
+  to: string,
+): Promise<ContributionYear> {
+  const login = normaliseLogin(rawLogin);
+  if (!LOGIN_RE.test(login)) throw new BadLoginError(rawLogin);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    throw new BadLoginError(`range ${from}..${to}`);
+  }
+  const startYear = Number(from.slice(0, 4));
+  const range: [string, string] = [from, to];
+
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  try {
+    if (token) {
+      const viaApi = await viaGraphQL(login, startYear, token, range);
+      if (viaApi) return viaApi;
+    }
+    const viaScrape = await viaHTML(login, startYear, range);
+    if (viaScrape) return viaScrape;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    console.error(`[monolith] range lookup failed for ${login} ${from}..${to}:`, err);
+  }
+  console.warn(`[monolith] serving synthetic data for ${login} ${from}..${to}`);
+  return syntheticYear(login, startYear);
 }
 
 /**
@@ -300,6 +342,83 @@ async function viaGraphQLMulti(
   }
   if (parts.length === 0) return null;
   return assembleMulti(login, parts);
+}
+
+/**
+ * The whole account, from join to now. marktanalyse 5.4 "since-account-creation
+ * lifetime view": one probe year reveals `contributionYears`, then the full set
+ * is fetched in a single aliased call. When GitHub is unreachable we fall back
+ * to a recent window so the object still renders.
+ */
+export async function fetchLifetime(rawLogin: string): Promise<MultiYearData> {
+  const login = normaliseLogin(rawLogin);
+  if (!LOGIN_RE.test(login)) throw new BadLoginError(rawLogin);
+  // Probe the current year to learn the real year list, then fetch all of them.
+  const probe = await fetchContributionYear(login, new Date().getUTCFullYear());
+  const years = (probe.contributionYears ?? []).filter((y) => Number.isInteger(y));
+  if (years.length === 0) {
+    // No contributionYears in the payload (HTML fallback): use a recent window.
+    return fetchContributionYears(login, availableYears());
+  }
+  return fetchContributionYears(login, years);
+}
+
+/**
+ * A single repository's last-52-week commit skyline. marktanalyse 5.4: REST
+ * `/stats/commit_activity` is unauthenticated, one request, and returns exactly
+ * the 52 weeks x 7 days shape a skyline builder wants. It carries totals per
+ * week, not per day, so the day grid is synthesised from the weekly total.
+ */
+export interface RepoActivity {
+  owner: string;
+  repo: string;
+  /** One entry per of the last 52 weeks, oldest first. */
+  weeks: { week: string; total: number; days: number[] }[];
+  total: number;
+}
+
+export async function fetchRepoActivity(owner: string, repo: string): Promise<RepoActivity> {
+  const res = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stats/commit_activity`,
+    { headers: { Accept: "application/vnd.github+json", "User-Agent": "monolith" }, next: { revalidate: 3600 } },
+  );
+  if (res.status === 404) throw new NotFoundError(`${owner}/${repo}`);
+  if (!res.ok) throw new Error(`repo stats ${res.status}`);
+  const rows = (await res.json()) as { week: number; total: number; days: number[] }[];
+  const weeks = rows.map((r) => ({
+    week: new Date(r.week * 1000).toISOString().slice(0, 10),
+    total: r.total,
+    days: r.days,
+  }));
+  return {
+    owner,
+    repo,
+    weeks,
+    total: weeks.reduce((a, w) => a + w.total, 0),
+  };
+}
+
+/**
+ * Turn a repo's weekly commit histogram into the `ContributionYear` shape the
+ * geometry builders already consume. The day grid is exact (GitHub returns the
+ * seven per-day counts per week), so the skyline is faithful, not synthesised.
+ */
+export function repoActivityToYear(activity: RepoActivity): ContributionYear {
+  const days: Day[] = [];
+  for (const w of activity.weeks) {
+    const sunday = new Date(`${w.week}T00:00:00Z`);
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(sunday);
+      date.setUTCDate(sunday.getUTCDate() + d);
+      const count = w.days[d] ?? 0;
+      const level = (count === 0 ? 0 : count < 3 ? 1 : count < 7 ? 2 : count < 14 ? 3 : 4) as Level;
+      days.push({ date: date.toISOString().slice(0, 10), count, level });
+    }
+  }
+  days.sort((a, b) => a.date.localeCompare(b.date));
+  return pack(activity.owner, activity.repo, new Date(`${days[0]?.date ?? "2008-01-01"}`).getUTCFullYear(), days, "graphql", {
+    totalIssues: 0,
+  });
 }
 
 /** Roll a list of years into one MultiYearData, summing the composition. */

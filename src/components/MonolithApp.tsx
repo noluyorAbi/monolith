@@ -326,6 +326,7 @@ export function MonolithApp({
           variant,
           sizeMm,
           paletteId: paletteId,
+          dampening,
         })}`,
       );
     },
@@ -420,6 +421,7 @@ export function MonolithApp({
       variant,
       sizeMm,
       paletteId: paletteId,
+      dampening,
     })}`;
     try {
       await navigator.clipboard.writeText(url);
