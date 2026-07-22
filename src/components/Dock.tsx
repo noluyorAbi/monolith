@@ -40,7 +40,7 @@ function Toggle({
         type="button"
         aria-pressed={active}
         onClick={onClick}
-        className={`flex items-center gap-1.5 rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] ${
+        className={`flex min-h-9 items-center gap-1.5 rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] sm:min-h-0 ${
           active
             ? "border-edge text-fog"
             : "border-line text-dim hover:border-edge hover:text-mute"
@@ -85,7 +85,7 @@ function Pill({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`relative rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] ${
+      className={`relative min-h-9 rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] sm:min-h-0 ${
         active ? "border-transparent" : "border-line hover:border-edge"
       }`}
     >
@@ -144,136 +144,150 @@ export function Dock(props: DockProps) {
     <AnimatePresence>
       {props.visible && (
         <motion.div
-          className="absolute inset-x-0 bottom-0 z-30 border-t border-edge bg-ink/94 backdrop-blur-xl"
+          className="absolute inset-x-0 bottom-0 z-30 border-t border-edge bg-ink/94 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
           initial={{ y: "100%" }}
           animate={{ y: 0 }}
           exit={{ y: "100%" }}
           transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
         >
-          <div className="flex items-end gap-7 overflow-x-auto px-5 py-4 sm:px-7 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <Group label="Year">
-              <Hint label="Earlier year">
-              <button
-                type="button"
-                onClick={() => stepYear(1)}
-                aria-label="Previous year"
-                className="rounded-[4px] border border-line px-1.5 py-1 text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40"
-                disabled={yearIndex >= props.years.length - 1}
-              >
-                ‹
-              </button>
-              </Hint>
-              <span className="w-[4ch] text-center text-[0.78rem] tabular-nums text-fog">
-                {props.year}
-              </span>
-              <Hint label="Later year">
-              <button
-                type="button"
-                onClick={() => stepYear(-1)}
-                aria-label="Next year"
-                className="rounded-[4px] border border-line px-1.5 py-1 text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40"
-                disabled={yearIndex <= 0}
-              >
-                ›
-              </button>
-              </Hint>
-            </Group>
-
-            <Group label="Form">
-              {VARIANTS.map((v) => (
-                <Pill
-                  key={v.id}
-                  layoutGroup="dock-variant"
-                  active={props.variant === v.id}
-                  title={v.blurb}
-                  onClick={() => {
-                    if (props.variant !== v.id) play("step");
-                    props.onVariant(v.id);
-                  }}
-                >
-                  {v.name}
-                </Pill>
-              ))}
-            </Group>
-
-            <Group label="Colours">
-              {PALETTES.map((f) => {
-                const locked = f.unlockAt !== undefined && props.total < f.unlockAt;
-                const active = props.palette.id === f.id;
-                return (
-                  <Hint
-                    key={f.id}
-                    label={
-                      locked
-                        ? `${f.name} · locked until ${f.unlockAt?.toLocaleString("en-GB")} contributions`
-                        : `${f.name} · ${f.note}`
-                    }
-                  >
+          {/* The settings scroll sideways; the actions never do. Kept in one
+            row they pushed "Get the files" past the right edge of anything
+            narrower than about 1400 px, which on a phone meant the one button
+            the whole page exists for was off screen. */}
+          <div className="flex flex-col sm:flex-row sm:items-stretch">
+            <div className="relative min-w-0 flex-1">
+              <div className="flex items-end gap-7 overflow-x-auto px-5 py-4 sm:px-7 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <Group label="Year">
+                  <Hint label="Earlier year">
                   <button
                     type="button"
-                    aria-pressed={active}
-                    aria-label={`${f.name} palette`}
-                    disabled={locked}
-                    onClick={() => {
-                      play("step");
-                      props.onPalette(f.id);
-                    }}
-                    className="relative grid h-7 w-7 place-items-center rounded-full border border-line transition-all duration-150 hover:border-edge active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={() => stepYear(1)}
+                    aria-label="Previous year"
+                    className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                    disabled={yearIndex >= props.years.length - 1}
                   >
-                    <span
-                      className="h-3.5 w-3.5 rounded-full"
-                      style={{
-                        background: `linear-gradient(135deg, ${f.ramp[4]} 0%, ${f.ramp[2]} 55%, ${f.base} 100%)`,
-                      }}
-                    />
-                    {active && (
-                      <motion.span
-                        layoutId="dock-finish"
-                        className="absolute inset-0 rounded-full border-2 border-fog"
-                        transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                      />
-                    )}
-                    {locked && <span className="absolute -bottom-0.5 text-[0.5rem] text-dim">·</span>}
+                    ‹
                   </button>
                   </Hint>
-                );
-              })}
-            </Group>
+                  <span className="w-[4ch] text-center text-[0.78rem] tabular-nums text-fog">
+                    {props.year}
+                  </span>
+                  <Hint label="Later year">
+                  <button
+                    type="button"
+                    onClick={() => stepYear(-1)}
+                    aria-label="Next year"
+                    className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                    disabled={yearIndex <= 0}
+                  >
+                    ›
+                  </button>
+                  </Hint>
+                </Group>
 
-            <Group label={`Size · ${size.mm}mm`}>
-              {SIZES.map((s) => (
-                <Pill
-                  key={s.id}
-                  layoutGroup="dock-size"
-                  active={props.sizeId === s.id}
-                  title={s.blurb}
-                  onClick={() => {
-                    if (props.sizeId !== s.id) play("step");
-                    props.onSize(s.id);
-                  }}
-                >
-                  {s.name}
-                </Pill>
-              ))}
-            </Group>
+                <Group label="Form">
+                  {VARIANTS.map((v) => (
+                    <Pill
+                      key={v.id}
+                      layoutGroup="dock-variant"
+                      active={props.variant === v.id}
+                      title={v.blurb}
+                      onClick={() => {
+                        if (props.variant !== v.id) play("step");
+                        props.onVariant(v.id);
+                      }}
+                    >
+                      {v.name}
+                    </Pill>
+                  ))}
+                </Group>
 
-            <Group label="Studio">
-              {STUDIO_SWITCHES.map((s) => (
-                <Toggle
-                  key={s.id}
-                  active={props.studio[s.id]}
-                  title={s.hint}
-                  onClick={() => {
-                    play("tick");
-                    props.onStudio({ ...props.studio, [s.id]: !props.studio[s.id] });
-                  }}
-                >
-                  {s.name}
-                </Toggle>
-              ))}
-            </Group>
+                <Group label="Colours">
+                  {PALETTES.map((f) => {
+                    const locked = f.unlockAt !== undefined && props.total < f.unlockAt;
+                    const active = props.palette.id === f.id;
+                    return (
+                      <Hint
+                        key={f.id}
+                        label={
+                          locked
+                            ? `${f.name} · locked until ${f.unlockAt?.toLocaleString("en-GB")} contributions`
+                            : `${f.name} · ${f.note}`
+                        }
+                      >
+                      <button
+                        type="button"
+                        aria-pressed={active}
+                        aria-label={`${f.name} palette`}
+                        disabled={locked}
+                        onClick={() => {
+                          play("step");
+                          props.onPalette(f.id);
+                        }}
+                        className="relative grid h-9 w-9 place-items-center rounded-full border border-line transition-all duration-150 sm:h-7 sm:w-7 hover:border-edge active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <span
+                          className="h-3.5 w-3.5 rounded-full"
+                          style={{
+                            background: `linear-gradient(135deg, ${f.ramp[4]} 0%, ${f.ramp[2]} 55%, ${f.base} 100%)`,
+                          }}
+                        />
+                        {active && (
+                          <motion.span
+                            layoutId="dock-finish"
+                            className="absolute inset-0 rounded-full border-2 border-fog"
+                            transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                          />
+                        )}
+                        {locked && <span className="absolute -bottom-0.5 text-[0.5rem] text-dim">·</span>}
+                      </button>
+                      </Hint>
+                    );
+                  })}
+                </Group>
 
-            <div className="ml-auto flex shrink-0 items-center gap-2 pl-4">
+                <Group label={`Size · ${size.mm}mm`}>
+                  {SIZES.map((s) => (
+                    <Pill
+                      key={s.id}
+                      layoutGroup="dock-size"
+                      active={props.sizeId === s.id}
+                      title={s.blurb}
+                      onClick={() => {
+                        if (props.sizeId !== s.id) play("step");
+                        props.onSize(s.id);
+                      }}
+                    >
+                      {s.name}
+                    </Pill>
+                  ))}
+                </Group>
+
+                <Group label="Studio">
+                  {STUDIO_SWITCHES.map((s) => (
+                    <Toggle
+                      key={s.id}
+                      active={props.studio[s.id]}
+                      title={s.hint}
+                      onClick={() => {
+                        play("tick");
+                        props.onStudio({ ...props.studio, [s.id]: !props.studio[s.id] });
+                      }}
+                    >
+                      {s.name}
+                    </Toggle>
+                  ))}
+                </Group>
+              </div>
+              {/* The row scrolls with nothing to say so. A fade off the right
+                edge is the cheapest honest signal that there is more of it. */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-ink to-transparent"
+              />
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2 border-t border-line px-5 py-3 sm:border-l sm:border-t-0 sm:px-7 sm:py-4">
               <Hint
                 label={
                   props.spin
@@ -289,7 +303,7 @@ export function Dock(props: DockProps) {
                 }}
                 aria-label="Turntable"
                 aria-pressed={props.spin}
-                className={`h-8 w-8 rounded-[5px] border border-line text-[0.9rem] transition-colors duration-150 hover:border-edge hover:text-fog ${props.spin ? "text-fog" : "text-dim"}`}
+                className={`h-10 w-10 shrink-0 rounded-[5px] border border-line text-[0.9rem] transition-colors duration-150 hover:border-edge hover:text-fog sm:h-8 sm:w-8 ${props.spin ? "text-fog" : "text-dim"}`}
               >
                 <span aria-hidden>⟳</span>
               </button>
@@ -306,7 +320,7 @@ export function Dock(props: DockProps) {
                 onClick={() => props.onSound(!props.sound)}
                 aria-label="Sound"
                 aria-pressed={props.sound}
-                className={`h-8 w-8 rounded-[5px] border border-line text-[0.85rem] transition-colors duration-150 hover:border-edge hover:text-fog ${props.sound ? "text-fog" : "text-dim"}`}
+                className={`h-10 w-10 shrink-0 rounded-[5px] border border-line text-[0.85rem] transition-colors duration-150 hover:border-edge hover:text-fog sm:h-8 sm:w-8 ${props.sound ? "text-fog" : "text-dim"}`}
               >
                 <span aria-hidden>{props.sound ? "◉" : "◎"}</span>
               </button>
@@ -318,7 +332,7 @@ export function Dock(props: DockProps) {
                   play("lock");
                   props.onPrint();
                 }}
-                className="rounded-[5px] bg-accent px-4 py-2 text-[0.68rem] font-medium tracking-[0.12em] uppercase text-void transition-transform duration-150 hover:brightness-110 active:scale-[0.97]"
+                className="h-10 flex-1 rounded-[5px] bg-accent px-4 text-[0.68rem] font-medium tracking-[0.12em] uppercase text-void transition-transform duration-150 hover:brightness-110 active:scale-[0.97] sm:h-auto sm:flex-none sm:py-2"
               >
                 Get the files
               </button>
