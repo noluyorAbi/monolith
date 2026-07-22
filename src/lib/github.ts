@@ -24,16 +24,13 @@ const LEVELS: Record<string, Level> = {
   FOURTH_QUARTILE: 4,
 };
 
-const GQL = `query($login:String!,$from:DateTime!,$to:DateTime!){
-  user(login:$login){
-    login name
-    contributionsCollection(from:$from,to:$to){
-      contributionCalendar{
-        weeks{ contributionDays{ date contributionCount contributionLevel } }
-      }
-    }
-  }
-}`;
+// One query, one point, one round trip. Everything below is a scalar or a
+// connectionless field, so adding it costs nothing in GraphQL points: the cost
+// is driven by connections, not by fields (see feature-prio.md F4 / marktanalyse
+// section 5.5). contributionYears makes the year picker correct, the total*
+// family and milestone fields are spent by F6, and isHalloween is spent by the
+// Halloween finish.
+const GQL = `query($login:String!,$from:DateTime!,$to:DateTime!){\n  user(login:$login){\n    login name\n    contributionYears\n    contributionsCollection(from:$from,to:$to){\n      contributionCalendar{\n        colors\n        isHalloween\n        weeks{ contributionDays{ date contributionCount contributionLevel weekday } }\n      }\n      totalCommitContributions\n      totalIssueContributions\n      totalPullRequestContributions\n      totalPullRequestReviewContributions\n      totalRepositoriesWithContributedCommits\n      joinedGitHubContribution\n      firstPullRequestContribution\n      firstIssueContribution\n      firstRepositoryContribution\n    }\n  }\n}`;
 
 async function viaGraphQL(
   login: string,
@@ -60,10 +57,23 @@ async function viaGraphQL(
       user?: {
         login: string;
         name: string | null;
+        /** The exact years the account has contributions in, newest first. */
+        contributionYears: number[];
         contributionsCollection: {
           contributionCalendar: {
-            weeks: { contributionDays: { date: string; contributionCount: number; contributionLevel: string }[] }[];
+            colors: string[];
+            isHalloween: boolean;
+            weeks: { contributionDays: { date: string; contributionCount: number; contributionLevel: string; weekday: number }[] }[];
           };
+          totalCommitContributions: number;
+          totalIssueContributions: number;
+          totalPullRequestContributions: number;
+          totalPullRequestReviewContributions: number;
+          totalRepositoriesWithContributedCommits: number;
+          joinedGitHubContribution: { occurredAt: string } | null;
+          firstPullRequestContribution: { occurredAt: string } | null;
+          firstIssueContribution: { occurredAt: string } | null;
+          firstRepositoryContribution: { occurredAt: string } | null;
         };
       } | null;
     };
@@ -73,8 +83,9 @@ async function viaGraphQL(
   const user = json.data?.user;
   if (!user) return null;
 
+  const cal = user.contributionsCollection.contributionCalendar;
   const days: Day[] = [];
-  for (const week of user.contributionsCollection.contributionCalendar.weeks) {
+  for (const week of cal.weeks) {
     for (const d of week.contributionDays) {
       days.push({
         date: d.date,
@@ -84,7 +95,26 @@ async function viaGraphQL(
     }
   }
   days.sort((a, b) => a.date.localeCompare(b.date));
-  return pack(user.login, user.name || user.login, year, days, "graphql");
+  const cc = user.contributionsCollection;
+  const extras: Partial<ContributionYear> = {
+    contributionYears: user.contributionYears ?? undefined,
+    colors: cal.colors && cal.colors.length ? cal.colors : undefined,
+    isHalloween: cal.isHalloween ?? false,
+    totalIssues: cc.totalIssueContributions,
+    totalPullRequests: cc.totalPullRequestContributions,
+    totalReviews: cc.totalPullRequestReviewContributions,
+    totalRepos: cc.totalRepositoriesWithContributedCommits,
+    joinedAt: dateOf(cc.joinedGitHubContribution),
+    firstPrAt: dateOf(cc.firstPullRequestContribution),
+    firstIssueAt: dateOf(cc.firstIssueContribution),
+    firstRepoAt: dateOf(cc.firstRepositoryContribution),
+  };
+  return pack(user.login, user.name || user.login, year, days, "graphql", extras);
+}
+
+/** GitHub returns milestone contributions as `{ occurredAt }`; take the date. */
+function dateOf(node: { occurredAt: string } | null | undefined): string | undefined {
+  return node?.occurredAt ? node.occurredAt.slice(0, 10) : undefined;
 }
 
 /**

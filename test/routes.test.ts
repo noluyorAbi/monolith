@@ -5,8 +5,11 @@ import { GET as getKit } from "@/app/api/kit/route";
 import { GET as getStl } from "@/app/api/stl/route";
 import { GET as get3mf } from "@/app/api/3mf/route";
 import { GET as getContributions } from "@/app/api/contributions/route";
-import { MAX_SIZE_MM, MIN_SIZE_MM, modelQuery, parseModelRequest } from "@/lib/request";
+import { GET as getCard } from "@/app/api/card/[login]/route";
+import { GET as getGlb } from "@/app/api/glb/route";
+import { MAX_SIZE_MM, MIN_SIZE_MM, modelQuery, buildBambuLink, parseModelRequest } from "@/lib/request";
 import { DEFAULT_MATERIAL_ID, DEFAULT_PRINTER_ID, DEFAULT_QUALITY_ID } from "@/lib/print";
+import { DEFAULT_PALETTE_ID } from "@/lib/palettes";
 import { yearFromDays } from "@/lib/contributions";
 import type { Day } from "@/lib/types";
 import fixture from "../data/contributions-2025.json";
@@ -49,6 +52,7 @@ test("the query the browser builds is the query the routes parse", () => {
     materialId: "petg",
     qualityId: "fine",
     slots: 4,
+    paletteId: "aurum",
   });
   const parsed = parseModelRequest(new URL(`${BASE}/kit?${query}`));
 
@@ -60,6 +64,35 @@ test("the query the browser builds is the query the routes parse", () => {
   assert.equal(parsed.material.id, "petg");
   assert.equal(parsed.quality.id, "fine");
   assert.equal(parsed.slots, 4);
+  assert.equal(parsed.paletteId, "aurum");
+});
+
+test("an unknown palette in the share link degrades to the default, never errors", () => {
+  const parsed = parseModelRequest(
+    new URL(`${BASE}/kit?login=octocat&variant=wave&mm=180&palette=does-not-exist`),
+  );
+  assert.equal(parsed.variant, "wave");
+  assert.equal(parsed.paletteId, DEFAULT_PALETTE_ID);
+});
+
+test("the full-state link round trips the viewer configuration", () => {
+  const query = modelQuery({
+    login: "torvalds",
+    year: 2024,
+    variant: "spine",
+    sizeMm: 120,
+    paletteId: "obsidian",
+  });
+  const parsed = parseModelRequest(new URL(`${BASE}/s?${query}`));
+  assert.equal(parsed.login, "torvalds");
+  assert.equal(parsed.year, 2024);
+  assert.equal(parsed.variant, "spine");
+  assert.equal(parsed.sizeMm, 120);
+  assert.equal(parsed.paletteId, "obsidian");
+  // The query string is exactly what the app, the download, and the card all
+  // read, so a shared link reproduces the object on every surface.
+  assert.ok(query.includes("palette=obsidian"));
+  assert.ok(query.includes("variant=spine"));
 });
 
 test("nonsense parameters fall back rather than reaching the generator", () => {
@@ -183,6 +216,21 @@ test("an invented year is labelled in the stl header and the 3mf description", a
   assert.match(files.get("Metadata/MONOLITH.txt")!.toString(), /SAMPLE DATA/);
 });
 
+test("the 3MF arrives split into one object per contribution level", async () => {
+  stubGitHub();
+  const res = await get3mf(new Request(`${BASE}/3mf?login=noluyorAbi&year=2025&variant=skyline&mm=180`));
+  const files = unzip(Buffer.from(await res.arrayBuffer()));
+  const model = files.get("3D/3dmodel.model")!.toString();
+
+  // F1 (core): Bambu Studio must open the plate already broken into the parts
+  // MONOLITH chose, one 3MF object per intensity level, so each can take its
+  // own filament slot. There are five levels (plinth + four intensities).
+  const objects = (model.match(/<object /g) ?? []).length;
+  assert.ok(objects >= 2, `expected the model split into parts, found ${objects} object(s)`);
+  // The parts are named, so the slicer's object list is self-explanatory.
+  assert.match(model, /Peak days|Busy days|Quiet days|Plinth/);
+});
+
 test("a missing account is a 404 rather than an invented year", async () => {
   vi.stubGlobal("fetch", async () => new Response("", { status: 404 }));
   const res = await getKit(new Request(`${BASE}/kit?login=definitelynotarealaccount&year=2025`));
@@ -209,4 +257,69 @@ test("the fixture year survives a round trip through the parser", () => {
   const year = yearFromDays(fixture.login, fixture.year, fixture.days as Day[]);
   assert.equal(year.total, fixture.total);
   assert.ok(year.weeks.length >= 52 && year.weeks.length <= 54);
+});
+
+test("the embeddable card renders the object as an image anyone can host", async () => {
+  stubGitHub();
+  const res = await getCard(
+    new Request(`${BASE}/card/noluyorAbi?login=noluyorAbi&year=2025&variant=skyline&mm=180`),
+    { params: Promise.resolve({ login: "noluyorAbi" }) },
+  );
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Content-Type"), "image/svg+xml");
+  const svg = await res.text();
+  assert.match(svg, /<svg/);
+  // It carries the footprint, not a generic logo, and the one print fact no
+  // competitor can show.
+  assert.match(svg, /noluyorAbi/);
+  assert.match(svg, /2025/);
+  assert.match(svg, /g filament/);
+  assert.match(svg, /<rect/, "the calendar grid should be drawn");
+
+  // Unknown handles 404 rather than rendering attacker-chosen text.
+  const bad = await getCard(new Request(`${BASE}/card/not%20a%20handle`), {
+    params: Promise.resolve({ login: "not a handle" }),
+  });
+  assert.equal(bad.status, 404);
+});
+
+test("the glb endpoint returns a valid binary glTF carrying vertex colours", async () => {
+  stubGitHub();
+  const res = await getGlb(
+    new Request(`${BASE}/glb?login=noluyorAbi&year=2025&variant=skyline&mm=180&palette=signal`),
+  );
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Content-Type"), "model/gltf-binary");
+  const buf = Buffer.from(await res.arrayBuffer());
+  // GLB magic "glTF" and version 2.
+  assert.equal(buf.readUInt32LE(0), 0x46546c67);
+  assert.equal(buf.readUInt32LE(4), 2);
+  // The JSON chunk declares a vertex-coloured material and POSITION + COLOR_0.
+  const jsonLen = buf.readUInt32LE(12);
+  const json = JSON.parse(buf.slice(20, 20 + jsonLen).toString("utf8"));
+  assert.equal(json.materials[0].pbrMetallicRoughness.baseColorFactor.join(), "1,1,1,1");
+  assert.deepEqual(Object.keys(json.meshes[0].primitives[0].attributes).sort(), ["COLOR_0", "POSITION"]);
+  assert.ok(json.accessors[0].count > 0, "the geometry should have vertices");
+  // A bad handle is a 400, not a generated object.
+  const bad = await getGlb(new Request(`${BASE}/glb?login=not%20a%20handle&year=2025`));
+  assert.equal(bad.status, 400);
+});
+
+test("the Bambu Studio hand-off only ever carries a clean http(s) origin", () => {
+  // The one external-app launch in the product. It must refuse to hand a
+  // local path or a non-http scheme to Bambu Studio, no matter what origin the
+  // browser reports. F0.
+  const ok = buildBambuLink("https://monolith.adatepe.dev", "login=octocat&year=2025", "octocat", 2025);
+  assert.match(ok, /^bambustudioopen:\/\/open\?file=https%3A%2F%2Fmonolith/);
+  assert.match(ok, /monolith-octocat-2025\.3mf/);
+
+  for (const origin of ["file:///Users/x", "javascript:alert(1)", "ftp://evil", "not a url"]) {
+    assert.throws(
+      () => buildBambuLink(origin, "login=octocat", "octocat", 2025),
+      /refusing/,
+      `origin ${origin} should be refused`,
+    );
+  }
 });

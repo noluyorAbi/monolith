@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { SIZES, VARIANTS, sizeById, type SizeId } from "@/lib/build";
+import { SIZES, VARIANTS, fitsBed, sizeById, type SizeId } from "@/lib/build";
+import { printerById } from "@/lib/print";
 import { PALETTES, type Palette } from "@/lib/palettes";
 import type { StudioLights, Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
@@ -73,19 +74,22 @@ function Pill({
   children,
   layoutGroup,
   title,
+  disabled,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
   layoutGroup: string;
   title?: string;
+  disabled?: boolean;
 }) {
   const button = (
     <button
       type="button"
       aria-pressed={active}
+      disabled={disabled}
       onClick={onClick}
-      className={`relative min-h-9 rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] sm:min-h-0 ${
+      className={`relative min-h-9 rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 ${
         active ? "border-transparent" : "border-line hover:border-edge"
       }`}
     >
@@ -115,6 +119,10 @@ export interface DockProps {
   onPalette: (id: string) => void;
   sizeId: SizeId;
   onSize: (id: SizeId) => void;
+  printerId: string;
+  onPrinter: (id: string) => void;
+  dampening: number;
+  onDampening: (v: number) => void;
   total: number;
   onPrint: () => void;
   spin: boolean;
@@ -247,20 +255,42 @@ export function Dock(props: DockProps) {
                 </Group>
 
                 <Group label={`Size · ${size.mm}mm`}>
-                  {SIZES.map((s) => (
-                    <Pill
-                      key={s.id}
-                      layoutGroup="dock-size"
-                      active={props.sizeId === s.id}
-                      title={s.blurb}
-                      onClick={() => {
-                        if (props.sizeId !== s.id) play("step");
-                        props.onSize(s.id);
-                      }}
-                    >
-                      {s.name}
-                    </Pill>
-                  ))}
+                  {SIZES.map((s) => {
+                    // F16: a size the chosen printer cannot print is marked, not
+                    // silently offered. Picking it would queue a print that fails
+                    // on the first layer, so we show why instead of enabling it.
+                    const fits = fitsBed(printerById(props.printerId), s.mm);
+                    return (
+                      <Pill
+                        key={s.id}
+                        layoutGroup="dock-size"
+                        active={props.sizeId === s.id}
+                        title={fits ? s.blurb : `${s.blurb} · too big for this printer`}
+                        disabled={!fits}
+                        onClick={() => {
+                          if (!fits) return;
+                          if (props.sizeId !== s.id) play("step");
+                          props.onSize(s.id);
+                        }}
+                      >
+                        {s.name}
+                        {!fits ? " · bed" : ""}
+                      </Pill>
+                    );
+                  })}
+                </Group>
+
+                <Group label={`Outlier compression · ${Math.round(props.dampening * 100)}%`}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={props.dampening}
+                    onChange={(e) => props.onDampening(Number(e.target.value))}
+                    title="Flatten the busiest days so one spike does not tower over the year"
+                    className="h-1 w-full cursor-pointer appearance-none rounded-full bg-edge accent-fog"
+                  />
                 </Group>
 
                 <Group label="Studio">

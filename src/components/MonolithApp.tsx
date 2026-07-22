@@ -19,8 +19,9 @@ import { CursorField } from "./CursorField";
 import { Story } from "./Story";
 import { PROJECT } from "@/lib/project";
 import { VARIANTS, buildMonolith, sizeById } from "@/lib/build";
-import { SELECTABLE_YEARS, availableYears, computeStats, yearFromDays } from "@/lib/contributions";
-import { AMBIENT_PALETTE, DEFAULT_PALETTE_ID, paletteById } from "@/lib/palettes";
+import { DEFAULT_PRINTER_ID } from "@/lib/print";
+import { SELECTABLE_YEARS, availableYears, availableYearsFor, computeStats, yearFromDays } from "@/lib/contributions";
+import { AMBIENT_PALETTE, DEFAULT_PALETTE_ID, PALETTES, paletteById } from "@/lib/palettes";
 import {
   play,
   setSoundEnabled,
@@ -29,6 +30,7 @@ import {
   subscribeSound,
 } from "@/lib/sound";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { modelQuery } from "@/lib/request";
 import type { SizeId } from "@/lib/build";
 import type {
   BuiltMesh,
@@ -49,18 +51,31 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function MonolithApp({
   initialLogin,
   initialYear,
+  initialPaletteId,
 }: {
   initialLogin?: string;
   initialYear?: number;
+  initialPaletteId?: string;
 }) {
   const years = useMemo(() => availableYears(SELECTABLE_YEARS), []);
   const [phase, setPhase] = useState<Phase>("idle");
   const [login, setLogin] = useState(initialLogin ?? "");
   const [year, setYear] = useState(initialYear ?? years[0]);
   const [variant, setVariant] = useState<Variant>("skyline");
-  const [paletteId, setPaletteId] = useState(DEFAULT_PALETTE_ID);
+  const [paletteId, setPaletteId] = useState(
+    initialPaletteId && PALETTES.some((p) => p.id === initialPaletteId)
+      ? initialPaletteId
+      : DEFAULT_PALETTE_ID,
+  );
   const [sizeId, setSizeId] = useState<SizeId>("shelf");
+  const [printerId, setPrinterId] = useState(DEFAULT_PRINTER_ID);
+  const [dampening, setDampening] = useState(0);
   const [data, setData] = useState<ContributionYear | null>(null);
+  // Once a year is fetched, the picker offers the years that account actually
+  // has, instead of a fixed window that would show empty years or hide real
+  // ones. The initial list is the recent window so the idle landing still has
+  // a year to render. F4.
+  const liveYears = useMemo(() => availableYearsFor(data), [data]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [steps, setSteps] = useState<ForgeStep[]>([]);
   const [progress, setProgress] = useState(0);
@@ -107,6 +122,7 @@ export function MonolithApp({
     data: ContributionYear;
     variant: Variant;
     sizeMm: number;
+    dampening: number;
     mesh: BuiltMesh;
   } | null>(null);
   const runId = useRef(0);
@@ -156,11 +172,11 @@ export function MonolithApp({
     // exactly this data and configuration: a control touched during the forge's
     // scripted pauses would otherwise leave the readout describing an object
     // that never gets rendered.
-    if (built && built.data === data && built.variant === variant && built.sizeMm === sizeMm) {
+    if (built && built.data === data && built.variant === variant && built.sizeMm === sizeMm && built.dampening === dampening) {
       return built.mesh;
     }
-    return buildMonolith(data, { variant, sizeMm, label: true });
-  }, [data, built, variant, sizeMm]);
+    return buildMonolith(data, { variant, sizeMm, label: true, dampening });
+  }, [data, built, variant, sizeMm, dampening]);
 
   const forge = useCallback(
     async (
@@ -256,8 +272,9 @@ export function MonolithApp({
         variant,
         sizeMm,
         label: true,
+        dampening,
       });
-      setBuilt({ data: payload.data, variant, sizeMm, mesh: forged });
+      setBuilt({ data: payload.data, variant, sizeMm, dampening, mesh: forged });
       push(
         {
           label: "extruding",
@@ -288,16 +305,31 @@ export function MonolithApp({
       // build it: set upfront by the callers, a failed switch left the dock
       // naming a year the object on screen never was.
       setYear(forYear);
+      // A live Halloween calendar is the one seasonal flag GitHub ships; when
+      // it is set, offer the matching finish by default unless the viewer has
+      // already picked one. F4: the new data reaching the UI as a finish.
+      if (payload.data.isHalloween) {
+        setPaletteId((cur) => (cur === DEFAULT_PALETTE_ID ? "halloween" : cur));
+      }
       setPhase("live");
       setSpin(!reduceMotion);
       play("thunk");
+      // Write the full configuration into the URL so a copied link reproduces
+      // exactly what was built. F3: a shared link carries the whole state, not
+      // just the person and the year.
       window.history.replaceState(
         null,
         "",
-        `/s/${payload.data.login}?year=${forYear}`,
+        `/s/${payload.data.login}?${modelQuery({
+          login: payload.data.login,
+          year: forYear,
+          variant,
+          sizeMm,
+          paletteId: paletteId,
+        })}`,
       );
     },
-    [variant, sizeMm, reduceMotion],
+    [variant, sizeMm, reduceMotion, paletteId, dampening],
   );
 
   // Deep-link boot. The guard is what makes this run once, rather than an
@@ -369,20 +401,26 @@ export function MonolithApp({
         setVariant(VARIANTS[n - 1].id);
       }
       if (e.key === "[" || e.key === "]") {
-        const i = years.indexOf(year) + (e.key === "[" ? 1 : -1);
-        if (years[i] !== undefined) {
+        const i = liveYears.indexOf(year) + (e.key === "[" ? 1 : -1);
+        if (liveYears[i] !== undefined) {
           play("step");
-          void forge(login, years[i], { keep: true });
+          void forge(login, liveYears[i], { keep: true });
         }
       }
       if (e.key === "Escape") reset();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, printing, years, year, login, forge, reset]);
+  }, [phase, printing, liveYears, year, login, forge, reset]);
 
   async function share() {
-    const url = `${window.location.origin}/s/${login}?year=${year}`;
+    const url = `${window.location.origin}/s/${login}?${modelQuery({
+      login,
+      year,
+      variant,
+      sizeMm,
+      paletteId: paletteId,
+    })}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -759,18 +797,22 @@ export function MonolithApp({
         </AnimatePresence>
 
         <Dock
-          visible={phase === "live" && !!data}
-          year={year}
-          years={years}
-          onYear={(y) => {
-            void forge(login, y, { keep: true });
-          }}
+        visible={phase === "live" && !!data}
+        year={year}
+        years={liveYears}
+        onYear={(y) => {
+          void forge(login, y, { keep: true });
+        }}
           variant={variant}
           onVariant={setVariant}
           palette={palette}
           onPalette={setPaletteId}
           sizeId={sizeId}
           onSize={setSizeId}
+          printerId={printerId}
+          onPrinter={setPrinterId}
+          dampening={dampening}
+          onDampening={setDampening}
           total={stats?.total ?? 0}
           onPrint={() => setPrinting(true)}
           spin={spin && !reduceMotion}
@@ -790,7 +832,9 @@ export function MonolithApp({
               year={year}
               variant={variant}
               sizeMm={sizeMm}
-                mesh={mesh}
+              mesh={mesh}
+              printerId={printerId}
+              onPrinter={setPrinterId}
             />
           </>
         )}

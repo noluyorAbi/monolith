@@ -1,6 +1,7 @@
 import { MeshBuilder, scaleToSize, type Attribs } from "./mesh";
 import { GLYPH_H, measureText, rasterise } from "./font5x7";
 import type { BuildOptions, BuiltMesh, ContributionYear, Day, Variant } from "./types";
+import type { Printer } from "./print";
 
 /** Millimetres. Chosen so a default skyline lands close to a 210mm desk piece. */
 const CELL = 4;
@@ -26,13 +27,20 @@ export const VARIANTS: { id: Variant; name: string; blurb: string }[] = [
   { id: "spine", name: "Spine", blurb: "Twelve months, twelve towers" },
 ];
 
-export const SIZES = [
+export type SizeId = "desk" | "shelf" | "statement";
+
+export interface SizeDef {
+  id: SizeId;
+  name: string;
+  mm: number;
+  blurb: string;
+}
+
+export const SIZES: SizeDef[] = [
   { id: "desk", name: "Desk", mm: 120, blurb: "Fits beside a keyboard" },
   { id: "shelf", name: "Shelf", mm: 180, blurb: "The default trophy" },
   { id: "statement", name: "Statement", mm: 260, blurb: "You want it seen" },
-] as const;
-
-export type SizeId = (typeof SIZES)[number]["id"];
+];
 
 export const DEFAULT_SIZE_ID: SizeId = "shelf";
 
@@ -40,10 +48,22 @@ export function sizeById(id: string): (typeof SIZES)[number] {
   return SIZES.find((s) => s.id === id) ?? SIZES.find((s) => s.id === DEFAULT_SIZE_ID)!;
 }
 
-function barHeight(count: number, max: number): number {
+function barHeight(count: number, max: number, dampening = 0): number {
   if (count <= 0) return 0;
   if (max <= 0) return MIN_BAR;
-  return MIN_BAR + Math.pow(count / max, 0.7) * (MAX_H - MIN_BAR);
+  const d = clamp01(dampening);
+  // dampening in [0,1] raises the power curve from 0.7 toward ~2.1 (pulling
+  // mid days down) AND lowers the ceiling the busiest day may reach, from the
+  // full MAX_H down to 40% of it. Without the ceiling drop the single spike
+  // would still tower at 100% no matter the curve. F7.
+  const power = 0.7 + d * 1.4;
+  const cap = MAX_H * (1 - d * 0.6);
+  return MIN_BAR + Math.pow(count / max, power) * (cap - MIN_BAR);
+}
+
+function clamp01(n: number): number {
+  if (Number.isNaN(n)) return 0;
+  return n < 0 ? 0 : n > 1 ? 1 : n;
 }
 
 function maxCount(days: Day[]): number {
@@ -101,7 +121,7 @@ function signature(data: ContributionYear): string {
   return data.login.toUpperCase();
 }
 
-function buildSkyline(data: ContributionYear, label: boolean): MeshBuilder {
+function buildSkyline(data: ContributionYear, label: boolean, dampening = 0): MeshBuilder {
   const mb = new MeshBuilder();
   const weeks = data.weeks;
   const cols = weeks.length;
@@ -123,7 +143,7 @@ function buildSkyline(data: ContributionYear, label: boolean): MeshBuilder {
       if (!day) continue;
       const order = 0.05 + 0.95 * (seen / total);
       seen++;
-      const h = barHeight(day.count, max);
+      const h = barHeight(day.count, max, dampening);
       if (h <= 0) continue;
       const cx = x0 + PLATE_PAD + w * CELL;
       const cz = z0 + PLATE_PAD + d * CELL;
@@ -152,7 +172,7 @@ function buildSkyline(data: ContributionYear, label: boolean): MeshBuilder {
   return mb;
 }
 
-function buildRing(data: ContributionYear, label: boolean): MeshBuilder {
+function buildRing(data: ContributionYear, label: boolean, dampening = 0): MeshBuilder {
   const mb = new MeshBuilder();
   const weeks = data.weeks;
   const cols = weeks.length;
@@ -174,7 +194,7 @@ function buildRing(data: ContributionYear, label: boolean): MeshBuilder {
       if (!day) continue;
       const order = 0.05 + 0.95 * (seen / total);
       seen++;
-      const h = barHeight(day.count, max);
+      const h = barHeight(day.count, max, dampening);
       if (h <= 0) continue;
       const a0 = w * sector + angleGap / 2;
       const a1 = (w + 1) * sector - angleGap / 2;
@@ -195,7 +215,7 @@ function buildRing(data: ContributionYear, label: boolean): MeshBuilder {
   return mb;
 }
 
-function buildWave(data: ContributionYear, label: boolean): MeshBuilder {
+function buildWave(data: ContributionYear, label: boolean, dampening = 0): MeshBuilder {
   const mb = new MeshBuilder();
   const weeks = data.weeks;
   const cols = weeks.length;
@@ -208,7 +228,7 @@ function buildWave(data: ContributionYear, label: boolean): MeshBuilder {
   const cellH = (w: number, d: number): number => {
     if (w < 0 || w >= cols || d < 0 || d > 6) return 0;
     const day = weeks[w][d];
-    return day ? barHeight(day.count, max) : 0;
+    return day ? barHeight(day.count, max, dampening) : 0;
   };
   const cellLevel = (w: number, d: number): number => {
     if (w < 0 || w >= cols || d < 0 || d > 6) return 0;
@@ -287,7 +307,7 @@ function buildWave(data: ContributionYear, label: boolean): MeshBuilder {
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-function buildSpine(data: ContributionYear, label: boolean): MeshBuilder {
+function buildSpine(data: ContributionYear, label: boolean, dampening = 0): MeshBuilder {
   const mb = new MeshBuilder();
   const totals = new Array(12).fill(0);
   for (const day of data.days) {
@@ -307,7 +327,10 @@ function buildSpine(data: ContributionYear, label: boolean): MeshBuilder {
   mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
 
   for (let m = 0; m < 12; m++) {
-    const h = MIN_BAR + Math.pow(totals[m] / max, 0.75) * (MAX_H * 1.6 - MIN_BAR);
+    const d = clamp01(dampening);
+    const power = 0.75 + d * 1.4;
+    const cap = MAX_H * 1.6 * (1 - d * 0.6);
+    const h = MIN_BAR + Math.pow(totals[m] / max, power) * (cap - MIN_BAR);
     const cx = x0 + PLATE_PAD + m * pitch + (pitch - barW) / 2;
     const level = totals[m] === 0 ? 0 : Math.min(4, Math.ceil((totals[m] / max) * 4));
     mb.box(cx, BASE_H, z0 + PLATE_PAD, cx + barW, BASE_H + h, z0 + PLATE_PAD + depth, {
@@ -340,7 +363,7 @@ function buildSpine(data: ContributionYear, label: boolean): MeshBuilder {
   return mb;
 }
 
-const BUILDERS: Record<Variant, (data: ContributionYear, label: boolean) => MeshBuilder> = {
+const BUILDERS: Record<Variant, (data: ContributionYear, label: boolean, dampening?: number) => MeshBuilder> = {
   skyline: buildSkyline,
   ring: buildRing,
   wave: buildWave,
@@ -363,7 +386,7 @@ export function buildMonolith(data: ContributionYear, options: BuildOptions): Bu
     return scaleToSize(buildSlab().finish(), options.sizeMm * 0.28);
   }
   const builder = BUILDERS[options.variant] ?? buildSkyline;
-  const raw = builder(data, options.label).finish();
+  const raw = builder(data, options.label, options.dampening ?? 0).finish();
   const scaled = scaleToSize(raw, options.sizeMm);
 
   // Everything is modelled at a nominal size and then scaled, so the features
@@ -374,4 +397,26 @@ export function buildMonolith(data: ContributionYear, options: BuildOptions): Bu
     gapMm: GAPPED.includes(options.variant) ? GAP * k : null,
   };
   return scaled;
+}
+
+/**
+ * Whether a finished object at `sizeMm` fits a printer's bed. The object is
+ * square on the bed, so the limiting edge is the smaller bed dimension. F16:
+ * the picker marks sizes a chosen printer cannot print rather than letting
+ * the user queue a print that will fail on the first layer.
+ */
+export function fitsBed(printer: Printer, sizeMm: number): boolean {
+  const bed = Math.min(printer.bedMm[0], printer.bedMm[1]);
+  return sizeMm <= bed;
+}
+
+/** The largest offered size that actually fits the given printer. */
+export function biggestSizeFor(printer: Printer): SizeDef {
+  const fit = [...SIZES].reverse().find((s) => fitsBed(printer, s.mm));
+  return fit ?? SIZES[0];
+}
+
+/** The offered sizes with a flag for whether the printer can print them. */
+export function sizesForPrinter(printer: Printer): Array<SizeDef & { fits: boolean }> {
+  return SIZES.map((s) => ({ ...s, fits: fitsBed(printer, s.mm) }));
 }

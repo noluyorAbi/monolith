@@ -20,6 +20,28 @@ export interface ContributionYear {
   /** True when GitHub was unreachable and the shape is synthesised. */
   demo: boolean;
   source: "graphql" | "html" | "synthetic";
+  /**
+   * Everything below is read from the GraphQL response. It is optional because
+   * the token-less HTML fallback returns none of it, and the production
+   * geometry path must keep type-checking against that fallback. F4/F6 spend
+   * these; until then they are inert data.
+   */
+  /** The exact years this account has contributed in, newest first. */
+  contributionYears?: number[];
+  /** GitHub's own hex ramp for the rendered calendar. */
+  colors?: string[];
+  /** A real seasonal palette flag nobody else turns into a finish. */
+  isHalloween?: boolean;
+  /** Composition totals, all from the same single query. */
+  totalIssues?: number;
+  totalPullRequests?: number;
+  totalReviews?: number;
+  totalRepos?: number;
+  /** Milestone dates, for engraving on the base plate. */
+  joinedAt?: string;
+  firstPrAt?: string;
+  firstIssueAt?: string;
+  firstRepoAt?: string;
 }
 
 export interface Stats {
@@ -39,6 +61,12 @@ export interface BuildOptions {
   /** Target size of the longest footprint edge, in millimetres. */
   sizeMm: number;
   label: boolean;
+  /**
+   * Outlier compression, 0..1. 0 keeps busy days at their true relative
+   * height; 1 strongly flattens the busiest days toward the rest so a single
+   * spike does not tower over the year. F7.
+   */
+  dampening?: number;
 }
 
 export interface BuiltMesh {

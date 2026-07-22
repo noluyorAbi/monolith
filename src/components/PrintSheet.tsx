@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
 import {
   DEFAULT_MATERIAL_ID,
-  DEFAULT_PRINTER_ID,
   DEFAULT_QUALITY_ID,
   MATERIALS,
   MIN_TOWER_GAP_MM,
@@ -19,7 +18,7 @@ import {
   printerById,
   qualityById,
 } from "@/lib/print";
-import { modelQuery } from "@/lib/request";
+import { modelQuery, buildBambuLink } from "@/lib/request";
 import { SLOT_CHOICES, type ColourSlots } from "@/lib/slots";
 import { printableParts } from "@/lib/parts";
 import { PROJECT } from "@/lib/project";
@@ -73,13 +72,16 @@ export interface PrintSheetProps {
   variant: Variant;
   sizeMm: number;
   mesh: BuiltMesh;
+  printerId: string;
+  onPrinter: (id: string) => void;
 }
 
 export function PrintSheet(props: PrintSheetProps) {
-  const [printerId, setPrinterId] = useState(DEFAULT_PRINTER_ID);
+  const { printerId, setPrinterId } = { printerId: props.printerId, setPrinterId: props.onPrinter };
   const [materialId, setMaterialId] = useState(DEFAULT_MATERIAL_ID);
   const [qualityId, setQualityId] = useState(DEFAULT_QUALITY_ID);
   const [slots, setSlots] = useState<ColourSlots>(1);
+  const [copiedCard, setCopiedCard] = useState(false);
   const wide = useMediaQuery("(min-width: 640px)");
   /**
    * Swipe to dismiss, from the handle only. A drag listener on the whole sheet
@@ -146,7 +148,7 @@ export function PrintSheet(props: PrintSheetProps) {
   );
   const est = useMemo(
     () => (parts ? estimate(parts, material, quality, printer) : null),
-    [parts, material, quality, printer],
+    [parts, material, quality, printerId],
   );
   const specs = useMemo(() => overrides(material, quality), [material, quality]);
 
@@ -174,9 +176,11 @@ export function PrintSheet(props: PrintSheetProps) {
    */
   function openInBambu() {
     play("lock");
-    const model = `${window.location.origin}/api/3mf?${query}`;
-    const name = `monolith-${props.login}-${props.year}.3mf`;
-    window.location.href = `bambustudioopen://open?file=${encodeURIComponent(model)}&name=${encodeURIComponent(name)}`;
+    // The only external-app launch in the app. buildBambuLink refuses any
+    // origin that is not a clean http(s) URL, so this can never hand a local
+    // path or a `file:`/`javascript:` scheme to Bambu Studio. F0.
+    const link = buildBambuLink(window.location.origin, query, props.login, props.year);
+    window.location.assign(link);
   }
 
   return (
@@ -413,6 +417,47 @@ export function PrintSheet(props: PrintSheetProps) {
                         .stl only
                       </a>
                     </div>
+                    {/* F2: the one distribution surface whose value grows on its
+                      own. A README embed re-renders on every profile view
+                      forever, so we hand the visitor the exact snippet to paste. */}
+                    <div className="mt-3 rounded-lg border border-edge p-3">
+                      <div className="mb-1.5 text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+                        Embed in a README
+                      </div>
+                      <p className="text-[0.6rem] leading-relaxed text-dim">
+                        Paste this into your profile README. It re-renders every time someone
+                        visits, with the object you just built.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const snippet = `![${props.login}'s ${props.year} on MONOLITH](https://monolith.adatepe.dev/api/card/${props.login}?variant=${props.variant}&mm=${props.sizeMm}&year=${props.year})`;
+                          navigator.clipboard?.writeText(snippet).then(
+                            () => {
+                              play("lock");
+                              setCopiedCard(true);
+                              setTimeout(() => setCopiedCard(false), 1800);
+                            },
+                            () => play("error"),
+                          );
+                        }}
+                        className="hairline mt-2 w-full rounded-[5px] bg-ink px-3 py-2 text-left font-mono text-[0.6rem] text-fog transition-colors duration-150 hover:border-mute active:scale-[0.99]"
+                        title="Copy the markdown snippet"
+                      >
+                        {copiedCard ? "✓ copied to clipboard" : `![...](${window.location.origin}/api/card/${props.login}?variant=${props.variant}&mm=${props.sizeMm}&year=${props.year})`}
+                      </button>
+                    </div>
+                    {/* F8: one object, every workflow. The same footprint that
+                      prints also drops into Blender, Fusion or a three.js scene
+                      with vertex colours intact, no converter. */}
+                    <a
+                      href={`/api/glb?${query}`}
+                      download
+                      onClick={() => play("tick")}
+                      className="hairline mt-3 block w-full rounded-[5px] px-3 py-2 text-center text-[0.66rem] tracking-[0.12em] uppercase text-fog transition-colors duration-150 hover:border-mute active:scale-[0.97]"
+                    >
+                      .glb (open in any 3D app)
+                    </a>
                     <div className="mt-2 flex items-center justify-center gap-4 text-[0.6rem] tracking-[0.14em] uppercase text-mute">
                       <a
                         href={PROJECT.url}

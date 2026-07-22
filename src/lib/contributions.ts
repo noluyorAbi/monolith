@@ -64,6 +64,27 @@ export function availableYears(count = 6): number[] {
   return Array.from({ length: count }, (_, i) => now - i);
 }
 
+/**
+ * The years worth offering for a given account. Defaults to the fixed recent
+ * window, but when the live data carries GitHub's own `contributionYears` we
+ * offer exactly the years that exist rather than guessing. A 2024 account no
+ * longer gets empty years, and a 2011 account no longer has its real years
+ * hidden. F4: the cheapest single field, spent on the picker.
+ */
+export function availableYearsFor(data: ContributionYear | null, count = SELECTABLE_YEARS): number[] {
+  const recent = availableYears(count);
+  const real = (data?.contributionYears ?? []).filter((y) => Number.isInteger(y));
+  if (real.length === 0) return recent;
+  // Real years win outright: offer every one, newest first, but keep the list
+  // from overflowing the picker with a hard ceiling. The recent window is only
+  // a fallback for when we have no contributionYears at all.
+  const MAX_OFFERED = 15;
+  return Array.from(new Set(real))
+    .filter((y) => y >= 2008 && y <= new Date().getUTCFullYear())
+    .sort((a, b) => b - a)
+    .slice(0, MAX_OFFERED);
+}
+
 /** Lay a chronological day list out as GitHub does: columns of weeks, Sunday first. */
 function toWeeks(days: Day[]): (Day | null)[][] {
   if (days.length === 0) return [];
@@ -87,6 +108,7 @@ export function pack(
   year: number,
   days: Day[],
   source: ContributionYear["source"],
+  extras?: Partial<ContributionYear>,
 ): ContributionYear {
   return {
     login,
@@ -97,6 +119,7 @@ export function pack(
     weeks: toWeeks(days),
     demo: source === "synthetic",
     source,
+    ...extras,
   };
 }
 

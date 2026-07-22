@@ -2,6 +2,7 @@ import { DEFAULT_SIZE_ID, VARIANTS, sizeById } from "./build";
 import { parseYear } from "./contributions";
 import { materialById, printerById, qualityById, type Material, type Printer, type Quality } from "./print";
 import { SLOT_CHOICES, type ColourSlots } from "./slots";
+import { DEFAULT_PALETTE_ID, PALETTES } from "./palettes";
 import type { Variant } from "./types";
 
 /**
@@ -25,11 +26,17 @@ export interface ModelRequest {
   material: Material;
   quality: Quality;
   slots: ColourSlots;
+  /** The finish the viewer chose. Optional: a shared link without it falls back to the default. */
+  paletteId: string;
 }
+
+/** Bump this if the query shape changes, so a link built before the change still parses. */
+export const SHARE_VERSION = 1 as const;
 
 export function parseModelRequest(url: URL): ModelRequest {
   const variant = url.searchParams.get("variant") ?? "";
   const slots = Number(url.searchParams.get("slots"));
+  const paletteId = url.searchParams.get("palette") ?? "";
   return {
     login: url.searchParams.get("login") ?? "",
     year: parseYear(url.searchParams.get("year")),
@@ -42,6 +49,8 @@ export function parseModelRequest(url: URL): ModelRequest {
     material: materialById(url.searchParams.get("material") ?? ""),
     quality: qualityById(url.searchParams.get("quality") ?? ""),
     slots: (SLOT_CHOICES.some((c) => c.slots === slots) ? slots : 1) as ColourSlots,
+    // A palette that does not exist degrades to the default rather than erroring.
+    paletteId: PALETTES.some((p) => p.id === paletteId) ? paletteId : DEFAULT_PALETTE_ID,
   };
 }
 
@@ -54,6 +63,7 @@ export interface ModelQuery {
   materialId?: string;
   qualityId?: string;
   slots?: number;
+  paletteId?: string;
 }
 
 /** The other half of the contract, so the browser cannot invent a parameter. */
@@ -68,5 +78,29 @@ export function modelQuery(input: ModelQuery): string {
   if (input.materialId) params.set("material", input.materialId);
   if (input.qualityId) params.set("quality", input.qualityId);
   if (input.slots) params.set("slots", String(input.slots));
+  if (input.paletteId) params.set("palette", input.paletteId);
   return params.toString();
+}
+
+/**
+ * The "Open in Bambu Studio" hand-off. Bambu Studio registers the
+ * `bambustudioopen:` scheme, and it fetches the model itself from a URL, so we
+ * hand it an absolute https URL to our own 3MF endpoint — never a local path,
+ * never a `file:` or `javascript:` scheme. F0: this is the one place in the app
+ * that launches an external local app, so it is the single choke point that
+ * must refuse anything that is not a clean https origin.
+ */
+export function buildBambuLink(origin: string, query: string, login: string, year: number): string {
+  let safe: URL;
+  try {
+    safe = new URL(origin);
+  } catch {
+    throw new Error("refusing to build a Bambu link from a non-URL origin");
+  }
+  if (safe.protocol !== "https:" && safe.protocol !== "http:") {
+    throw new Error(`refusing to hand a ${safe.protocol} origin to a local app`);
+  }
+  const model = `${safe.origin}/api/3mf?${query}`;
+  const name = `monolith-${login}-${year}.3mf`;
+  return `bambustudioopen://open?file=${encodeURIComponent(model)}&name=${encodeURIComponent(name)}`;
 }
