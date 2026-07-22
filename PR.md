@@ -233,4 +233,17 @@ single most repeated gap"*. These are now implemented:
 
 ---
 
+### Frontend wiring (all of the above are now reachable from the Dock)
+
+Previously the data + API for these existed but the UI only exposed the single-year
+path, so nothing was clickable. The Dock now has:
+
+- **Subject** toggle: `user` / `repo` (repo shows owner/repo inputs, M14)
+- **Span** toggle: `year` / `lifetime` / `range` (range shows From–To date pickers, M11/M12)
+- `forge()` routes to the right endpoint and builds multi-year via `buildMultiYear`
+- the HUD prints a year-label override (`2021–2026` or `owner/repo`)
+
+Verified live in a browser: lifetime renders a side-by-side multi-year skyline,
+range shows date pickers, and repo renders a 5,620-commit skyline.
+
 *Generated for review on `feat/market-features`. Merge target: `main`. Pushed; PR #6 open.*
