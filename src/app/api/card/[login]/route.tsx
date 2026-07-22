@@ -32,7 +32,10 @@ export async function GET(
   }
 
   const req = parseModelRequest(new URL(request.url));
-  const data = await fetchContributionYear(req.login, req.year);
+  // The login lives in the path for the card route; fall back to it when the
+  // shared query parser did not find one (it only reads the query string).
+  const login_ = req.login || login;
+  const data = await fetchContributionYear(login_, req.year);
   const mesh = buildMonolith(data, { variant: req.variant, sizeMm: req.sizeMm, label: true });
   const parts = printableParts(mesh);
   const est = estimate(parts, materialById("pla"), qualityById("standard"), printerById("a1"));
