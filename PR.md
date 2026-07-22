@@ -214,10 +214,22 @@ single most repeated gap"*. These are now implemented:
 | M7 | Two-user comparison | `/api/compare?a=&b=&year=` returns both stats + delta | api/compare/route.ts | routes.test |
 | M8 | JSON alongside visual | `/api/contributions?years=2023,2024,2025` returns the multi-year roll-up as JSON | api/contributions/route.ts | routes.test |
 | M9 | Per-year permalinks | `/s/<login>/<year>` resolves to the single-year viewer with that year preselected | s/[login]/[year]/route.ts | routes.test |
+| M11 | Arbitrary date-range model | `fetchContributionRange(from, to)`; `viaGraphQL`/`viaHTML` accept a range, same geometry path draws "last 12 months" / "2014-2024" | github.ts, build.ts | multiyear.test |
+| M12 | Lifetime view (since join) | `fetchLifetime()` stacks every year the account has via `contributionYears` | github.ts | multiyear.test |
+| M13 | Share URL carries full state | `dampening` round-trips through `parseModelRequest`/`modelQuery` + all four download routes honour it (F3 completion) | request.ts, 3mf/glb/stl/kit routes, MonolithApp.tsx | routes.test |
+| M14 | Per-repo skyline | `fetchRepoActivity()` (unauth REST) + `repoActivityToYear()` + `/api/repo/[owner]/[repo]` 3MF | github.ts, api/repo/.../route.ts | multiyear.test, routes.test |
+| M16 | Commit time-of-day | `fetchCommitHours(login, year)` one bounded `/search/commits`, bucketed by author's local hour; `/api/contributions?hours=` | github.ts, api/contributions/route.ts | multiyear.test |
 
-**M10 (leaderboard / comparison gallery) is intentionally out of scope here.**
-It needs persistent storage and identity (auth/OAuth), which is a separate
-product surface, not a feature branch. Flagged, not dropped.
+**Out of scope for this branch (separate products, flagged not dropped):**
+
+- **M10 leaderboard / comparison gallery** — needs persistent storage + identity.
+- **Language colours as finishes** (marktanalyse 5.4) — feasible but byte-skewed and
+  expensive (paginated `user.repositories` aggregation). Deferred; the data path is
+  noted but not built because it measures repo size, not effort, and would need a
+  capped multi-page crawl.
+- **Order-a-print (#2), embeddable iframe widget (#3), auth/OAuth (#8), GitLab (#11),
+  public gallery (#10), shareable MP4 video (#14), CLI/package (#15)** — each needs
+  commerce, auth, storage, or a video pipeline. Not a feature-branch concern.
 
 ---
 
