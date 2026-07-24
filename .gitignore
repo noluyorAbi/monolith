@@ -10,3 +10,6 @@ node_modules
 tsconfig.tsbuildinfo
 .remotion
 .vercel
+
+# local agent config
+.claude/

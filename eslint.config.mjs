@@ -14,6 +14,9 @@ const config = [
       "assets/**",
       "next-env.d.ts",
       "*.tsbuildinfo",
+      // Git-ignored scratch space written by local session tooling; its
+      // contents are not source and must not gate a push.
+      ".remember/**",
     ],
   },
   ...coreWebVitals,

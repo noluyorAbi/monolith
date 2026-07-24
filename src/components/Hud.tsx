@@ -3,7 +3,8 @@
 import { motion } from "motion/react";
 import { Ticker } from "./Ticker";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import type { BuiltMesh, ContributionYear, Stats, Variant } from "@/lib/types";
+import type { BuiltMesh, CommitHoursData, ContributionYear, Stats, Variant } from "@/lib/types";
+import type { Persona } from "@/lib/persona";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -43,16 +44,222 @@ function shortDate(iso: string): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
+/** What kind of day the peak commit hour describes. M16's one-word verdict. */
+function chronotype(peakHour: number): string {
+  if (peakHour >= 22 || peakHour < 5) return "night owl";
+  if (peakHour < 11) return "early bird";
+  if (peakHour < 18) return "daylight coder";
+  return "evening coder";
+}
+
+/**
+ * The commit day, hour by hour. One series of one magnitude, so it wears one
+ * ink: every bar the recessive edge tone, the single peak the accent, labels
+ * in text tokens. Small enough to live under the stat column without a legend
+ * or an axis; the caption carries the units and the honesty about sampling.
+ */
+function HourHistogram({ hours }: { hours: CommitHoursData }) {
+  const max = Math.max(1, ...hours.hours);
+  const peak = hours.hours.indexOf(Math.max(...hours.hours));
+  return (
+    <motion.div
+      className="mt-3 flex flex-col gap-1.5 border-t border-line pt-3"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5, ease: EASE, delay: 0.46 }}
+    >
+      <div className="flex items-end gap-[2px]" aria-hidden>
+        {hours.hours.map((v, h) => (
+          <div
+            key={h}
+            title={`${String(h).padStart(2, "0")}:00 · ${v.toLocaleString("en-GB")} commits`}
+            className={`w-[5px] rounded-t-[1px] ${h === peak ? "bg-accent" : "bg-edge"}`}
+            style={{ height: `${v === 0 ? 1 : Math.max(2, (v / max) * 26)}px` }}
+          />
+        ))}
+      </div>
+      <span className="text-[0.6rem] tracking-[0.14em] uppercase text-dim">
+        commits by local hour · peak {String(peak).padStart(2, "0")}:00 ·{" "}
+        <span className="text-mute">{chronotype(peak)}</span>
+      </span>
+      {hours.capped && (
+        <span className="text-[0.55rem] tracking-[0.12em] uppercase text-dim">
+          sample of {hours.sampled.toLocaleString("en-GB")} of{" "}
+          {hours.total.toLocaleString("en-GB")} commits
+        </span>
+      )}
+    </motion.div>
+  );
+}
+
+/**
+ * The developer starsign, worn as a small constellation. The stars are the
+ * sign's sigil (seeded by the login, so it is personal and stable); the lines
+ * draw themselves in once, oldest ritual in the book for saying "this was
+ * cast, not templated". One accent star burns brighter: the sign's anchor.
+ */
+const TIER_COLOR: Record<Persona["tier"], string> = {
+  legendary: "var(--color-accent)",
+  rare: "var(--color-fog)",
+  uncommon: "var(--color-mute)",
+  common: "var(--color-dim)",
+};
+
+function PersonaCard({ persona }: { persona: Persona }) {
+  const px = (v: number) => v * 100;
+  const [bx, by] = persona.sigil.points[persona.sigil.brightest];
+  return (
+    <motion.div
+      className="mt-3 flex flex-col gap-2 border-t border-line pt-3"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: EASE, delay: 0.55 }}
+    >
+      <div className="flex items-center gap-3">
+        <svg
+          viewBox="0 0 100 100"
+          className="h-14 w-14 shrink-0"
+          role="img"
+          aria-label={`${persona.name} sigil`}
+        >
+          {/* A faint chart ring turning far below perception speed: the card
+              keeps breathing after the draw-in without asking for attention. */}
+          <motion.g
+            style={{ transformOrigin: "50px 50px" }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 120, ease: "linear", repeat: Infinity }}
+          >
+            <circle
+              cx={50}
+              cy={50}
+              r={46}
+              fill="none"
+              stroke="var(--color-edge)"
+              strokeWidth={0.8}
+              strokeDasharray="3 9"
+              opacity={0.45}
+            />
+          </motion.g>
+          {persona.sigil.edges.map(([a, b], i) => (
+            <motion.line
+              key={`e${i}`}
+              x1={px(persona.sigil.points[a][0])}
+              y1={px(persona.sigil.points[a][1])}
+              x2={px(persona.sigil.points[b][0])}
+              y2={px(persona.sigil.points[b][1])}
+              stroke="var(--color-edge)"
+              strokeWidth={1.6}
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ duration: 0.6, ease: EASE, delay: 0.7 + i * 0.09 }}
+            />
+          ))}
+          {persona.sigil.points.map(([x, y], i) => {
+            const bright = i === persona.sigil.brightest;
+            const twinkleAt = persona.sigil.twinkle.indexOf(i);
+            return (
+              <motion.circle
+                key={`p${i}`}
+                cx={px(x)}
+                cy={px(y)}
+                r={bright ? 4 : 2.2}
+                fill={bright ? "var(--color-accent)" : "var(--color-mute)"}
+                initial={{ opacity: 0, scale: 0 }}
+                animate={
+                  twinkleAt >= 0
+                    ? { opacity: [1, 0.3, 1], scale: 1 }
+                    : { opacity: 1, scale: 1 }
+                }
+                transition={
+                  twinkleAt >= 0
+                    ? {
+                        opacity: {
+                          duration: 2.8 + twinkleAt * 1.1,
+                          ease: "easeInOut",
+                          repeat: Infinity,
+                          delay: 2 + twinkleAt * 0.9,
+                        },
+                        scale: { duration: 0.4, ease: EASE, delay: 0.75 + i * 0.07 },
+                      }
+                    : { duration: 0.4, ease: EASE, delay: 0.75 + i * 0.07 }
+                }
+                style={bright ? { filter: "drop-shadow(0 0 4px var(--color-accent))" } : undefined}
+              />
+            );
+          })}
+          {/* The anchor star wears a small cross-flare, drawn in last. */}
+          {[
+            [px(bx) - 8, px(by), px(bx) + 8, px(by)],
+            [px(bx), px(by) - 8, px(bx), px(by) + 8],
+          ].map(([x1, y1, x2, y2], i) => (
+            <motion.line
+              key={`f${i}`}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke="var(--color-accent)"
+              strokeWidth={0.7}
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 0.55 }}
+              transition={{ duration: 0.5, ease: EASE, delay: 1.35 + i * 0.12 }}
+            />
+          ))}
+        </svg>
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">starsign</span>
+            <span
+              className="text-[0.55rem] tracking-[0.18em] uppercase"
+              style={{ color: TIER_COLOR[persona.tier] }}
+            >
+              {persona.tier}
+            </span>
+          </div>
+          <div className="font-[family-name:var(--font-display)] text-[0.95rem] tracking-[-0.01em] text-fog">
+            {persona.name}
+          </div>
+          {persona.ascendant && (
+            <div className="text-[0.55rem] tracking-[0.14em] uppercase text-dim">
+              ascendant · {persona.ascendant.name.replace(/^The /, "")}
+            </div>
+          )}
+        </div>
+      </div>
+      <p className="max-w-[19rem] text-[0.64rem] leading-relaxed text-mute">{persona.line}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {persona.traits.map((t) => (
+          <span
+            key={t}
+            className="hairline rounded-full px-2 py-[3px] text-[0.55rem] tracking-[0.12em] uppercase text-dim"
+          >
+            {t}
+          </span>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 export function Hud({
   data,
   stats,
   mesh,
   variant,
+  yearLabel,
+  commitHours,
+  persona,
 }: {
   data: ContributionYear;
   stats: Stats;
   mesh: BuiltMesh;
   variant: Variant;
+  /** Override for the year line: a range ("2019–2025") or "owner/repo". */
+  yearLabel?: string;
+  /** M16: the hour-of-day histogram, when a single user year is on screen. */
+  commitHours?: CommitHoursData | null;
+  /** The developer starsign, when the subject is a person rather than a repo. */
+  persona?: Persona | null;
 }) {
   /**
    * The full readout is seven lines tall. It needs a screen with the height to
@@ -88,7 +295,7 @@ export function Hud({
           )}
         </div>
         <div className="mt-1.5 text-[0.66rem] tracking-[0.2em] uppercase text-dim">
-          {data.year} · {variant}
+          {yearLabel ?? data.year} · {variant}
         </div>
       </motion.div>
 
@@ -109,7 +316,9 @@ export function Hud({
         )}
         <Row
           value={stats.averagePerActiveDay}
-          label={`per active day · ${stats.busiestWeekday.slice(0, 3).toLowerCase()} heaviest`}
+          // Defensive on the weekday: a stats payload from another span shape
+          // must degrade to a shorter label, never take the whole HUD down.
+          label={`per active day${stats.busiestWeekday ? ` · ${stats.busiestWeekday.slice(0, 3).toLowerCase()} heaviest` : ""}`}
           delay={0.34}
           format={oneDecimal}
         />
@@ -123,7 +332,24 @@ export function Hud({
             {mesh.size.x.toFixed(0)} × {mesh.size.z.toFixed(0)} × {mesh.size.y.toFixed(0)} mm
           </span>
           <span className="tabular-nums">{mesh.triangles.toLocaleString("en-GB")} triangles</span>
+          {/* Composition, when the GraphQL path delivered it: what the year
+            was made OF, not just how much of it there was. */}
+          {data.totalPullRequests !== undefined && (
+            <span className="tabular-nums">
+              {(data.totalPullRequests ?? 0).toLocaleString("en-GB")} prs ·{" "}
+              {(data.totalIssues ?? 0).toLocaleString("en-GB")} issues ·{" "}
+              {(data.totalReviews ?? 0).toLocaleString("en-GB")} reviews
+            </span>
+          )}
+          {persona && (
+            <span className="tabular-nums">
+              {Math.round(persona.metrics.weekendShare * 100)}% weekends · longest gap{" "}
+              {persona.metrics.longestGap} days
+            </span>
+          )}
         </motion.div>
+        {commitHours && <HourHistogram hours={commitHours} />}
+        {persona && <PersonaCard persona={persona} />}
       </div>
       )}
 

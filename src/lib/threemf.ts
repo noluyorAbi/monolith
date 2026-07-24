@@ -1,5 +1,6 @@
 import { zip, type ZipEntry } from "./zip";
 import type { Part } from "./parts";
+import { slotForLevel, type ColourSlots } from "./slots";
 import type { Printer } from "./print";
 
 /**
@@ -33,6 +34,8 @@ export interface ThreeMfOptions {
   sampleData?: boolean;
   /** Plain text card describing the profile, carried inside the container. */
   card?: string;
+  /** Number of filament slots in play. Drives the per-object extruder binding. */
+  slots?: ColourSlots;
 }
 
 function esc(value: string): string {
@@ -140,5 +143,38 @@ export function buildThreeMf(parts: Part[], options: ThreeMfOptions): Buffer {
   if (options.card) {
     entries.push({ path: "Metadata/MONOLITH.txt", data: encoder.encode(options.card) });
   }
+  // M6 / marktanalyse 4.13: the Bambu and Orca flavour of 3MF carries
+  // model_settings.config with a per-object <metadata key="extruder"> entry.
+  // Both slicers read it on import, so the contribution intensities arrive
+  // already bound to their filament slot — zero clicks, in the two slicers
+  // MONOLITH already targets. It is a tiny, well-formed blob; unlike a full
+  // hand-written project_settings.config it does not segfault the app.
+  if (options.slots && options.slots > 1) {
+    entries.push({
+      path: "Metadata/model_settings.config",
+      data: encoder.encode(modelSettingsConfig(parts, options.slots)),
+    });
+  }
   return zip(entries);
+}
+
+/**
+ * Minimal Bambu/Orca model_settings.config. One `<object>` per part, each
+ * carrying its extruder (filament slot) so the import lands pre-assigned.
+ * Object ids match the <object id="N"> order in 3dmodel.model (1-based).
+ */
+function modelSettingsConfig(parts: Part[], slots: ColourSlots): string {
+  const objects = parts
+    .map((part, i) => {
+      const extruder = slotForLevel(part.level, slots);
+      return `    <object id="${i + 1}">\n      <metadata key="extruder" value="${extruder}"/>\n    </object>`;
+    })
+    .join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <model_settings>
+${objects}
+  </model_settings>
+</config>
+`;
 }

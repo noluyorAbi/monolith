@@ -28,6 +28,12 @@ import type { BuiltMesh } from "./types";
 export interface KitOptions {
   login: string;
   year: number;
+  /**
+   * What the object actually covers when it is not one calendar year: a
+   * lifetime span ("2016-2025"), a range, or a repo's window. Filenames and
+   * the print card show it in place of the bare year.
+   */
+  spanLabel?: string;
   variant: string;
   sizeMm: number;
   printer: Printer;
@@ -85,8 +91,13 @@ export function kitStem(o: {
   year: number;
   variant: string;
   sizeMm: number;
+  spanLabel?: string;
 }): string {
-  return `monolith-${o.login}-${o.year}-${o.variant}-${o.sizeMm}mm`;
+  // A repo subject's login is "owner/repo" and a range label carries dots;
+  // whatever lands in a filename gets flattened to filename-safe characters.
+  const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]+/g, "-");
+  const span = o.spanLabel && o.spanLabel !== String(o.year) ? o.spanLabel : String(o.year);
+  return `monolith-${safe(o.login)}-${safe(span)}-${o.variant}-${o.sizeMm}mm`;
 }
 
 export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): string {
@@ -99,7 +110,7 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
 
   const lines: string[] = [
     `MONOLITH`,
-    `${options.login} · ${options.year} · ${options.variant} · ${options.sizeMm} mm`,
+    `${options.login} · ${options.spanLabel ?? options.year} · ${options.variant} · ${options.sizeMm} mm`,
     ``,
   ];
 
@@ -145,7 +156,11 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
   if (slots > 1) {
     lines.push(
       `  Multi colour: the object arrives as ${parts.length} separate parts, one per`,
-      `  intensity. In the object list, set the filament on each part:`,
+      `  intensity. Each part is already bound to its filament slot in`,
+      `  Metadata/model_settings.config, so Bambu Studio and OrcaSlicer import it`,
+      `  pre-assigned — no per-part clicks for the two slicers that matter.`,
+      ``,
+      `  The assignment, for reference:`,
       ``,
     );
     for (const part of parts) {
@@ -153,9 +168,9 @@ export function printCard(parts: Part[], mesh: BuiltMesh, options: KitOptions): 
     }
     lines.push(
       ``,
-      `  Slicers do not read colour assignments out of a plain 3MF, so this is`,
-      `  two clicks per part rather than automatic. It is the honest version:`,
-      `  the parts are already separated for you, the assignment is yours.`,
+      `  Other slicers (PrusaSlicer, Cura) do not read the vendor config, so there`,
+      `  the assignment is yours, two clicks per part. The parts are already`,
+      `  separated for you either way.`,
       ``,
     );
   } else {
@@ -244,6 +259,7 @@ export function buildKitThreeMf(parts: Part[], mesh: BuiltMesh, options: KitOpti
     modelLicence: options.modelLicence,
     sampleData: options.sampleData,
     card: printCard(parts, mesh, options),
+    slots: options.slots,
   });
 }
 
