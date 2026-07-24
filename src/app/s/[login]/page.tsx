@@ -40,14 +40,25 @@ export default async function SharePage({ params, searchParams }: Props) {
   const sp = await searchParams;
   if (!LOGIN_RE.test(login)) notFound();
   const chosen = clampSelectableYear(typeof sp.year === "string" ? sp.year : undefined);
-  // F3: the share link carries the full configuration, so a deep link opens
-  // the object exactly as it was shared rather than at the defaults.
+  // F3/M13: the share link carries the full configuration, so a deep link
+  // opens the object exactly as it was shared rather than at the defaults.
+  // Everything the parser validated is forwarded: variant, size, dampening,
+  // palette, span (lifetime/range) and subject (repo skyline) included.
   const req = parseModelRequest(new URL(`http://localhost/?${new URLSearchParams(sp as Record<string, string>)}`));
   return (
     <MonolithApp
       initialLogin={login}
       initialYear={chosen}
       initialPaletteId={req.paletteId}
+      initialVariant={req.variant}
+      initialSizeMm={req.sizeMm}
+      initialDampening={req.dampening}
+      initialSpan={req.span}
+      initialFrom={req.from}
+      initialTo={req.to}
+      initialSubject={req.subject}
+      initialRepoOwner={req.repoOwner}
+      initialRepoName={req.repoName}
     />
   );
 }

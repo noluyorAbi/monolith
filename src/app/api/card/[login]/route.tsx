@@ -4,7 +4,8 @@ import { parseModelRequest } from "@/lib/request";
 import { buildMonolith } from "@/lib/build";
 import { printableParts } from "@/lib/parts";
 import { estimate, materialById, printerById, qualityById } from "@/lib/print";
-import { defaultPalette } from "@/lib/palettes";
+import { modelErrorResponse } from "@/lib/responses";
+import { paletteById } from "@/lib/palettes";
 
 export const runtime = "nodejs";
 
@@ -32,34 +33,47 @@ export async function GET(
   }
 
   const req = parseModelRequest(new URL(request.url));
-  // The login lives in the path for the card route; fall back to it when the
-  // shared query parser did not find one (it only reads the query string).
-  const login_ = req.login || login;
-  const data = await fetchContributionYear(login_, req.year);
-  const mesh = buildMonolith(data, { variant: req.variant, sizeMm: req.sizeMm, label: true });
-  const parts = printableParts(mesh);
-  const est = estimate(parts, materialById("pla"), qualityById("standard"), printerById("a1"));
-  const ramp = defaultPalette().ramp;
+  try {
+    // The path segment is the identity; the query string only styles the card.
+    // Reading a login out of the query would bypass the LOGIN_RE guard above.
+    const data = await fetchContributionYear(login, req.year);
+    const mesh = buildMonolith(data, {
+      variant: req.variant,
+      sizeMm: req.sizeMm,
+      label: true,
+      dampening: req.dampening,
+    });
+    const parts = printableParts(mesh);
+    const est = estimate(parts, materialById("pla"), qualityById("standard"), printerById("a1"));
+    // The card wears the palette the share link carries, so an embedded card
+    // matches the object it advertises.
+    const ramp = paletteById(req.paletteId).ramp;
 
-  const svg = renderCard({
-    login: data.login,
-    year: data.year,
-    total: data.total,
-    demo: data.demo,
-    weeks: data.weeks,
-    ramp,
-    filamentG: Math.round(est.grams),
-    printHours: est.hoursLow.toFixed(1),
-  });
+    const svg = renderCard({
+      login: data.login,
+      year: data.year,
+      total: data.total,
+      demo: data.demo,
+      weeks: data.weeks,
+      ramp,
+      filamentG: Math.round(est.grams),
+      printHours: est.hoursLow.toFixed(1),
+    });
 
-  const wantsPng = new URL(request.url).searchParams.get("format") === "png";
-  const headers = {
-    "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
-    "Content-Type": wantsPng ? "image/png" : "image/svg+xml",
-  };
-  // SVG is the native card format; PNG is offered for embeddable contexts
-  // that refuse SVG. We still author in SVG and let the client pick.
-  return new Response(svg, { headers });
+    // The card is SVG, full stop. It used to advertise ?format=png while
+    // returning SVG bytes under an image/png header, which decodes as a broken
+    // image everywhere PNG was actually needed; an honest SVG content type is
+    // strictly better than a mislabelled one.
+    return new Response(svg, {
+      headers: {
+        "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+        "Content-Type": "image/svg+xml",
+      },
+    });
+  } catch (err) {
+    // A mistyped README link is a 404, not a server error.
+    return modelErrorResponse(err);
+  }
 }
 
 function renderCard(opts: {

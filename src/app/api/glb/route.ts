@@ -1,7 +1,7 @@
-import { fetchContributionYear } from "@/lib/github";
+import { resolveModelSource } from "@/lib/github";
 import { LOGIN_RE, BadLoginError } from "@/lib/contributions";
 import { parseModelRequest } from "@/lib/request";
-import { buildMonolith } from "@/lib/build";
+import { buildMonolith, buildMultiYear } from "@/lib/build";
 import { modelErrorResponse } from "@/lib/responses";
 import { paletteById, defaultPalette } from "@/lib/palettes";
 import { writeGlb } from "@/lib/glb";
@@ -10,20 +10,24 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const req = parseModelRequest(new URL(request.url));
-  if (!LOGIN_RE.test(req.login)) {
+  if (req.subject !== "repo" && !LOGIN_RE.test(req.login)) {
     return modelErrorResponse(new BadLoginError(req.login));
   }
   try {
-    const data = await fetchContributionYear(req.login, req.year);
+    // Same resolver as every download: the GLB matches the viewer in every
+    // mode (single year, lifetime stack, range, repo skyline).
+    const src = await resolveModelSource(req);
     const palette = paletteById(req.paletteId) ?? defaultPalette();
-    const mesh = buildMonolith(data, {
+    const build = {
       variant: req.variant,
       sizeMm: req.sizeMm,
       label: true,
       dampening: req.dampening,
-    });
+    };
+    const mesh = src.multi ? buildMultiYear(src.multi, build) : buildMonolith(src.data, build);
     const glb = writeGlb(mesh, palette);
-    const file = `${req.login}-${req.year}-${req.variant}-${req.sizeMm}mm.glb`;
+    const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]+/g, "-");
+    const file = `${safe(src.who)}-${safe(src.spanLabel)}-${req.variant}-${req.sizeMm}mm.glb`;
     return new Response(new Uint8Array(glb), {
       headers: {
         "Content-Type": "model/gltf-binary",
