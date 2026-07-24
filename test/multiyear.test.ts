@@ -2,7 +2,7 @@ import { afterEach, test, vi } from "vitest";
 import assert from "node:assert";
 
 import { fetchContributionYears, fetchContributionRange, fetchLifetime, fetchRepoActivity, repoActivityToYear, fetchCommitHours, StatsPendingError, type RepoActivity } from "@/lib/github";
-import { pack, syntheticYear, computeStats, BadLoginError } from "@/lib/contributions";
+import { pack, splitRangeByYear, syntheticYear, computeStats, BadLoginError } from "@/lib/contributions";
 import { buildMultiYear, buildMonolith, fitsBed } from "@/lib/build";
 import { printerById } from "@/lib/print";
 import type { ContributionYear } from "@/lib/types";
@@ -120,26 +120,30 @@ test("the aliased GraphQL multi-year call parses every year from one response", 
   assert.equal(data.joinedAt, "2016-04-01");
 });
 
-test("buildMultiYear stacks years into a wider footprint than one year", () => {
+test("buildMultiYear stacks years in depth, keeping one year's width", () => {
   const parts = fakeMulti("octocat", [2021, 2022, 2023, 2024]);
   const one = buildMonolith(parts[0], { variant: "skyline", sizeMm: 120, label: false });
   const stacked = buildMultiYear(multiOf(parts), { variant: "skyline", sizeMm: 120, label: false });
-  assert.ok(stacked.size.x > one.size.x * 2.5, `stacked width ${stacked.size.x} vs single ${one.size.x}`);
+  // Years are terraces along Z: depth grows, width stays a single year's.
+  assert.ok(stacked.size.z > one.size.z * 2.5, `stacked depth ${stacked.size.z} vs single ${one.size.z}`);
+  assert.ok(stacked.size.x < one.size.x * 1.05, `width must stay one year's (${stacked.size.x} vs ${one.size.x})`);
   assert.ok(stacked.triangles > one.triangles, "stacked has more triangles than one year");
-  let minX = Infinity;
-  let maxX = -Infinity;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (let i = 0; i < stacked.positions.length; i += 3) {
     minX = Math.min(minX, stacked.positions[i]);
     maxX = Math.max(maxX, stacked.positions[i]);
+    minZ = Math.min(minZ, stacked.positions[i + 2]);
+    maxZ = Math.max(maxZ, stacked.positions[i + 2]);
   }
-  assert.ok(minX < 0 && maxX > 0, "object is centred on the origin");
+  assert.ok(minX < 0 && maxX > 0, "object is centred on X");
+  assert.ok(minZ < 0 && maxZ > 0, "object is centred on Z");
 });
 
-test("a multi-year stack wider than the bed is caught by fitsBed", () => {
+test("a multi-year stack deeper than the bed is caught by fitsBed", () => {
   const parts = fakeMulti("octocat", [2020, 2021, 2022, 2023, 2024, 2025]);
   const stacked = buildMultiYear(multiOf(parts), { variant: "skyline", sizeMm: 180, label: false });
   const mini = printerById("a1m"); // 180mm bed
-  assert.equal(fitsBed(mini, stacked.size.x), false);
+  assert.equal(fitsBed(mini, stacked.size.z), false);
 });
 
 test("streak stats are derived client-side from the calendar", () => {
@@ -165,6 +169,48 @@ test("milestone dates are engraved onto the base plate when present", () => {
     b.bounds.min[2] < a.bounds.min[2] - 0.1,
     `milestone text should reach past the plate wall (${b.bounds.min[2]} vs ${a.bounds.min[2]})`,
   );
+});
+
+test("a cross-year range re-slices into per-year rows; a single-year range stays one plate", () => {
+  const spread: ReturnType<typeof syntheticYear>["days"] = [];
+  for (const [date, count] of [
+    ["2023-08-01", 5],
+    ["2023-12-30", 2],
+    ["2024-03-01", 7],
+    ["2025-01-05", 1],
+  ] as const) {
+    spread.push({ date, count, level: 1 });
+  }
+  const range = pack("octocat", "octocat", 2023, spread, "html");
+  const multi = splitRangeByYear(range);
+  assert.ok(multi, "a 2023..2025 range must re-slice");
+  assert.equal(multi!.years.length, 3);
+  assert.equal(multi!.fromYear, 2023);
+  assert.equal(multi!.toYear, 2025);
+  assert.equal(multi!.totalCommits, 15);
+
+  const single = pack("octocat", "octocat", 2024, [{ date: "2024-05-01", count: 3, level: 1 }], "html");
+  assert.equal(splitRangeByYear(single), null, "one calendar year stays one plate");
+});
+
+test("terraced rows share one physical scale even when a year is partial", () => {
+  // A full year beside a half year: the half row must come out narrower, not
+  // blown up to full width with double-sized cells.
+  const full = syntheticYear("octocat", 2024);
+  const half = pack(
+    "octocat",
+    "octocat",
+    2025,
+    syntheticYear("octocat", 2025).days.slice(0, 182),
+    "synthetic",
+  );
+  const stacked = buildMultiYear(multiOf([full, half]), { variant: "skyline", sizeMm: 180, label: false });
+  // The stack's width is the FULL year's width; the half year occupies about
+  // half of it, so the overall footprint is still 180 across.
+  assert.ok(Math.abs(stacked.size.x - 180) < 1, `stack width ${stacked.size.x} should be the full year's 180`);
+  // Two rows deep.
+  const one = buildMonolith(full, { variant: "skyline", sizeMm: 180, label: false });
+  assert.ok(stacked.size.z > one.size.z * 1.8, `two rows expected, depth ${stacked.size.z}`);
 });
 
 test("multi-year print metrics report per-year millimetres, not a stack-wide rescale", () => {

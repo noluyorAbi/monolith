@@ -20,7 +20,7 @@ import { Story } from "./Story";
 import { PROJECT } from "@/lib/project";
 import { SIZES, VARIANTS, buildMonolith, buildMultiYear, sizeById } from "@/lib/build";
 import { DEFAULT_PRINTER_ID } from "@/lib/print";
-import { SELECTABLE_YEARS, availableYears, availableYearsFor, computeStats, yearFromDays } from "@/lib/contributions";
+import { SELECTABLE_YEARS, availableYears, availableYearsFor, computeStats, splitRangeByYear, yearFromDays } from "@/lib/contributions";
 import { AMBIENT_PALETTE, DEFAULT_PALETTE_ID, PALETTES, paletteById } from "@/lib/palettes";
 import {
   play,
@@ -31,6 +31,7 @@ import {
 } from "@/lib/sound";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { modelQuery, type ModelSpan, type ModelSubject } from "@/lib/request";
+import { derivePersona } from "@/lib/persona";
 import type { SizeId } from "@/lib/build";
 import type {
   BuiltMesh,
@@ -290,6 +291,13 @@ export function MonolithApp({
         play("tick");
       };
 
+      // A repo build without a repository would fetch /api/repo//?json and
+      // 404. Say what is missing instead of asking the network.
+      if (effSubject === "repo" && (!effRepoOwner || !effRepoName)) {
+        fail("Paste a repository URL first.");
+        return;
+      }
+
       let payload: { data?: ContributionYear; multi?: MultiYearData; stats: Stats };
       try {
         const endpoint =
@@ -300,7 +308,17 @@ export function MonolithApp({
               : effSpan === "range"
                 ? `/api/contributions?login=${encodeURIComponent(handle)}&from=${encodeURIComponent(effRangeFrom)}&to=${encodeURIComponent(effRangeTo)}`
                 : `/api/contributions?login=${encodeURIComponent(handle)}&year=${forYear}`;
-        const res = await fetch(endpoint);
+        let res = await fetch(endpoint);
+        // 503 means GitHub is still computing repo statistics (its documented
+        // 202 behaviour, surfaced with a Retry-After). That resolves in
+        // seconds, so wait it out here rather than making the person re-click.
+        for (let retry = 0; res.status === 503 && retry < 2; retry++) {
+          if (!alive()) return;
+          setSteps((prev) => [...prev, { label: "waiting", value: "GitHub is computing the statistics" }]);
+          await wait(3200);
+          if (!alive()) return;
+          res = await fetch(endpoint);
+        }
         if (!alive()) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -313,6 +331,14 @@ export function MonolithApp({
         return;
       }
       if (!alive()) return;
+
+      // A range that crosses calendar years renders as the same depth-wise
+      // terrace stack a lifetime object uses; one plate 150 weeks long is not
+      // an object, it is a ruler. User subject only: a repo's 52-week window
+      // is the same length as a normal year and stays one plate.
+      if (effSubject === "user" && effSpan === "range" && payload.data && !payload.multi) {
+        payload.multi = splitRangeByYear(payload.data) ?? undefined;
+      }
 
       // A year the account simply was not active in. GitHub answers it with a
       // perfectly valid calendar of zeroes, and building that would present an
@@ -484,6 +510,21 @@ export function MonolithApp({
     commitHours.login.toLowerCase() === login.toLowerCase()
       ? commitHours
       : null;
+
+  // The developer starsign: cast from the calendar on screen, refined by the
+  // hour histogram once it lands. A repository has working hours but not a
+  // temperament, so the sign is a user-only reading. For a multi-year object
+  // the reading spans every rendered year: mixing one year's days with the
+  // roll-up's stats once produced "active 525% of days".
+  const persona = useMemo(() => {
+    if (!data || !stats || subject !== "user") return null;
+    if (multi) {
+      const days = multi.years.flatMap((y) => y.days);
+      const merged = { ...data, days, total: multi.totalCommits };
+      return derivePersona(merged, computeStats(merged), null);
+    }
+    return derivePersona(data, stats, hoursForHud);
+  }, [data, stats, multi, subject, hoursForHud]);
 
   const reset = useCallback(() => {
     runId.current++;
@@ -794,7 +835,10 @@ export function MonolithApp({
                 className="pointer-events-none absolute bottom-[20%] right-[max(3rem,6vw)] z-20 hidden text-right text-[0.58rem] leading-relaxed tracking-[0.2em] uppercase text-dim min-[900px]:block"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+                // The entrance waits its turn; the exit must not. Without its
+                // own transition the exit inherits the 0.9 s entrance delay
+                // and this caption hangs over the forge readout.
+                exit={{ opacity: 0, transition: { duration: 0.2, delay: 0 } }}
                 transition={{ duration: 0.5, delay: 0.9, ease: [0.16, 1, 0.3, 1] }}
               >
                 <span className="normal-case tracking-[0.12em] text-mute">{ghost.login}</span> · {ghost.year}
@@ -814,7 +858,9 @@ export function MonolithApp({
               className="pointer-events-none absolute bottom-[13%] right-[max(3rem,6vw)] z-20 flex items-center gap-2 text-[0.58rem] tracking-[0.22em] uppercase text-dim"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              // Exit immediately: inheriting the 1.6 s entrance delay left
+              // "drag to turn it" floating over the forge until 90%.
+              exit={{ opacity: 0, transition: { duration: 0.2, delay: 0 } }}
               transition={{ duration: 0.5, delay: 1.6, ease: [0.16, 1, 0.3, 1] }}
             >
               <motion.span
@@ -844,7 +890,7 @@ export function MonolithApp({
                 className="pointer-events-auto absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 sm:bottom-[3.4rem] text-[0.56rem] tracking-[0.24em] uppercase text-dim transition-colors duration-150 hover:text-fog"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: scrolled ? 0 : 1 }}
-                exit={{ opacity: 0 }}
+                exit={{ opacity: 0, transition: { duration: 0.2, delay: 0 } }}
                 transition={{ duration: 0.45, delay: scrolled ? 0 : 1.1, ease: [0.16, 1, 0.3, 1] }}
                 aria-hidden={scrolled}
                 inert={scrolled}
@@ -867,7 +913,7 @@ export function MonolithApp({
                 className="pointer-events-none absolute inset-x-0 bottom-0 z-20 hidden items-center justify-between px-5 pb-5 text-[0.58rem] tracking-[0.18em] uppercase text-dim sm:flex sm:px-7 sm:pb-7"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+                exit={{ opacity: 0, transition: { duration: 0.2, delay: 0 } }}
                 transition={{ duration: 0.4, delay: 0.3 }}
               >
                 <span>Source available · the files are free · print it yourself</span>
@@ -926,7 +972,7 @@ export function MonolithApp({
 
         {phase === "live" && data && stats && mesh && (
           <div className="pointer-events-none absolute inset-0 z-20">
-            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} commitHours={hoursForHud} />
+            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} commitHours={hoursForHud} persona={persona} />
           </div>
         )}
 
