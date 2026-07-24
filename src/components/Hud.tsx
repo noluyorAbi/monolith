@@ -98,8 +98,16 @@ function HourHistogram({ hours }: { hours: CommitHoursData }) {
  * draw themselves in once, oldest ritual in the book for saying "this was
  * cast, not templated". One accent star burns brighter: the sign's anchor.
  */
+const TIER_COLOR: Record<Persona["tier"], string> = {
+  legendary: "var(--color-accent)",
+  rare: "var(--color-fog)",
+  uncommon: "var(--color-mute)",
+  common: "var(--color-dim)",
+};
+
 function PersonaCard({ persona }: { persona: Persona }) {
   const px = (v: number) => v * 100;
+  const [bx, by] = persona.sigil.points[persona.sigil.brightest];
   return (
     <motion.div
       className="mt-3 flex flex-col gap-2 border-t border-line pt-3"
@@ -110,10 +118,28 @@ function PersonaCard({ persona }: { persona: Persona }) {
       <div className="flex items-center gap-3">
         <svg
           viewBox="0 0 100 100"
-          className="h-12 w-12 shrink-0"
+          className="h-14 w-14 shrink-0"
           role="img"
           aria-label={`${persona.name} sigil`}
         >
+          {/* A faint chart ring turning far below perception speed: the card
+              keeps breathing after the draw-in without asking for attention. */}
+          <motion.g
+            style={{ transformOrigin: "50px 50px" }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 120, ease: "linear", repeat: Infinity }}
+          >
+            <circle
+              cx={50}
+              cy={50}
+              r={46}
+              fill="none"
+              stroke="var(--color-edge)"
+              strokeWidth={0.8}
+              strokeDasharray="3 9"
+              opacity={0.45}
+            />
+          </motion.g>
           {persona.sigil.edges.map(([a, b], i) => (
             <motion.line
               key={`e${i}`}
@@ -130,6 +156,7 @@ function PersonaCard({ persona }: { persona: Persona }) {
           ))}
           {persona.sigil.points.map(([x, y], i) => {
             const bright = i === persona.sigil.brightest;
+            const twinkleAt = persona.sigil.twinkle.indexOf(i);
             return (
               <motion.circle
                 key={`p${i}`}
@@ -138,18 +165,65 @@ function PersonaCard({ persona }: { persona: Persona }) {
                 r={bright ? 4 : 2.2}
                 fill={bright ? "var(--color-accent)" : "var(--color-mute)"}
                 initial={{ opacity: 0, scale: 0 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.4, ease: EASE, delay: 0.75 + i * 0.07 }}
+                animate={
+                  twinkleAt >= 0
+                    ? { opacity: [1, 0.3, 1], scale: 1 }
+                    : { opacity: 1, scale: 1 }
+                }
+                transition={
+                  twinkleAt >= 0
+                    ? {
+                        opacity: {
+                          duration: 2.8 + twinkleAt * 1.1,
+                          ease: "easeInOut",
+                          repeat: Infinity,
+                          delay: 2 + twinkleAt * 0.9,
+                        },
+                        scale: { duration: 0.4, ease: EASE, delay: 0.75 + i * 0.07 },
+                      }
+                    : { duration: 0.4, ease: EASE, delay: 0.75 + i * 0.07 }
+                }
                 style={bright ? { filter: "drop-shadow(0 0 4px var(--color-accent))" } : undefined}
               />
             );
           })}
+          {/* The anchor star wears a small cross-flare, drawn in last. */}
+          {[
+            [px(bx) - 8, px(by), px(bx) + 8, px(by)],
+            [px(bx), px(by) - 8, px(bx), px(by) + 8],
+          ].map(([x1, y1, x2, y2], i) => (
+            <motion.line
+              key={`f${i}`}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke="var(--color-accent)"
+              strokeWidth={0.7}
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 0.55 }}
+              transition={{ duration: 0.5, ease: EASE, delay: 1.35 + i * 0.12 }}
+            />
+          ))}
         </svg>
         <div className="min-w-0">
-          <div className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">starsign</div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">starsign</span>
+            <span
+              className="text-[0.55rem] tracking-[0.18em] uppercase"
+              style={{ color: TIER_COLOR[persona.tier] }}
+            >
+              {persona.tier}
+            </span>
+          </div>
           <div className="font-[family-name:var(--font-display)] text-[0.95rem] tracking-[-0.01em] text-fog">
             {persona.name}
           </div>
+          {persona.ascendant && (
+            <div className="text-[0.55rem] tracking-[0.14em] uppercase text-dim">
+              ascendant · {persona.ascendant.name.replace(/^The /, "")}
+            </div>
+          )}
         </div>
       </div>
       <p className="max-w-[19rem] text-[0.64rem] leading-relaxed text-mute">{persona.line}</p>

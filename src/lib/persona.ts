@@ -9,6 +9,8 @@ import type { CommitHoursData, ContributionYear, Stats } from "./types";
  * sigil is seeded by the login so two Nightsmiths still wear different stars.
  */
 
+export type PersonaTier = "legendary" | "rare" | "uncommon" | "common";
+
 export interface PersonaMetrics {
   /** Share of days in the window with at least one contribution, 0..1. */
   cadence: number;
@@ -22,6 +24,11 @@ export interface PersonaMetrics {
   longestGap: number;
   /** Peak local commit hour 0..23, or null when the histogram never arrived. */
   peakHour: number | null;
+  /**
+   * A genuine second commit hour, at least six hours from the peak and
+   * carrying most of its weight, or null. Two work-lives in one calendar.
+   */
+  secondHour: number | null;
 }
 
 export interface Persona {
@@ -30,11 +37,23 @@ export interface Persona {
   name: string;
   /** One sentence that reads like a horoscope written by a build log. */
   line: string;
+  /** How uncommon the shape is; worn as a small coloured tag. */
+  tier: PersonaTier;
   /** Two or three short evidence chips, so the sign is a measurement, not flattery. */
   traits: string[];
+  /** The next sign down the ladder that also matches: the undertone. */
+  ascendant: { id: string; name: string } | null;
   metrics: PersonaMetrics;
-  /** A small constellation, seeded by the login: points in 0..1, edges by index. */
-  sigil: { points: [number, number][]; edges: [number, number][]; brightest: number };
+  /**
+   * A small constellation, seeded by the login: points in 0..1, edges by
+   * index, plus which stars twinkle after the draw-in.
+   */
+  sigil: {
+    points: [number, number][];
+    edges: [number, number][];
+    brightest: number;
+    twinkle: number[];
+  };
 }
 
 export function computePersonaMetrics(
@@ -55,8 +74,25 @@ export function computePersonaMetrics(
       gap = 0;
     }
   }
-  const peakHour =
-    hours && hours.sampled > 0 ? hours.hours.indexOf(Math.max(...hours.hours)) : null;
+  let peakHour: number | null = null;
+  let secondHour: number | null = null;
+  if (hours && hours.sampled > 0) {
+    const peak = Math.max(...hours.hours);
+    peakHour = hours.hours.indexOf(peak);
+    // A second life: another hour at least six hours away (circularly) that
+    // still carries most of the peak's weight. Needs a real sample behind it.
+    if (hours.sampled >= 30) {
+      let best = 0;
+      for (let h = 0; h < 24; h++) {
+        const dist = Math.min(Math.abs(h - peakHour), 24 - Math.abs(h - peakHour));
+        if (dist < 6) continue;
+        if (hours.hours[h] > best) {
+          best = hours.hours[h];
+          if (best >= peak * 0.55) secondHour = h;
+        }
+      }
+    }
+  }
   return {
     cadence: data.days.length ? stats.activeDays / data.days.length : 0,
     weekendShare: data.total ? weekend / data.total : 0,
@@ -67,6 +103,7 @@ export function computePersonaMetrics(
     longestStreak: stats.longestStreak,
     longestGap,
     peakHour,
+    secondHour,
   };
 }
 
@@ -74,76 +111,131 @@ interface SignDef {
   id: string;
   name: string;
   line: string;
+  tier: PersonaTier;
   /** First predicate that matches wins; ordered most-specific first. */
   when: (m: PersonaMetrics) => boolean;
 }
 
 const night = (h: number | null) => h !== null && (h >= 22 || h < 5);
 const dawn = (h: number | null) => h !== null && h >= 5 && h < 10;
+const dusk = (h: number | null) => h !== null && h >= 17 && h < 22;
 
 /**
  * Ordered most-specific to most-general; the last entry always matches, so
  * every account gets a sign. Names stay in the forge register the rest of the
- * product speaks.
+ * product speaks. The tier is the honest frequency of the shape, worn as a
+ * small tag: legendary shapes are genuinely hard to produce by accident.
  */
 const SIGNS: SignDef[] = [
   {
+    id: "eclipse",
+    name: "The Eclipse",
+    tier: "legendary",
+    line: "Months of dark, then the whole sky at once. Absence is part of the orbit, not the end of it.",
+    when: (m) => m.longestGap >= 100 && m.spike >= 6,
+  },
+  {
+    id: "twinflame",
+    name: "The Twin Flame",
+    tier: "rare",
+    line: "Two fires, hours apart: one before the world wakes, one after it sleeps. Both are real.",
+    when: (m) => m.peakHour !== null && m.secondHour !== null,
+  },
+  {
     id: "nightsmith",
     name: "The Nightsmith",
+    tier: "rare",
     line: "Forges after midnight, steady as a furnace. The quiet hours are the workshop.",
     when: (m) => night(m.peakHour) && m.cadence >= 0.45,
   },
   {
-    id: "comet",
-    name: "The Comet",
-    line: "Long dark orbits, then a tail of fire across the calendar. Arrival is an event.",
-    when: (m) => m.spike >= 5 && m.cadence < 0.4,
-  },
-  {
     id: "dawnwright",
     name: "The Dawnwright",
+    tier: "rare",
     line: "First light, first commit. The day is built before anyone else has opened a terminal.",
     when: (m) => dawn(m.peakHour),
   },
   {
+    id: "moth",
+    name: "The Moth",
+    tier: "uncommon",
+    line: "Circles back to the lamp every evening. The day ends where the focus begins.",
+    when: (m) => dusk(m.peakHour) && m.cadence >= 0.35,
+  },
+  {
     id: "alchemist",
     name: "The Weekend Alchemist",
+    tier: "uncommon",
     line: "Weekdays belong to someone else; Saturday turns base hours into gold.",
     when: (m) => m.weekendShare >= 0.34,
   },
   {
+    id: "clockwork",
+    name: "The Clockwork",
+    tier: "uncommon",
+    line: "Runs on office time to the minute; the weekend is a scheduled outage.",
+    when: (m) => m.weekendShare <= 0.05 && m.cadence >= 0.35,
+  },
+  {
+    id: "comet",
+    name: "The Comet",
+    tier: "rare",
+    line: "Long dark orbits, then a tail of fire across the calendar. Arrival is an event.",
+    when: (m) => m.spike >= 5 && m.cadence < 0.4,
+  },
+  {
+    id: "supernova",
+    name: "The Supernova",
+    tier: "legendary",
+    line: "A busy sky, and still one day outshines the rest of the year combined. It was visible from space.",
+    when: (m) => m.spike >= 12,
+  },
+  {
+    id: "perennial",
+    name: "The Perennial",
+    tier: "legendary",
+    line: "Blooms every single day, all seasons, no theatrics. The rarest shape: relentless and even.",
+    when: (m) => m.cadence >= 0.85 && m.spike < 3,
+  },
+  {
     id: "metronome",
     name: "The Metronome",
+    tier: "uncommon",
     line: "Rarely loud, never silent. The streak is the achievement; the calendar keeps the beat.",
     when: (m) => m.cadence >= 0.62 && m.spike < 4,
   },
   {
     id: "stormcaller",
     name: "The Stormcaller",
+    tier: "uncommon",
     line: "Calm skies, then a day that towers over the month. The pressure builds, and lands at once.",
     when: (m) => m.spike >= 6,
   },
   {
     id: "keeper",
     name: "The Streakkeeper",
+    tier: "uncommon",
     line: "Guards an unbroken line the way a lighthouse guards a coast: daily, deliberately.",
     when: (m) => m.longestStreak >= 30,
   },
   {
     id: "tidewalker",
     name: "The Tidewalker",
+    tier: "common",
     line: "Comes and goes with the moon: weeks of flow, weeks of ebb, and the work rises with each return.",
     when: (m) => m.longestGap >= 21 && m.cadence >= 0.25,
   },
   {
     id: "lantern",
     name: "The Lantern",
+    tier: "common",
     line: "A small light most days. Not the brightest in the sky, but the one you navigate by.",
     when: (m) => m.cadence >= 0.4,
   },
   {
     id: "cartographer",
     name: "The Cartographer",
+    tier: "common",
     line: "Charts the year in careful expeditions: out, map something real, return, rest.",
     when: () => true,
   },
@@ -189,11 +281,46 @@ function castSigil(seed: string): Persona["sigil"] {
   // One chord back across the figure, never duplicating a walk edge.
   const from = Math.floor(rnd() * (count - 3));
   edges.push([from, from + 2 + Math.floor(rnd() * (count - from - 3))]);
-  return { points, edges, brightest: Math.floor(rnd() * count) };
+  const brightest = Math.floor(rnd() * count);
+  // Two lesser stars twinkle after the draw-in; never the anchor star, whose
+  // steadiness is the point.
+  const twinkle: number[] = [];
+  while (twinkle.length < 2) {
+    const i = Math.floor(rnd() * count);
+    if (i !== brightest && !twinkle.includes(i)) twinkle.push(i);
+  }
+  return { points, edges, brightest, twinkle };
 }
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
+
+/** The one measurement that made this sign fire; leads the evidence chips. */
+function signatureTrait(id: string, m: PersonaMetrics): string | null {
+  switch (id) {
+    case "eclipse":
+      return `silent ${m.longestGap} days straight`;
+    case "twinflame":
+      return m.secondHour !== null && m.peakHour !== null
+        ? `burns at ${hh(m.peakHour)} + ${hh(m.secondHour)}`
+        : null;
+    case "supernova":
+    case "stormcaller":
+    case "comet":
+      return `peak day ×${m.spike.toFixed(0)} the average`;
+    case "perennial":
+    case "keeper":
+      return `${m.longestStreak}-day streak`;
+    case "alchemist":
+      return `${pct(m.weekendShare)} on weekends`;
+    case "clockwork":
+      return `${pct(1 - m.weekendShare)} on weekdays`;
+    case "tidewalker":
+      return `${m.longestGap}-day ebb`;
+    default:
+      return null;
+  }
+}
 
 export function derivePersona(
   data: ContributionYear,
@@ -201,19 +328,33 @@ export function derivePersona(
   hours?: CommitHoursData | null,
 ): Persona {
   const metrics = computePersonaMetrics(data, stats, hours);
-  const sign = SIGNS.find((s) => s.when(metrics))!;
+  const idx = SIGNS.findIndex((s) => s.when(metrics));
+  const sign = SIGNS[idx];
+  // The undertone: the next sign down the ladder that also matches. The
+  // fallback never counts; an ascendant must be earned, not defaulted.
+  const asc = SIGNS.slice(idx + 1, -1).find((s) => s.when(metrics)) ?? null;
 
-  const traits: string[] = [`active ${pct(metrics.cadence)} of days`];
-  if (metrics.peakHour !== null) traits.push(`peak ${hh(metrics.peakHour)}`);
-  if (metrics.weekendShare >= 0.25) traits.push(`${pct(metrics.weekendShare)} on weekends`);
-  else if (metrics.longestStreak >= 10) traits.push(`${metrics.longestStreak}-day streak`);
-  else if (metrics.spike >= 4) traits.push(`peak day ×${metrics.spike.toFixed(0)} the average`);
+  const traits: string[] = [];
+  const lead = signatureTrait(sign.id, metrics);
+  if (lead) traits.push(lead);
+  traits.push(`active ${pct(metrics.cadence)} of days`);
+  if (metrics.peakHour !== null && sign.id !== "twinflame") traits.push(`peak ${hh(metrics.peakHour)}`);
+  if (traits.length < 3) {
+    if (metrics.weekendShare >= 0.25 && sign.id !== "alchemist")
+      traits.push(`${pct(metrics.weekendShare)} on weekends`);
+    else if (metrics.longestStreak >= 10 && lead !== `${metrics.longestStreak}-day streak`)
+      traits.push(`${metrics.longestStreak}-day streak`);
+    else if (metrics.spike >= 4 && !lead?.startsWith("peak day"))
+      traits.push(`peak day ×${metrics.spike.toFixed(0)} the average`);
+  }
 
   return {
     id: sign.id,
     name: sign.name,
     line: sign.line,
+    tier: sign.tier,
     traits: traits.slice(0, 3),
+    ascendant: asc ? { id: asc.id, name: asc.name } : null,
     metrics,
     sigil: castSigil(`${data.login.toLowerCase()}:${sign.id}`),
   };

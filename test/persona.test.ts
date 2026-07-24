@@ -46,10 +46,56 @@ test("a weekend-heavy year casts the Weekend Alchemist", () => {
   assert.ok(p.traits.some((t) => t.includes("weekends")));
 });
 
-test("a steady every-day year casts the Metronome", () => {
+test("a literally-every-day even year casts the legendary Perennial", () => {
   const data = year(() => 3);
   const p = derivePersona(data, computeStats(data));
+  assert.equal(p.id, "perennial");
+  assert.equal(p.tier, "legendary");
+});
+
+test("a steady but not daily year casts the Metronome, with an earned ascendant", () => {
+  const data = year((i) => (i % 4 === 3 ? 0 : 3));
+  const p = derivePersona(data, computeStats(data));
   assert.equal(p.id, "metronome");
+  assert.equal(p.ascendant?.id, "lantern", "the next matching sign down the ladder");
+});
+
+test("months of silence broken by a towering return cast the Eclipse", () => {
+  const data = year((i) => (i < 200 ? (i % 2 ? 2 : 1) : i === 300 ? 50 : 0));
+  const p = derivePersona(data, computeStats(data));
+  assert.equal(p.id, "eclipse");
+  assert.equal(p.tier, "legendary");
+  assert.ok(p.traits.some((t) => t.includes("silent")), "the gap is the evidence");
+});
+
+test("two genuine commit-hour peaks cast the Twin Flame", () => {
+  const data = year(() => 2);
+  const hours = new Array(24).fill(0);
+  hours[7] = 30;
+  hours[23] = 20;
+  const p = derivePersona(data, computeStats(data), {
+    login: "octocat",
+    year: 2025,
+    hours,
+    total: 50,
+    sampled: 50,
+    capped: false,
+  });
+  assert.equal(p.id, "twinflame");
+  assert.ok(p.traits.some((t) => t.includes("07:00") && t.includes("23:00")));
+});
+
+test("a colossal day over a busy calendar casts the Supernova, not the Comet", () => {
+  const data = year((i) => (i === 100 ? 200 : 1));
+  const p = derivePersona(data, computeStats(data));
+  assert.equal(p.id, "supernova");
+});
+
+test("a strict weekday machine casts the Clockwork", () => {
+  const data = year((_, wd) => (wd === 0 || wd === 6 ? 0 : 4));
+  const p = derivePersona(data, computeStats(data));
+  assert.equal(p.id, "clockwork");
+  assert.ok(p.traits.some((t) => t.includes("weekdays")));
 });
 
 test("a night peak on a steady year casts the Nightsmith", () => {
