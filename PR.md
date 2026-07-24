@@ -309,4 +309,17 @@ the chosen size, depth still grows per year for the bed check. Verified live for
 skyline, wave and ring. Tests 88 → 99, including a bottom-face span assertion that
 fails on N loose plates.
 
+**Plate follow-ups:** the plate is sized from each row's nominal calendar
+footprint rather than tower positions, so sparse or empty years still own a
+full terrace (labels no longer float in air); each terrace's year is engraved
+on the plate's right side wall via a new `engraveWallRight` helper.
+
+**Starsigns v2:** the sign ladder grows to 16 with honest rarity tiers
+(Eclipse / Supernova / Perennial legendary; Twin Flame reads a genuine second
+commit-hour peak off the histogram; Moth and Clockwork fill the middle), every
+persona carries an earned ascendant, traits lead with the deciding
+measurement, and the sigil card wears the tier colour, names the ascendant and
+stays alive after draw-in (seeded twinkle, anchor cross-flare, slow chart
+ring). Tests 99 → 106.
+
 *Generated for review on `feat/market-features`. Merge target: `main`. Pushed; PR #6 open.*
