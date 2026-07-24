@@ -255,6 +255,19 @@ export function MonolithApp({
   // the persona on screen (hour-refined included), so toggling the flag or a
   // late histogram both rebuild the object; the key makes that comparable
   // against what the forge built.
+  // The shareable sign-card image for the reading on screen.
+  const signCardUrl = useMemo(() => {
+    if (!persona) return null;
+    const p = new URLSearchParams({ login, year: String(year), sign: persona.id });
+    if (span === "lifetime") p.set("span", "lifetime");
+    else if (span === "range" && rangeFrom && rangeTo) {
+      p.set("span", "range");
+      p.set("from", rangeFrom);
+      p.set("to", rangeTo);
+    }
+    return `/api/sign?${p}`;
+  }, [persona, login, year, span, rangeFrom, rangeTo]);
+
   const sigilOpt = useMemo(
     () =>
       flags.includes("sigil") && persona
@@ -1014,7 +1027,7 @@ export function MonolithApp({
 
         {phase === "live" && data && stats && mesh && (
           <div className="pointer-events-none absolute inset-0 z-20">
-            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} commitHours={hoursForHud} persona={persona} />
+            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} commitHours={hoursForHud} persona={persona} signCardUrl={signCardUrl} />
           </div>
         )}
 

@@ -298,8 +298,16 @@ const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
 /** Every sign id the share contract may carry. */
 export const SIGN_IDS = SIGNS.map((s) => s.id);
 
+/** Public face of a sign, for surfaces that receive only its id. */
+export function signInfo(
+  id: string,
+): { id: string; name: string; tier: PersonaTier; line: string } | null {
+  const s = SIGNS.find((x) => x.id === id);
+  return s ? { id: s.id, name: s.name, tier: s.tier, line: s.line } : null;
+}
+
 export function signName(id: string): string | null {
-  return SIGNS.find((s) => s.id === id)?.name ?? null;
+  return signInfo(id)?.name ?? null;
 }
 
 /**
@@ -313,11 +321,11 @@ export function sigilFor(
   login: string,
   signId: string,
   spanKey: string,
-): { points: [number, number][]; edges: [number, number][]; name: string } | null {
+): (Persona["sigil"] & { name: string }) | null {
   const name = signName(signId);
   if (!name) return null;
   const sigil = castSigil(`${login.toLowerCase()}:${signId}${spanKey ? `:${spanKey}` : ""}`);
-  return { points: sigil.points, edges: sigil.edges, name };
+  return { ...sigil, name };
 }
 
 /** The one measurement that made this sign fire; leads the evidence chips. */

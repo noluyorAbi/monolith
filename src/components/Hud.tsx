@@ -105,7 +105,15 @@ const TIER_COLOR: Record<Persona["tier"], string> = {
   common: "var(--color-dim)",
 };
 
-function PersonaCard({ persona, yearLabel }: { persona: Persona; yearLabel: string }) {
+function PersonaCard({
+  persona,
+  yearLabel,
+  signCardUrl,
+}: {
+  persona: Persona;
+  yearLabel: string;
+  signCardUrl?: string | null;
+}) {
   const px = (v: number) => v * 100;
   const [bx, by] = persona.sigil.points[persona.sigil.brightest];
   return (
@@ -229,7 +237,7 @@ function PersonaCard({ persona, yearLabel }: { persona: Persona; yearLabel: stri
         </div>
       </div>
       <p className="max-w-[19rem] text-[0.64rem] leading-relaxed text-mute">{persona.line}</p>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         {persona.traits.map((t) => (
           <span
             key={t}
@@ -238,6 +246,16 @@ function PersonaCard({ persona, yearLabel }: { persona: Persona; yearLabel: stri
             {t}
           </span>
         ))}
+        {signCardUrl && (
+          <a
+            href={signCardUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="pointer-events-auto rounded-full px-2 py-[3px] text-[0.55rem] tracking-[0.12em] uppercase text-dim underline decoration-line underline-offset-2 transition-colors hover:text-fog"
+          >
+            card ↗
+          </a>
+        )}
       </div>
     </motion.div>
   );
@@ -251,6 +269,7 @@ export function Hud({
   yearLabel,
   commitHours,
   persona,
+  signCardUrl,
 }: {
   data: ContributionYear;
   stats: Stats;
@@ -262,6 +281,8 @@ export function Hud({
   commitHours?: CommitHoursData | null;
   /** The developer starsign, when the subject is a person rather than a repo. */
   persona?: Persona | null;
+  /** Link to the square sign-card image for this reading. */
+  signCardUrl?: string | null;
 }) {
   /**
    * The full readout is seven lines tall. It needs a screen with the height to
@@ -351,7 +372,13 @@ export function Hud({
           )}
         </motion.div>
         {commitHours && <HourHistogram hours={commitHours} />}
-        {persona && <PersonaCard persona={persona} yearLabel={yearLabel ?? String(data.year)} />}
+        {persona && (
+          <PersonaCard
+            persona={persona}
+            yearLabel={yearLabel ?? String(data.year)}
+            signCardUrl={signCardUrl}
+          />
+        )}
       </div>
       )}
 
