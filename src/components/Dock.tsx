@@ -307,14 +307,30 @@ export function Dock(props: DockProps) {
                       type="date"
                       value={props.rangeFrom}
                       onChange={(e) => props.onRangeFrom(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") props.onRebuild({ span: "range" });
+                      }}
                       className="h-9 rounded-[5px] border border-line bg-transparent px-2 text-[0.62rem] text-fog outline-none focus:border-edge sm:h-auto"
                     />
                     <input
                       type="date"
                       value={props.rangeTo}
                       onChange={(e) => props.onRangeTo(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") props.onRebuild({ span: "range" });
+                      }}
                       className="h-9 rounded-[5px] border border-line bg-transparent px-2 text-[0.62rem] text-fog outline-none focus:border-edge sm:h-auto"
                     />
+                    <Hint label="Rebuild for this window">
+                      <button
+                        type="button"
+                        onClick={() => props.onRebuild({ span: "range" })}
+                        aria-label="Apply date range"
+                        className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                      >
+                        →
+                      </button>
+                    </Hint>
                   </Group>
                 )}
 

@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { Ticker } from "./Ticker";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import type { BuiltMesh, ContributionYear, Stats, Variant } from "@/lib/types";
+import type { BuiltMesh, CommitHoursData, ContributionYear, Stats, Variant } from "@/lib/types";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -43,12 +43,61 @@ function shortDate(iso: string): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
+/** What kind of day the peak commit hour describes. M16's one-word verdict. */
+function chronotype(peakHour: number): string {
+  if (peakHour >= 22 || peakHour < 5) return "night owl";
+  if (peakHour < 11) return "early bird";
+  if (peakHour < 18) return "daylight coder";
+  return "evening coder";
+}
+
+/**
+ * The commit day, hour by hour. One series of one magnitude, so it wears one
+ * ink: every bar the recessive edge tone, the single peak the accent, labels
+ * in text tokens. Small enough to live under the stat column without a legend
+ * or an axis; the caption carries the units and the honesty about sampling.
+ */
+function HourHistogram({ hours }: { hours: CommitHoursData }) {
+  const max = Math.max(1, ...hours.hours);
+  const peak = hours.hours.indexOf(Math.max(...hours.hours));
+  return (
+    <motion.div
+      className="mt-3 flex flex-col gap-1.5 border-t border-line pt-3"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5, ease: EASE, delay: 0.46 }}
+    >
+      <div className="flex items-end gap-[2px]" aria-hidden>
+        {hours.hours.map((v, h) => (
+          <div
+            key={h}
+            title={`${String(h).padStart(2, "0")}:00 · ${v.toLocaleString("en-GB")} commits`}
+            className={`w-[5px] rounded-t-[1px] ${h === peak ? "bg-accent" : "bg-edge"}`}
+            style={{ height: `${v === 0 ? 1 : Math.max(2, (v / max) * 26)}px` }}
+          />
+        ))}
+      </div>
+      <span className="text-[0.6rem] tracking-[0.14em] uppercase text-dim">
+        commits by local hour · peak {String(peak).padStart(2, "0")}:00 ·{" "}
+        <span className="text-mute">{chronotype(peak)}</span>
+      </span>
+      {hours.capped && (
+        <span className="text-[0.55rem] tracking-[0.12em] uppercase text-dim">
+          sample of {hours.sampled.toLocaleString("en-GB")} of{" "}
+          {hours.total.toLocaleString("en-GB")} commits
+        </span>
+      )}
+    </motion.div>
+  );
+}
+
 export function Hud({
   data,
   stats,
   mesh,
   variant,
   yearLabel,
+  commitHours,
 }: {
   data: ContributionYear;
   stats: Stats;
@@ -56,6 +105,8 @@ export function Hud({
   variant: Variant;
   /** Override for the year line: a range ("2019–2025") or "owner/repo". */
   yearLabel?: string;
+  /** M16: the hour-of-day histogram, when a single user year is on screen. */
+  commitHours?: CommitHoursData | null;
 }) {
   /**
    * The full readout is seven lines tall. It needs a screen with the height to
@@ -127,6 +178,7 @@ export function Hud({
           </span>
           <span className="tabular-nums">{mesh.triangles.toLocaleString("en-GB")} triangles</span>
         </motion.div>
+        {commitHours && <HourHistogram hours={commitHours} />}
       </div>
       )}
 

@@ -18,7 +18,7 @@ import {
   printerById,
   qualityById,
 } from "@/lib/print";
-import { modelQuery, buildBambuLink } from "@/lib/request";
+import { modelQuery, buildBambuLink, type ModelSpan, type ModelSubject } from "@/lib/request";
 import { SLOT_CHOICES, type ColourSlots } from "@/lib/slots";
 import { printableParts } from "@/lib/parts";
 import { PROJECT } from "@/lib/project";
@@ -69,15 +69,31 @@ export interface PrintSheetProps {
   onClose: () => void;
   login: string;
   year: number;
+  /** What the object covers, as the HUD spells it: "2025", "2016–2025", "owner/repo". */
+  yearLabel: string;
   variant: Variant;
   sizeMm: number;
   mesh: BuiltMesh;
   printerId: string;
   onPrinter: (id: string) => void;
+  dampening: number;
+  paletteId: string;
+  /**
+   * The subject and span of the object on screen. The download links carry
+   * them so the kit, 3MF, STL and GLB contain the lifetime stack / range /
+   * repo skyline the viewer priced, not a single-year collapse of it.
+   */
+  span: ModelSpan;
+  rangeFrom: string;
+  rangeTo: string;
+  subject: ModelSubject;
+  repoOwner: string;
+  repoName: string;
 }
 
 export function PrintSheet(props: PrintSheetProps) {
-  const { printerId, setPrinterId } = { printerId: props.printerId, setPrinterId: props.onPrinter };
+  const printerId = props.printerId;
+  const setPrinterId = props.onPrinter;
   const [materialId, setMaterialId] = useState(DEFAULT_MATERIAL_ID);
   const [qualityId, setQualityId] = useState(DEFAULT_QUALITY_ID);
   const [slots, setSlots] = useState<ColourSlots>(1);
@@ -147,7 +163,7 @@ export function PrintSheet(props: PrintSheetProps) {
     [open, props.mesh],
   );
   const est = useMemo(
-    () => (parts ? estimate(parts, material, quality, printer) : null),
+    () => (parts ? estimate(parts, material, quality, printerById(printerId)) : null),
     [parts, material, quality, printerId],
   );
   const specs = useMemo(() => overrides(material, quality), [material, quality]);
@@ -161,6 +177,14 @@ export function PrintSheet(props: PrintSheetProps) {
     materialId,
     qualityId,
     slots,
+    paletteId: props.paletteId,
+    dampening: props.dampening,
+    span: props.span,
+    from: props.rangeFrom,
+    to: props.rangeTo,
+    subject: props.subject,
+    repoOwner: props.repoOwner,
+    repoName: props.repoName,
   });
 
   const fits = fitsBed(props.mesh.size, printer);
@@ -228,7 +252,7 @@ export function PrintSheet(props: PrintSheetProps) {
                   Print it yourself
                 </h3>
                 <p className="mt-1 text-[0.66rem] tracking-[0.1em] uppercase text-dim">
-                  {props.login} · {props.year} · {props.variant} · {props.sizeMm}mm · free forever
+                  {props.login} · {props.yearLabel} · {props.variant} · {props.sizeMm}mm · free forever
                 </p>
               </div>
               <button
@@ -431,7 +455,11 @@ export function PrintSheet(props: PrintSheetProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          const snippet = `![${props.login}'s ${props.year} on MONOLITH](https://monolith.adatepe.dev/api/card/${props.login}?variant=${props.variant}&mm=${props.sizeMm}&year=${props.year})`;
+                          // The canonical deployment, not the tab's origin: a
+                          // snippet copied off a preview deploy must not bake
+                          // the preview URL into someone's README forever.
+                          const cardUrl = `${PROJECT.site}/api/card/${props.login}?variant=${props.variant}&mm=${props.sizeMm}&year=${props.year}&palette=${props.paletteId}`;
+                          const snippet = `![${props.login}'s ${props.year} on MONOLITH](${cardUrl})`;
                           navigator.clipboard?.writeText(snippet).then(
                             () => {
                               play("lock");
@@ -444,7 +472,7 @@ export function PrintSheet(props: PrintSheetProps) {
                         className="hairline mt-2 w-full rounded-[5px] bg-ink px-3 py-2 text-left font-mono text-[0.6rem] text-fog transition-colors duration-150 hover:border-mute active:scale-[0.99]"
                         title="Copy the markdown snippet"
                       >
-                        {copiedCard ? "✓ copied to clipboard" : `![...](${window.location.origin}/api/card/${props.login}?variant=${props.variant}&mm=${props.sizeMm}&year=${props.year})`}
+                        {copiedCard ? "✓ copied to clipboard" : `![...](${PROJECT.site}/api/card/${props.login}?variant=${props.variant}&mm=${props.sizeMm}&year=${props.year})`}
                       </button>
                     </div>
                     {/* F8: one object, every workflow. The same footprint that

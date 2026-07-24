@@ -18,7 +18,7 @@ import { PrintSheet } from "./PrintSheet";
 import { CursorField } from "./CursorField";
 import { Story } from "./Story";
 import { PROJECT } from "@/lib/project";
-import { VARIANTS, buildMonolith, buildMultiYear, sizeById } from "@/lib/build";
+import { SIZES, VARIANTS, buildMonolith, buildMultiYear, sizeById } from "@/lib/build";
 import { DEFAULT_PRINTER_ID } from "@/lib/print";
 import { SELECTABLE_YEARS, availableYears, availableYearsFor, computeStats, yearFromDays } from "@/lib/contributions";
 import { AMBIENT_PALETTE, DEFAULT_PALETTE_ID, PALETTES, paletteById } from "@/lib/palettes";
@@ -30,10 +30,11 @@ import {
   subscribeSound,
 } from "@/lib/sound";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { modelQuery } from "@/lib/request";
+import { modelQuery, type ModelSpan, type ModelSubject } from "@/lib/request";
 import type { SizeId } from "@/lib/build";
 import type {
   BuiltMesh,
+  CommitHoursData,
   ContributionYear,
   Day,
   MultiYearData,
@@ -49,14 +50,42 @@ type Phase = "idle" | "forging" | "live";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** The offered size whose millimetres sit closest to a shared link's `mm`. */
+function nearestSizeId(mm: number | undefined): SizeId {
+  if (!mm) return "shelf";
+  let best = SIZES[0];
+  for (const s of SIZES) {
+    if (Math.abs(s.mm - mm) < Math.abs(best.mm - mm)) best = s;
+  }
+  return best.id;
+}
+
 export function MonolithApp({
   initialLogin,
   initialYear,
   initialPaletteId,
+  initialVariant,
+  initialSizeMm,
+  initialDampening,
+  initialSpan,
+  initialFrom,
+  initialTo,
+  initialSubject,
+  initialRepoOwner,
+  initialRepoName,
 }: {
   initialLogin?: string;
   initialYear?: number;
   initialPaletteId?: string;
+  initialVariant?: Variant;
+  initialSizeMm?: number;
+  initialDampening?: number;
+  initialSpan?: ModelSpan;
+  initialFrom?: string;
+  initialTo?: string;
+  initialSubject?: ModelSubject;
+  initialRepoOwner?: string;
+  initialRepoName?: string;
 }) {
   const years = useMemo(() => availableYears(SELECTABLE_YEARS), []);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -65,28 +94,29 @@ export function MonolithApp({
   /**
    * What the object is a picture OF. Either a GitHub user (the default) or a
    * repository, in which case the forge pulls the repo's commit skyline instead
-   * of a contribution calendar. M14 / marktanalyse 5.4.
+   * of a contribution calendar. M14 / marktanalyse 5.4. Seeded from the share
+   * link so a deep link reproduces the shared object, not the default one.
    */
-  const [subject, setSubject] = useState<"user" | "repo">("user");
-  const [repoOwner, setRepoOwner] = useState("");
-  const [repoName, setRepoName] = useState("");
+  const [subject, setSubject] = useState<ModelSubject>(initialSubject ?? "user");
+  const [repoOwner, setRepoOwner] = useState(initialRepoOwner ?? "");
+  const [repoName, setRepoName] = useState(initialRepoName ?? "");
   /**
    * The window to render. `year` is a single calendar year (the original).
    * `lifetime` stacks every year the account has (M12). `range` is an arbitrary
    * from/to window (M11). These drive which endpoint the forge hits.
    */
-  const [span, setSpan] = useState<"year" | "lifetime" | "range">("year");
-  const [rangeFrom, setRangeFrom] = useState(`${years[0]}-01-01`);
-  const [rangeTo, setRangeTo] = useState(`${new Date().getUTCFullYear()}-12-31`);
-  const [variant, setVariant] = useState<Variant>("skyline");
+  const [span, setSpan] = useState<ModelSpan>(initialSpan ?? "year");
+  const [rangeFrom, setRangeFrom] = useState(initialFrom || `${years[0]}-01-01`);
+  const [rangeTo, setRangeTo] = useState(initialTo || `${new Date().getUTCFullYear()}-12-31`);
+  const [variant, setVariant] = useState<Variant>(initialVariant ?? "skyline");
   const [paletteId, setPaletteId] = useState(
     initialPaletteId && PALETTES.some((p) => p.id === initialPaletteId)
       ? initialPaletteId
       : DEFAULT_PALETTE_ID,
   );
-  const [sizeId, setSizeId] = useState<SizeId>("shelf");
+  const [sizeId, setSizeId] = useState<SizeId>(nearestSizeId(initialSizeMm));
   const [printerId, setPrinterId] = useState(DEFAULT_PRINTER_ID);
-  const [dampening, setDampening] = useState(0);
+  const [dampening, setDampening] = useState(initialDampening ?? 0);
   const [data, setData] = useState<ContributionYear | null>(null);
   /** A multi-year roll-up (lifetime / several years). Set alongside `data` so
    * the viewer can render it with buildMultiYear. M1 / marktanalyse 5.4. */
@@ -112,6 +142,8 @@ export function MonolithApp({
   const [printing, setPrinting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [stars, setStars] = useState<number | null>(null);
+  /** M16: the commit time-of-day histogram, fetched once the object is live. */
+  const [commitHours, setCommitHours] = useState<CommitHoursData | null>(null);
   /** The studio's light switches, all on until a hand reaches for them. */
   const [studio, setStudio] = useState<StudioLights>({
     key: true,
@@ -370,22 +402,30 @@ export function MonolithApp({
       setSpin(!reduceMotion);
       play("thunk");
       // Write the full configuration into the URL so a copied link reproduces
-      // exactly what was built. F3: a shared link carries the whole state, not
-      // just the person and the year.
+      // exactly what was built. F3/M13: a shared link carries the whole state
+      // — span, range and repo subject included, or a shared lifetime stack
+      // would reopen as a single year.
+      const urlLogin = effSubject === "repo" ? effRepoOwner : (payload.multi?.login ?? yearData!.login);
       window.history.replaceState(
         null,
         "",
-        `/s/${payload.multi?.login ?? yearData!.login}?${modelQuery({
-          login: payload.multi?.login ?? yearData!.login,
+        `/s/${urlLogin}?${modelQuery({
+          login: urlLogin,
           year: forYear,
           variant,
           sizeMm,
           paletteId: paletteId,
           dampening,
+          span: effSpan,
+          from: effRangeFrom,
+          to: effRangeTo,
+          subject: effSubject,
+          repoOwner: effRepoOwner,
+          repoName: effRepoName,
         })}`,
       );
     },
-    [variant, sizeMm, reduceMotion, paletteId, dampening],
+    [variant, sizeMm, reduceMotion, paletteId, dampening, subject, span, repoOwner, repoName, rangeFrom, rangeTo],
   );
 
   // Deep-link boot. The guard is what makes this run once, rather than an
@@ -416,6 +456,35 @@ export function MonolithApp({
     };
   }, []);
 
+  // M16 in the HUD: once a single user year is live, ask for the hour-of-day
+  // histogram. Fire-and-forget with a cancellation guard; a rate-limited
+  // search API just means the HUD shows no histogram, never an error. Stale
+  // data is filtered at render time (the HUD only shows a histogram matching
+  // the login and year on screen), so nothing needs clearing here.
+  useEffect(() => {
+    if (phase !== "live" || subject !== "user" || span !== "year" || !login) return;
+    let cancelled = false;
+    fetch(`/api/contributions?hours=${encodeURIComponent(login)}&year=${year}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { hours?: CommitHoursData } | null) => {
+        if (!cancelled && json?.hours && json.hours.sampled > 0) setCommitHours(json.hours);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, subject, span, login, year]);
+
+  /** The histogram, only when it describes exactly the object on screen. */
+  const hoursForHud =
+    commitHours &&
+    subject === "user" &&
+    span === "year" &&
+    commitHours.year === year &&
+    commitHours.login.toLowerCase() === login.toLowerCase()
+      ? commitHours
+      : null;
+
   const reset = useCallback(() => {
     runId.current++;
     setPhase("idle");
@@ -425,6 +494,7 @@ export function MonolithApp({
     setSteps([]);
     setProgress(0);
     setError(null);
+    setCommitHours(null);
     window.history.replaceState(null, "", "/");
   }, []);
 
@@ -455,7 +525,11 @@ export function MonolithApp({
         play("step");
         setVariant(VARIANTS[n - 1].id);
       }
-      if (e.key === "[" || e.key === "]") {
+      // Year stepping only means something on a single user year: a lifetime
+      // stack, a range or a repo skyline has no "previous year" to step to,
+      // and firing the year fetch from those modes would silently swap the
+      // object out from under its own label.
+      if ((e.key === "[" || e.key === "]") && span === "year" && subject === "user") {
         const i = liveYears.indexOf(year) + (e.key === "[" ? 1 : -1);
         if (liveYears[i] !== undefined) {
           play("step");
@@ -466,17 +540,35 @@ export function MonolithApp({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, printing, liveYears, year, login, forge, reset]);
+  }, [phase, printing, liveYears, year, login, forge, reset, span, subject]);
 
   async function share() {
-    const url = `${window.location.origin}/s/${login}?${modelQuery({
-      login,
+    const urlLogin = subject === "repo" ? repoOwner : login;
+    const url = `${window.location.origin}/s/${urlLogin}?${modelQuery({
+      login: urlLogin,
       year,
       variant,
       sizeMm,
       paletteId: paletteId,
       dampening,
+      span,
+      from: rangeFrom,
+      to: rangeTo,
+      subject,
+      repoOwner,
+      repoName,
     })}`;
+    // On touch devices the native share sheet reaches the places a copied
+    // link is actually headed; everywhere else the clipboard stays quickest.
+    if (typeof navigator.share === "function" && window.matchMedia("(pointer: coarse)").matches) {
+      try {
+        await navigator.share({ url, title: `${login} on MONOLITH` });
+        play("lock");
+        return;
+      } catch {
+        // Cancelled or unsupported payload: fall through to the clipboard.
+      }
+    }
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -834,7 +926,7 @@ export function MonolithApp({
 
         {phase === "live" && data && stats && mesh && (
           <div className="pointer-events-none absolute inset-0 z-20">
-            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} />
+            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} commitHours={hoursForHud} />
           </div>
         )}
 
@@ -901,11 +993,20 @@ export function MonolithApp({
               onClose={() => setPrinting(false)}
               login={login}
               year={year}
+              yearLabel={yearLabel}
               variant={variant}
               sizeMm={sizeMm}
               mesh={mesh}
               printerId={printerId}
               onPrinter={setPrinterId}
+              dampening={dampening}
+              paletteId={paletteId}
+              span={span}
+              rangeFrom={rangeFrom}
+              rangeTo={rangeTo}
+              subject={subject}
+              repoOwner={repoOwner}
+              repoName={repoName}
             />
           </>
         )}
