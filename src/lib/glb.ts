@@ -146,7 +146,9 @@ export function writeGlb(mesh: BuiltMesh, palette: Palette): Buffer {
 
   const json = Buffer.from(JSON.stringify(gltf), "utf8");
   const jsonChunkLen = align4(json.length);
-  const jsonPadded = Buffer.alloc(jsonChunkLen);
+  // The spec pads the JSON chunk with spaces (0x20), not zeros: loaders parse
+  // the whole chunkLength, and a trailing NUL is not JSON whitespace.
+  const jsonPadded = Buffer.alloc(jsonChunkLen, 0x20);
   json.copy(jsonPadded);
 
   const totalLength = 12 + 8 + jsonChunkLen + 8 + binLength;

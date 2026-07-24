@@ -171,29 +171,34 @@ function buildSkyline(data: ContributionYear, label: boolean, dampening = 0): Me
   });
   // M4 / marktanalyse 5.4: engrave the account's real milestones on the base
   // plate so the object carries its own origin story. Only when the data has
-  // them (the GraphQL path; the HTML fallback does not), and only on the
-  // front face so the signature and the year keep the back.
+  // them (the GraphQL path; the HTML fallback does not). They live on the
+  // min-Z wall, which faces -Z, so the letters must extrude with face:"back"
+  // (the spine builder raises text on this same wall the same way); "front"
+  // would bury them inside the plate. One in each corner so both can be
+  // present without colliding.
   const yearOf = (iso?: string) => (iso ? iso.slice(0, 4) : undefined);
+  const milestonePx = px * 0.8;
+  const milestoneY = (BASE_H - GLYPH_H * milestonePx) / 2;
   const joined = yearOf(data.joinedAt);
   if (joined) {
     engraveWall(mb, `JOINED ${joined}`, {
-      x: x0 + plateW / 2 - (measureText(`JOINED ${joined}`) * px) / 2,
-      y: textY,
-      px: px * 0.8,
+      x: x0 + PLATE_PAD,
+      y: milestoneY,
+      px: milestonePx,
       z: z0,
       align: "left",
-      face: "front",
+      face: "back",
     });
   }
   const firstPr = yearOf(data.firstPrAt);
   if (firstPr) {
     engraveWall(mb, `1ST PR ${firstPr}`, {
-      x: x0 + plateW / 2 - (measureText(`1ST PR ${firstPr}`) * px) / 2,
-      y: textY,
-      px: px * 0.8,
+      x: x0 + plateW - PLATE_PAD,
+      y: milestoneY,
+      px: milestonePx,
       z: z0,
-      align: "left",
-      face: "front",
+      align: "right",
+      face: "back",
     });
   }
   return mb;
@@ -466,9 +471,20 @@ export function buildMultiYear(
   const levels: number[] = [];
   const order: number[] = [];
   const baseY: number[] = [];
+  // The engraving and the tower gaps live inside each per-year mesh, already
+  // scaled by that year's own factor. The roll-up must report those real
+  // millimetres, not re-derive them from the N-years-wide total footprint,
+  // which would understate them by a factor of N and trip false print
+  // warnings. Engraving is on the labelled (last) year; the gap warning takes
+  // the tightest year.
+  let engravePixelMm = 0;
+  let gapMm: number | null = null;
 
   multi.years.forEach((year, i) => {
     const mesh = buildMonolith(year, { ...options, label: i === multi.years.length - 1 });
+    if (i === multi.years.length - 1) engravePixelMm = mesh.print?.engravePixelMm ?? 0;
+    const g = mesh.print?.gapMm;
+    if (g != null && (gapMm == null || g < gapMm)) gapMm = g;
     const dx = i * stride;
     for (let v = 0; v < mesh.positions.length; v += 3) {
       positions.push(mesh.positions[v] + dx, mesh.positions[v + 1], mesh.positions[v + 2]);
@@ -498,10 +514,7 @@ export function buildMultiYear(
     pos[i] -= cx;
     pos[i + 1] -= bounds.min[1];
   }
-  const print = {
-    engravePixelMm: options.label ? (ENGRAVE_TEXT_MM / GLYPH_H) * (options.sizeMm / Math.max(size.x, size.z)) : 0,
-    gapMm: GAPPED.includes(options.variant) ? GAP * (options.sizeMm / Math.max(size.x, size.z)) : null,
-  };
+  const print = { engravePixelMm, gapMm };
   return {
     positions: pos,
     levels: new Float32Array(levels),

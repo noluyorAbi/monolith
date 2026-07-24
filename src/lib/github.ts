@@ -10,7 +10,7 @@ import {
   yearRange,
   availableYears,
 } from "./contributions";
-import type { ContributionYear, Day, Level, MultiYearData } from "./types";
+import type { CommitHoursData, ContributionYear, Day, Level, MultiYearData } from "./types";
 
 /**
  * Reaching GitHub. Server only: it reads GITHUB_TOKEN and scrapes a page, and
@@ -193,10 +193,11 @@ export async function fetchContributionYear(
 
 /**
  * An arbitrary window, not a calendar year. marktanalyse 6.1 / 5.4: "my last
- * twelve months" or "2014 to 2024". GraphQL and the HTML fallback both accept
- * `from`/`to`, so this is one fetcher swap away from `fetchContributionYear`.
- * The packed `year` is the start year so the week grid lines up; the build
- * path is identical to a single year (the builders grid from the first day).
+ * twelve months" or "2014 to 2024". GitHub's contributionsCollection refuses
+ * any window longer than one year, so the range is split at calendar-year
+ * boundaries, each slice fetched like a single year, and the days stitched
+ * back together. The packed `year` is the start year so the week grid lines
+ * up; the build path is identical to a single year.
  */
 export async function fetchContributionRange(
   rawLogin: string,
@@ -208,23 +209,74 @@ export async function fetchContributionRange(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
     throw new BadLoginError(`range ${from}..${to}`);
   }
+  if (from > to) [from, to] = [to, from];
   const startYear = Number(from.slice(0, 4));
-  const range: [string, string] = [from, to];
+
+  // Calendar-year slices. ISO dates compare correctly as strings.
+  const windows: [string, string][] = [];
+  for (let cursor = from; cursor <= to; ) {
+    const y = Number(cursor.slice(0, 4));
+    const yearEnd = `${y}-12-31`;
+    windows.push([cursor, yearEnd < to ? yearEnd : to]);
+    cursor = `${y + 1}-01-01`;
+  }
 
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  try {
-    if (token) {
-      const viaApi = await viaGraphQL(login, startYear, token, range);
-      if (viaApi) return viaApi;
-    }
-    const viaScrape = await viaHTML(login, startYear, range);
-    if (viaScrape) return viaScrape;
-  } catch (err) {
-    if (err instanceof NotFoundError) throw err;
-    console.error(`[monolith] range lookup failed for ${login} ${from}..${to}:`, err);
+  const chunks = await Promise.all(
+    windows.map(async ([f, t]): Promise<ContributionYear | null> => {
+      const y = Number(f.slice(0, 4));
+      try {
+        if (token) {
+          const viaApi = await viaGraphQL(login, y, token, [f, t]);
+          if (viaApi) return viaApi;
+        }
+        return await viaHTML(login, y, [f, t]);
+      } catch (err) {
+        if (err instanceof NotFoundError) throw err;
+        console.error(`[monolith] range slice failed for ${login} ${f}..${t}:`, err);
+        return null;
+      }
+    }),
+  );
+
+  const parts = chunks.filter((c): c is ContributionYear => c !== null);
+  if (parts.length === 0) {
+    console.warn(`[monolith] serving synthetic data for ${login} ${from}..${to}`);
+    return syntheticYear(login, startYear);
   }
-  console.warn(`[monolith] serving synthetic data for ${login} ${from}..${to}`);
-  return syntheticYear(login, startYear);
+  if (parts.length === 1) return { ...parts[0], year: startYear };
+
+  // Adjacent slices pad to full calendar weeks, so their edges overlap by up
+  // to six days; dedupe by date, keeping the larger count.
+  const byDate = new Map<string, Day>();
+  for (const part of parts) {
+    for (const d of part.days) {
+      const seen = byDate.get(d.date);
+      if (!seen || d.count > seen.count) byDate.set(d.date, d);
+    }
+  }
+  const days = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+  const sum = (f: (p: ContributionYear) => number | undefined) =>
+    parts.reduce((a, p) => a + (f(p) ?? 0), 0);
+  const firstDefined = <T,>(f: (p: ContributionYear) => T | undefined): T | undefined => {
+    for (const p of parts) {
+      const v = f(p);
+      if (v !== undefined) return v;
+    }
+    return undefined;
+  };
+  return pack(login, parts[0].name, startYear, days, parts[0].source, {
+    contributionYears: firstDefined((p) => p.contributionYears),
+    isHalloween: parts.some((p) => p.isHalloween),
+    totalIssues: sum((p) => p.totalIssues),
+    totalPullRequests: sum((p) => p.totalPullRequests),
+    totalReviews: sum((p) => p.totalReviews),
+    joinedAt: firstDefined((p) => p.joinedAt),
+    firstPrAt: firstDefined((p) => p.firstPrAt),
+    firstIssueAt: firstDefined((p) => p.firstIssueAt),
+    firstRepoAt: firstDefined((p) => p.firstRepoAt),
+  });
 }
 
 /**
@@ -377,15 +429,41 @@ export interface RepoActivity {
   total: number;
 }
 
+/**
+ * GitHub answers the FIRST stats request for a cold repo with 202 and an empty
+ * body while it computes. That is not an error and not data; it is "ask again
+ * in a moment", and the route maps it to a 503 with Retry-After.
+ */
+export class StatsPendingError extends Error {
+  constructor(slug: string) {
+    super(`GitHub is still computing statistics for ${slug}; retry shortly.`);
+    this.name = "StatsPendingError";
+  }
+}
+
 export async function fetchRepoActivity(owner: string, repo: string): Promise<RepoActivity> {
-  const res = await fetch(
-    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stats/commit_activity`,
-    { headers: { Accept: "application/vnd.github+json", "User-Agent": "monolith" }, next: { revalidate: 3600 } },
-  );
-  if (res.status === 404) throw new NotFoundError(`${owner}/${repo}`);
+  const slug = `${owner}/${repo}`;
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stats/commit_activity`;
+  const headers = { Accept: "application/vnd.github+json", "User-Agent": "monolith" };
+
+  // 202 = "computing, ask again". Usually ready within a second or two, so a
+  // couple of short in-request retries turn the common cold-repo case into a
+  // success instead of surfacing the pending state to every first caller.
+  let res = await fetch(url, { headers, next: { revalidate: 3600 } });
+  for (let attempt = 0; res.status === 202 && attempt < 2; attempt++) {
+    await new Promise((r) => setTimeout(r, 1200));
+    res = await fetch(url, { headers, cache: "no-store" });
+  }
+  if (res.status === 404) throw new NotFoundError(slug);
+  if (res.status === 202) throw new StatsPendingError(slug);
+  // 204 is GitHub's answer for an empty repository: no commits, no body.
+  if (res.status === 204) return { owner, repo, weeks: [], total: 0 };
   if (!res.ok) throw new Error(`repo stats ${res.status}`);
-  const rows = (await res.json()) as { week: number; total: number; days: number[] }[];
-  const weeks = rows.map((r) => ({
+
+  const text = await res.text();
+  const rows = text.trim() ? (JSON.parse(text) as unknown) : [];
+  if (!Array.isArray(rows)) return { owner, repo, weeks: [], total: 0 };
+  const weeks = (rows as { week: number; total: number; days: number[] }[]).map((r) => ({
     week: new Date(r.week * 1000).toISOString().slice(0, 10),
     total: r.total,
     days: r.days,
@@ -405,7 +483,16 @@ export async function fetchRepoActivity(owner: string, repo: string): Promise<Re
  */
 export function repoActivityToYear(activity: RepoActivity): ContributionYear {
   const days: Day[] = [];
-  for (const w of activity.weeks) {
+  // An empty repository still deserves an object: a flat 52-week plate says
+  // "no commits" honestly, where an empty day list would crash the builders.
+  const weeks = activity.weeks.length
+    ? activity.weeks
+    : Array.from({ length: 52 }, (_, i) => {
+        const sunday = new Date();
+        sunday.setUTCDate(sunday.getUTCDate() - sunday.getUTCDay() - (51 - i) * 7);
+        return { week: sunday.toISOString().slice(0, 10), total: 0, days: new Array(7).fill(0) };
+      });
+  for (const w of weeks) {
     const sunday = new Date(`${w.week}T00:00:00Z`);
     for (let d = 0; d < 7; d++) {
       const date = new Date(sunday);
@@ -458,6 +545,70 @@ function assembleMulti(login: string, parts: ContributionYear[]): MultiYearData 
 }
 
 /**
+ * One resolver for every download route. The query string names a subject
+ * (user or repo) and a span (year, lifetime, range); this turns that into the
+ * data the mesh builders consume, so the 3MF, STL, GLB and kit endpoints all
+ * produce the object the viewer showed rather than silently collapsing every
+ * mode back to a single user year.
+ */
+export interface ResolvedModel {
+  /** Single-year-shaped data; for a multi-year span, the most recent year. */
+  data: ContributionYear;
+  /** Set when the object is a multi-year stack; build with buildMultiYear. */
+  multi: MultiYearData | null;
+  /** Whose object this is, for filenames and engraving: login or owner/repo. */
+  who: string;
+  /** The span, human-readable: "2025", "2016-2025", "2023-06-01..2024-06-01". */
+  spanLabel: string;
+  demo: boolean;
+}
+
+export async function resolveModelSource(req: {
+  login: string;
+  year: number;
+  span: "year" | "lifetime" | "range";
+  from: string;
+  to: string;
+  subject: "user" | "repo";
+  repoOwner: string;
+  repoName: string;
+}): Promise<ResolvedModel> {
+  if (req.subject === "repo") {
+    const activity = await fetchRepoActivity(req.repoOwner, req.repoName);
+    const data = repoActivityToYear(activity);
+    return {
+      data,
+      multi: null,
+      who: `${req.repoOwner}/${req.repoName}`,
+      spanLabel: "52-weeks",
+      demo: data.demo,
+    };
+  }
+  if (req.span === "lifetime") {
+    const multi = await fetchLifetime(req.login);
+    return {
+      data: multi.years[multi.years.length - 1],
+      multi: multi.years.length > 1 ? multi : null,
+      who: multi.login,
+      spanLabel: `${multi.fromYear}-${multi.toYear}`,
+      demo: multi.demo,
+    };
+  }
+  if (req.span === "range") {
+    const data = await fetchContributionRange(req.login, req.from, req.to);
+    return {
+      data,
+      multi: null,
+      who: data.login,
+      spanLabel: `${req.from}..${req.to}`,
+      demo: data.demo,
+    };
+  }
+  const data = await fetchContributionYear(req.login, req.year);
+  return { data, multi: null, who: data.login, spanLabel: String(data.year), demo: data.demo };
+}
+
+/**
  * The hour-of-day a user commits, in their own local timezone. marktanalyse
  * 5.1: `/search/commits` is unauthenticated, returns the author's true local
  * UTC offset, and is "the most valuable finding in this document". The search
@@ -466,14 +617,11 @@ function assembleMulti(login: string, parts: ContributionYear[]): MultiYearData 
  * local hour. A prolific user's year may exceed 1,000 commits; the histogram is
  * then a representative sample, which the caller is told via `capped`.
  */
-export interface CommitHours {
-  login: string;
-  year: number;
-  /** 24 buckets, index = local hour 0..23. */
-  hours: number[];
-  total: number;
-  capped: boolean;
-}
+export type CommitHours = CommitHoursData;
+
+/** How many search pages to spend per histogram. Three pages = 300 commits,
+ * a solid sample, while staying well inside the search API's 10 req/min. */
+const HOUR_PAGES = 3;
 
 export async function fetchCommitHours(
   rawLogin: string,
@@ -484,31 +632,37 @@ export async function fetchCommitHours(
   const from = `${year}-01-01`;
   const to = year === new Date().getUTCFullYear() ? new Date().toISOString().slice(0, 10) : `${year}-12-31`;
   const q = `author:${login} author-date:${from}..${to}`;
-  const res = await fetch(
-    `https://api.github.com/search/commits?per_page=100&q=${encodeURIComponent(q)}`,
-    { headers: { Accept: "application/vnd.github.cloak-preview+json", "User-Agent": "monolith" } },
-  );
-  if (!res.ok) {
-    // Search is rate-limited; return an empty histogram rather than throwing,
-    // so the caller can degrade gracefully.
-    return { login, year, hours: new Array(24).fill(0), total: 0, capped: false };
-  }
-  const json = (await res.json()) as { total_count: number; items: { commit: { author: { date: string } } }[] };
+
   const hours = new Array(24).fill(0);
-  for (const item of json.items) {
-    // The timestamp is `YYYY-MM-DDTHH:MM:SS+OFFSET`; the HH is the author's
-    // own local hour (marktanalyse 5.1: "true to the developer's actual day",
-    // carrying their real UTC offset). Take it straight off the wall clock
-    // rather than re-deriving it through the server timezone.
-    const wall = /T(\d{2}):\d{2}:\d{2}[+-]/.exec(item.commit.author.date);
-    if (wall) hours[Number(wall[1])]++;
+  let total = 0;
+  let sampled = 0;
+  for (let page = 1; page <= HOUR_PAGES; page++) {
+    const res = await fetch(
+      `https://api.github.com/search/commits?per_page=100&page=${page}&q=${encodeURIComponent(q)}`,
+      { headers: { Accept: "application/vnd.github.cloak-preview+json", "User-Agent": "monolith" } },
+    );
+    if (!res.ok) {
+      // Search is rate-limited; keep whatever pages already landed rather
+      // than throwing, so the caller can degrade gracefully.
+      break;
+    }
+    const json = (await res.json()) as { total_count: number; items: { commit: { author: { date: string } } }[] };
+    total = json.total_count;
+    for (const item of json.items) {
+      // The timestamp is `YYYY-MM-DDTHH:MM:SS+OFFSET` or `...Z`; the HH is the
+      // author's own local hour (marktanalyse 5.1: "true to the developer's
+      // actual day", carrying their real UTC offset — for a UTC author the
+      // offset is rendered as Z and the wall clock is still theirs). Take it
+      // straight off the string rather than re-deriving it through the server
+      // timezone.
+      const wall = /T(\d{2}):\d{2}:\d{2}(?:[+-Zz])/.exec(item.commit.author.date);
+      if (wall) {
+        hours[Number(wall[1])]++;
+        sampled++;
+      }
+    }
+    if (json.items.length < 100) break;
   }
-  return {
-    login,
-    year,
-    hours,
-    total: json.total_count,
-    // 100 results is one page; the real total may be larger.
-    capped: json.total_count > 100,
-  };
+
+  return { login, year, hours, total, sampled, capped: total > sampled };
 }

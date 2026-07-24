@@ -77,6 +77,23 @@ export interface MultiYearData {
   firstRepoAt?: string;
 }
 
+/**
+ * The hour-of-day histogram of a user's commits, in their own local timezone
+ * (M16 / marktanalyse 5.1). Shared between the server fetcher and the HUD.
+ */
+export interface CommitHoursData {
+  login: string;
+  year: number;
+  /** 24 buckets, index = local hour 0..23. */
+  hours: number[];
+  /** The year's true commit count, which may exceed what was sampled. */
+  total: number;
+  /** How many commits actually landed in the histogram buckets. */
+  sampled: number;
+  /** True when total > sampled: the histogram is a sample, not the census. */
+  capped: boolean;
+}
+
 export interface Stats {
   total: number;
   activeDays: number;
