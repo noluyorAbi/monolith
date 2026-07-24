@@ -298,4 +298,15 @@ peak hour + chronotype, honest sampling caption) once a single user year is live
 share uses the native share sheet on touch devices; the "star on github" chip shows
 the live star count.
 
+**One continuous base plate for multi-year stacks:** range and lifetime builds used
+to emit one plate per year row with air between them, which prints as N loose
+objects. Rows are now built plate-less (builders take a `plate` flag) and a single
+shared plate spans the whole footprint; the signature, the year span (e.g.
+`2023-2026`) and the JOINED / 1ST PR milestones are engraved on the shared plate's
+outer walls. One scale factor for the whole assembly keeps cell size uniform across
+partial years and the engraving at exact single-year millimetres; width still means
+the chosen size, depth still grows per year for the bed check. Verified live for
+skyline, wave and ring. Tests 88 → 99, including a bottom-face span assertion that
+fails on N loose plates.
+
 *Generated for review on `feat/market-features`. Merge target: `main`. Pushed; PR #6 open.*
