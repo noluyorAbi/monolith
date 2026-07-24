@@ -495,8 +495,20 @@ export function buildMultiYear(
   const builder = BUILDERS[options.variant] ?? buildSkyline;
   const rows = multi.years.map((y) => builder(y, false, options.dampening ?? 0, false).finish());
 
+  // Nominal per-row footprint from the CALENDAR, not from whichever towers
+  // happen to exist: a sparse or empty year still owns a full-size terrace,
+  // so the plate always spans every row and the side-wall year labels always
+  // land on plate instead of floating in air beyond it.
+  const RING_R = 30 + 7 * 5; // innerR + 7 bands, keep in sync with buildRing
+  const foot = (y: ContributionYear): { w: number; d: number } =>
+    options.variant === "ring"
+      ? { w: RING_R * 2, d: RING_R * 2 }
+      : options.variant === "spine"
+        ? { w: 12 * 14, d: 26 } // 12 months x pitch, bar depth; see buildSpine
+        : { w: y.weeks.length * CELL, d: 7 * CELL };
+
   // Row pitch: the deepest row plus a readable gap of plate between years.
-  const rowDepth = Math.max(...rows.map((r) => r.size.z));
+  const rowDepth = Math.max(...multi.years.map((y) => foot(y).d));
   const rowGap = CELL * 2.5;
   const stride = rowDepth + rowGap;
 
@@ -516,26 +528,14 @@ export function buildMultiYear(
   // outermost face.
   rows.forEach((mesh, i) => append(mesh, i * stride));
 
-  // Tower footprint across all rows, before the plate is added.
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (let i = 0; i < positions.length; i += 3) {
-    if (positions[i] < minX) minX = positions[i];
-    if (positions[i] > maxX) maxX = positions[i];
-    if (positions[i + 2] < minZ) minZ = positions[i + 2];
-    if (positions[i + 2] > maxZ) maxZ = positions[i + 2];
-  }
-  if (!Number.isFinite(minX)) {
-    minX = maxX = minZ = maxZ = 0;
-  }
-
-  // One complete plate under every row. Towers are inset GAP/2 from their
-  // grid cell, so the margin adds that half gap back and the plate edge lands
-  // exactly PLATE_PAD outside the grid, same as a single year's plate.
-  const margin = PLATE_PAD + GAP / 2;
-  const px0 = minX - margin;
-  const px1 = maxX + margin;
-  const pz0 = minZ - margin;
-  const pz1 = maxZ + margin;
+  // One complete plate under every row, sized from the nominal footprints so
+  // its edge lands exactly PLATE_PAD outside the widest grid, same as a
+  // single year's plate.
+  const halfW = Math.max(...multi.years.map((y) => foot(y).w)) / 2;
+  const px0 = -halfW - PLATE_PAD;
+  const px1 = halfW + PLATE_PAD;
+  const pz0 = -rowDepth / 2 - PLATE_PAD;
+  const pz1 = (rows.length - 1) * stride + rowDepth / 2 + PLATE_PAD;
   const mb = new MeshBuilder();
   mb.box(px0, 0, pz0, px1, BASE_H, pz1);
 

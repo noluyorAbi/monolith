@@ -187,6 +187,31 @@ test("each terrace's year is engraved on the plate's right side wall", () => {
   assert.equal(clusters, 3, `side-wall text should appear beside all 3 rows, got ${clusters} clusters`);
 });
 
+test("a sparse or empty year still owns a full terrace of plate", () => {
+  // The user's own 5-yr range: early years nearly empty. The plate used to be
+  // sized from tower positions, so empty rows had NO plate under them and
+  // their year labels floated in air beyond the plate's edge.
+  const full = fakeMulti("octocat", [2024])[0];
+  const sparse = pack("octocat", "octocat", 2022, [{ date: "2022-07-01", count: 1, level: 1 }], "html");
+  const empty = pack("octocat", "octocat", 2023, [{ date: "2023-07-01", count: 0, level: 0 }], "html");
+  const stacked = buildMultiYear(multiOf([sparse, empty, full]), { variant: "skyline", sizeMm: 180, label: true });
+  const one = buildMonolith(full, { variant: "skyline", sizeMm: 180, label: false });
+  // Three full rows of plate depth, not one row plus stray towers.
+  assert.ok(
+    stacked.size.z > one.size.z * 2.5,
+    `plate must span all 3 rows (depth ${stacked.size.z} vs single ${one.size.z})`,
+  );
+  // And the bottom face spans it all in one piece.
+  let bottomSpan = 0;
+  const p = stacked.positions;
+  for (let t = 0; t < p.length; t += 9) {
+    if (p[t + 1] !== 0 || p[t + 4] !== 0 || p[t + 7] !== 0) continue;
+    const zs = [p[t + 2], p[t + 5], p[t + 8]];
+    bottomSpan = Math.max(bottomSpan, Math.max(...zs) - Math.min(...zs));
+  }
+  assert.ok(bottomSpan > one.size.z * 2.5, `one continuous plate expected, bottom span ${bottomSpan}`);
+});
+
 test("a multi-year stack deeper than the bed is caught by fitsBed", () => {
   const parts = fakeMulti("octocat", [2020, 2021, 2022, 2023, 2024, 2025]);
   const stacked = buildMultiYear(multiOf(parts), { variant: "skyline", sizeMm: 180, label: false });
