@@ -9,6 +9,8 @@ import {
   syntheticYear,
   yearRange,
   availableYears,
+  assembleMultiYear,
+  splitRangeByYear,
 } from "./contributions";
 import type { CommitHoursData, ContributionYear, Day, Level, MultiYearData } from "./types";
 
@@ -307,7 +309,7 @@ export async function fetchContributionYears(
   }
   // No token, or the aliased call failed: fetch each year independently.
   const parts = await Promise.all(ordered.map((y) => fetchContributionYear(login, y)));
-  return assembleMulti(login, parts);
+  return assembleMultiYear(login, parts);
 }
 
 /** Build one aliased query covering every requested year. */
@@ -393,7 +395,7 @@ async function viaGraphQLMulti(
     parts.push(pack(user.login, user.name || user.login, y, days, "graphql", extras));
   }
   if (parts.length === 0) return null;
-  return assembleMulti(login, parts);
+  return assembleMultiYear(login, parts);
 }
 
 /**
@@ -508,42 +510,6 @@ export function repoActivityToYear(activity: RepoActivity): ContributionYear {
   });
 }
 
-/** Roll a list of years into one MultiYearData, summing the composition. */
-function assembleMulti(login: string, parts: ContributionYear[]): MultiYearData {
-  const demo = parts.some((p) => p.demo);
-  const source = parts[0]?.source ?? "synthetic";
-  const sum = (f: (p: ContributionYear) => number | undefined) =>
-    parts.reduce((a, p) => a + (f(p) ?? 0), 0);
-  const firstDefined = <T,>(f: (p: ContributionYear) => T | undefined): T | undefined => {
-    for (const p of parts) {
-      const v = f(p);
-      if (v !== undefined) return v;
-    }
-    return undefined;
-  };
-  return {
-    login,
-    name: parts[0]?.name ?? login,
-    years: parts,
-    fromYear: parts[0].year,
-    toYear: parts[parts.length - 1].year,
-    demo,
-    source,
-    contributionYears: firstDefined((p) => p.contributionYears),
-    colors: firstDefined((p) => p.colors),
-    isHalloween: parts.some((p) => p.isHalloween),
-    totalCommits: sum((p) => p.total),
-    totalIssues: sum((p) => p.totalIssues),
-    totalPullRequests: sum((p) => p.totalPullRequests),
-    totalReviews: sum((p) => p.totalReviews),
-    totalRepos: sum((p) => p.totalRepos),
-    joinedAt: firstDefined((p) => p.joinedAt),
-    firstPrAt: firstDefined((p) => p.firstPrAt),
-    firstIssueAt: firstDefined((p) => p.firstIssueAt),
-    firstRepoAt: firstDefined((p) => p.firstRepoAt),
-  };
-}
-
 /**
  * One resolver for every download route. The query string names a subject
  * (user or repo) and a span (year, lifetime, range); this turns that into the
@@ -596,9 +562,12 @@ export async function resolveModelSource(req: {
   }
   if (req.span === "range") {
     const data = await fetchContributionRange(req.login, req.from, req.to);
+    // A range across calendar years renders (and downloads) as the same
+    // depth-wise terrace stack a lifetime object uses.
+    const multi = splitRangeByYear(data);
     return {
       data,
-      multi: null,
+      multi,
       who: data.login,
       spanLabel: `${req.from}..${req.to}`,
       demo: data.demo,

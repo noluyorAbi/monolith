@@ -1,4 +1,4 @@
-import type { ContributionYear, Day, Level, Stats } from "./types";
+import type { ContributionYear, Day, Level, MultiYearData, Stats } from "./types";
 
 /**
  * Calendar helpers with no network and no environment access, so the browser
@@ -135,6 +135,72 @@ export function yearFromDays(
   source: ContributionYear["source"] = "html",
 ): ContributionYear {
   return pack(login, login, year, days, source);
+}
+
+/** Roll a list of years into one MultiYearData, summing the composition. */
+export function assembleMultiYear(login: string, parts: ContributionYear[]): MultiYearData {
+  const demo = parts.some((p) => p.demo);
+  const source = parts[0]?.source ?? "synthetic";
+  const sum = (f: (p: ContributionYear) => number | undefined) =>
+    parts.reduce((a, p) => a + (f(p) ?? 0), 0);
+  const firstDefined = <T,>(f: (p: ContributionYear) => T | undefined): T | undefined => {
+    for (const p of parts) {
+      const v = f(p);
+      if (v !== undefined) return v;
+    }
+    return undefined;
+  };
+  return {
+    login,
+    name: parts[0]?.name ?? login,
+    years: parts,
+    fromYear: parts[0].year,
+    toYear: parts[parts.length - 1].year,
+    demo,
+    source,
+    contributionYears: firstDefined((p) => p.contributionYears),
+    colors: firstDefined((p) => p.colors),
+    isHalloween: parts.some((p) => p.isHalloween),
+    totalCommits: sum((p) => p.total),
+    totalIssues: sum((p) => p.totalIssues),
+    totalPullRequests: sum((p) => p.totalPullRequests),
+    totalReviews: sum((p) => p.totalReviews),
+    totalRepos: sum((p) => p.totalRepos),
+    joinedAt: firstDefined((p) => p.joinedAt),
+    firstPrAt: firstDefined((p) => p.firstPrAt),
+    firstIssueAt: firstDefined((p) => p.firstIssueAt),
+    firstRepoAt: firstDefined((p) => p.firstRepoAt),
+  };
+}
+
+/**
+ * A stitched arbitrary range that crosses a calendar-year boundary, re-sliced
+ * into per-year rows so it renders as the same depth-wise terrace stack a
+ * lifetime object uses, instead of one strip a hundred and fifty weeks long.
+ * Returns null when the range fits inside one calendar year: a single plate
+ * is the right shape for that.
+ */
+export function splitRangeByYear(data: ContributionYear): MultiYearData | null {
+  const byYear = new Map<number, Day[]>();
+  for (const d of data.days) {
+    const y = Number(d.date.slice(0, 4));
+    const list = byYear.get(y);
+    if (list) list.push(d);
+    else byYear.set(y, [d]);
+  }
+  if (byYear.size < 2) return null;
+  const parts = [...byYear.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([y, days]) => pack(data.login, data.name, y, days, data.source));
+  const multi = assembleMultiYear(data.login, parts);
+  // The composition totals were fetched for the whole range, not per slice;
+  // carry them over rather than losing them in the re-slice.
+  multi.totalIssues = data.totalIssues ?? 0;
+  multi.totalPullRequests = data.totalPullRequests ?? 0;
+  multi.totalReviews = data.totalReviews ?? 0;
+  multi.totalRepos = data.totalRepos ?? 0;
+  multi.demo = data.demo;
+  return multi;
 }
 
 function hash(s: string): number {

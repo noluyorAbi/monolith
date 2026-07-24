@@ -65,22 +65,21 @@ export async function GET(request: Request) {
   }
 }
 
-/** A compact stat block for a multi-year roll-up. */
+/**
+ * The full stat block for a multi-year roll-up, computed over the years'
+ * concatenated day list. This returns the SAME shape as a single year's
+ * stats (the HUD renders busiest weekday and peak day unconditionally), plus
+ * the roll-up's composition totals. Concatenating the days also makes the
+ * streaks honest across year boundaries: a run over New Year's Eve counts as
+ * one streak instead of two.
+ */
 function statsForMulti(multi: MultiYearData) {
-  let longestStreak = 0;
-  let currentStreak = 0;
-  let activeDays = 0;
-  for (const y of multi.years) {
-    const s = computeStats(y);
-    longestStreak = Math.max(longestStreak, s.longestStreak);
-    currentStreak += s.currentStreak;
-    activeDays += s.activeDays;
-  }
+  const days = multi.years
+    .flatMap((y) => y.days)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const base = computeStats({ ...multi.years[0], days, total: multi.totalCommits });
   return {
-    total: multi.totalCommits,
-    activeDays,
-    longestStreak,
-    currentStreak,
+    ...base,
     totalIssues: multi.totalIssues,
     totalPullRequests: multi.totalPullRequests,
     totalReviews: multi.totalReviews,

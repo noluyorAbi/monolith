@@ -454,40 +454,65 @@ export function sizesForPrinter(printer: Printer): Array<SizeDef & { fits: boole
 }
 
 /**
- * Stack several years into one object, oldest on the left. Each year is built
- * at the same `sizeMm` and placed beside the previous one with a fixed gutter,
- * so the multi-year model reads as a skyline of skylines (marktanalyse 5.4 / 6.1).
- * The total footprint grows with the year count; the caller is responsible for
- * checking `fitsBed` against the chosen printer for the resulting width.
+ * Stack several years into one object, oldest at the back, newest at the
+ * front. Each year is built at the same `sizeMm` and placed one row deeper
+ * than the next (the Z axis), so ten years read as terraces of a hillside
+ * rather than a two-metre-wide strip: the width stays one year's width and
+ * only the depth grows, which is also what a print bed can actually hold.
+ * The caller still checks `fitsBed` against the resulting depth.
  */
 export function buildMultiYear(
   multi: MultiYearData,
   options: BuildOptions,
 ): BuiltMesh {
-  const per = buildMonolith(multi.years[0], { ...options, label: false });
-  const gutter = per.size.x * 0.12;
-  const stride = per.size.x + gutter;
+  // Every row must wear ONE physical scale, or a half year re-slices from an
+  // arbitrary range would blow its cells up to twice the size of its
+  // neighbours. Each year's raw width is known from its week count, so each
+  // is built to a proportionally smaller target and all rows come out with
+  // identical cell sizes.
+  const rawWidth = (weeks: number): number =>
+    options.variant === "skyline"
+      ? weeks * CELL + PLATE_PAD * 2
+      : options.variant === "wave"
+        ? weeks * CELL
+        : 1; // ring and spine have a fixed footprint regardless of weeks
+  const maxRaw = Math.max(...multi.years.map((y) => rawWidth(y.weeks.length)));
+  const targetFor = (y: ContributionYear): number =>
+    options.sizeMm * (rawWidth(y.weeks.length) / maxRaw);
+
+  const meshes = multi.years.map((year, i) =>
+    buildMonolith(year, {
+      ...options,
+      sizeMm: targetFor(year),
+      label: i === multi.years.length - 1,
+    }),
+  );
+
+  const maxDepth = Math.max(...meshes.map((m) => m.size.z));
+  const gutter = maxDepth * 0.18;
+  const stride = maxDepth + gutter;
   const positions: number[] = [];
   const levels: number[] = [];
   const order: number[] = [];
   const baseY: number[] = [];
   // The engraving and the tower gaps live inside each per-year mesh, already
-  // scaled by that year's own factor. The roll-up must report those real
-  // millimetres, not re-derive them from the N-years-wide total footprint,
+  // scaled by the shared factor. The roll-up must report those real
+  // millimetres, not re-derive them from the N-years-deep total footprint,
   // which would understate them by a factor of N and trip false print
   // warnings. Engraving is on the labelled (last) year; the gap warning takes
   // the tightest year.
   let engravePixelMm = 0;
   let gapMm: number | null = null;
 
-  multi.years.forEach((year, i) => {
-    const mesh = buildMonolith(year, { ...options, label: i === multi.years.length - 1 });
-    if (i === multi.years.length - 1) engravePixelMm = mesh.print?.engravePixelMm ?? 0;
+  meshes.forEach((mesh, i) => {
+    if (i === meshes.length - 1) engravePixelMm = mesh.print?.engravePixelMm ?? 0;
     const g = mesh.print?.gapMm;
     if (g != null && (gapMm == null || g < gapMm)) gapMm = g;
-    const dx = i * stride;
+    // Oldest year deepest, newest in front; the newest year carries the
+    // signature, so the engraved wall stays the outermost face.
+    const dz = i * stride;
     for (let v = 0; v < mesh.positions.length; v += 3) {
-      positions.push(mesh.positions[v] + dx, mesh.positions[v + 1], mesh.positions[v + 2]);
+      positions.push(mesh.positions[v], mesh.positions[v + 1], mesh.positions[v + 2] + dz);
       levels.push(mesh.levels[v / 3]);
       order.push(mesh.order[v / 3]);
       baseY.push(mesh.baseY[v / 3]);
@@ -507,12 +532,14 @@ export function buildMultiYear(
     y: bounds.max[1] - bounds.min[1],
     z: bounds.max[2] - bounds.min[2],
   };
-  // Re-centre on X so the object sits in the middle of the build plate, and
-  // lift so the base sits at y=0.
+  // Re-centre on X and Z so the object sits in the middle of the build plate,
+  // and lift so the base sits at y=0.
   const cx = (bounds.min[0] + bounds.max[0]) / 2;
+  const cz = (bounds.min[2] + bounds.max[2]) / 2;
   for (let i = 0; i < pos.length; i += 3) {
     pos[i] -= cx;
     pos[i + 1] -= bounds.min[1];
+    pos[i + 2] -= cz;
   }
   const print = { engravePixelMm, gapMm };
   return {
@@ -522,8 +549,8 @@ export function buildMultiYear(
     baseY: new Float32Array(baseY),
     triangles: pos.length / 9,
     bounds: {
-      min: [-size.x / 2, 0, bounds.min[2]],
-      max: [size.x / 2, size.y, bounds.max[2]],
+      min: [-size.x / 2, 0, -size.z / 2],
+      max: [size.x / 2, size.y, size.z / 2],
     },
     size,
     print,
