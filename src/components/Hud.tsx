@@ -109,10 +109,12 @@ function PersonaCard({
   persona,
   yearLabel,
   signCardUrl,
+  signHistory,
 }: {
   persona: Persona;
   yearLabel: string;
   signCardUrl?: string | null;
+  signHistory?: { year: number; name: string }[] | null;
 }) {
   const px = (v: number) => v * 100;
   const [bx, by] = persona.sigil.points[persona.sigil.brightest];
@@ -257,6 +259,23 @@ function PersonaCard({
           </a>
         )}
       </div>
+      {signHistory && signHistory.length >= 2 && (
+        <motion.div
+          className="flex max-w-[19rem] flex-wrap items-baseline gap-x-2 gap-y-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, ease: EASE, delay: 0.9 }}
+        >
+          <span className="text-[0.5rem] tracking-[0.2em] uppercase text-dim">readings</span>
+          {signHistory.map((h, i) => (
+            <span key={h.year} className="text-[0.55rem] tracking-[0.08em] uppercase">
+              <span className="text-dim">{h.year} </span>
+              <span className="text-mute">{h.name.replace(/^The /, "")}</span>
+              {i < signHistory.length - 1 && <span className="text-dim"> ·</span>}
+            </span>
+          ))}
+        </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -270,6 +289,7 @@ export function Hud({
   commitHours,
   persona,
   signCardUrl,
+  signHistory,
 }: {
   data: ContributionYear;
   stats: Stats;
@@ -283,6 +303,8 @@ export function Hud({
   persona?: Persona | null;
   /** Link to the square sign-card image for this reading. */
   signCardUrl?: string | null;
+  /** One sign per rendered year, when a lifetime or range is on screen. */
+  signHistory?: { year: number; name: string }[] | null;
 }) {
   /**
    * The full readout is seven lines tall. It needs a screen with the height to
@@ -377,6 +399,7 @@ export function Hud({
             persona={persona}
             yearLabel={yearLabel ?? String(data.year)}
             signCardUrl={signCardUrl}
+            signHistory={signHistory}
           />
         )}
       </div>

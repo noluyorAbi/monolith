@@ -31,7 +31,7 @@ import {
 } from "@/lib/sound";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { modelQuery, type FlagId, type ModelSpan, type ModelSubject } from "@/lib/request";
-import { derivePersona } from "@/lib/persona";
+import { deriveSign, derivePersona } from "@/lib/persona";
 import type { SizeId } from "@/lib/build";
 import type {
   BuiltMesh,
@@ -255,6 +255,16 @@ export function MonolithApp({
   // the persona on screen (hour-refined included), so toggling the flag or a
   // late histogram both rebuild the object; the key makes that comparable
   // against what the forge built.
+  // The sign per rendered year, when several are on screen: how the shape of
+  // a person's work drifted. Reads each terrace's own calendar.
+  const signHistory = useMemo(() => {
+    if (!multi || subject !== "user" || multi.years.length < 2) return null;
+    return multi.years.map((y) => ({
+      year: y.year,
+      name: deriveSign(y, computeStats(y)).name,
+    }));
+  }, [multi, subject]);
+
   // The shareable sign-card image for the reading on screen.
   const signCardUrl = useMemo(() => {
     if (!persona) return null;
@@ -1027,7 +1037,7 @@ export function MonolithApp({
 
         {phase === "live" && data && stats && mesh && (
           <div className="pointer-events-none absolute inset-0 z-20">
-            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} commitHours={hoursForHud} persona={persona} signCardUrl={signCardUrl} />
+            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} commitHours={hoursForHud} persona={persona} signCardUrl={signCardUrl} signHistory={signHistory} />
           </div>
         )}
 

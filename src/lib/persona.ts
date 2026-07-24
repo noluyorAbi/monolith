@@ -311,6 +311,19 @@ export function signName(id: string): string | null {
 }
 
 /**
+ * Just the sign for a window, without traits or a sigil: what the history
+ * timeline needs when it reads every year of a lifetime in one pass.
+ */
+export function deriveSign(
+  data: ContributionYear,
+  stats: Stats,
+): { id: string; name: string; tier: PersonaTier } {
+  const m = computePersonaMetrics(data, stats, null);
+  const s = SIGNS.find((x) => x.when(m))!;
+  return { id: s.id, name: s.name, tier: s.tier };
+}
+
+/**
  * The engraving payload for a known sign: the same deterministic
  * constellation the card shows, cast from login + sign + window. The sign id
  * travels in the share URL so an hour-refined reading (which the download

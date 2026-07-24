@@ -1,7 +1,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { computePersonaMetrics, derivePersona } from "@/lib/persona";
+import { computePersonaMetrics, derivePersona, deriveSign } from "@/lib/persona";
 import { buildOptionsFrom } from "@/lib/extras";
 import { parseRepoInput } from "@/lib/request";
 import { computeStats, yearFromDays } from "@/lib/contributions";
@@ -156,6 +156,13 @@ test("the same sign wears a different constellation for a different window", () 
   );
   // Still deterministic per window.
   assert.deepEqual(derivePersona(data, stats, null, "2026").sigil, y2026.sigil);
+});
+
+test("deriveSign agrees with the full persona for the same calendar", () => {
+  for (const data of [year(() => 3), year((i) => (i === 100 ? 100 : i % 4 === 0 ? 1 : 0))]) {
+    const stats = computeStats(data);
+    assert.equal(deriveSign(data, stats).id, derivePersona(data, stats).id);
+  }
 });
 
 test("buildOptionsFrom honours the carried sign and derives one when absent", () => {
