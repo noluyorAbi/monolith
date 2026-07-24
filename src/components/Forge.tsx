@@ -41,14 +41,14 @@ export function Forge({
                   animate={{ opacity: 0.45 - (history.length - 1 - i) * 0.11 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <span className="w-[9ch] shrink-0">{s.label}</span>
+                  <span className="w-[12ch] shrink-0">{s.label}</span>
                   <span className="truncate">{s.value}</span>
                 </motion.div>
               ))}
             </div>
 
             <div className="flex items-baseline gap-4 text-[0.86rem] tracking-[0.16em] uppercase">
-              <span className="w-[9ch] shrink-0 text-mute">
+              <span className="w-[12ch] shrink-0 text-mute">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.span
                     key={current?.label}

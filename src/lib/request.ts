@@ -26,6 +26,27 @@ export type ModelSubject = "user" | "repo";
 export const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * Accepts what people actually paste for a repository: the full GitHub URL
+ * (with or without https, www, a trailing path like /tree/main, or .git),
+ * an SSH remote, or a bare owner/repo. Returns null for anything else.
+ */
+export function parseRepoInput(raw: string): { owner: string; name: string } | null {
+  const s = raw
+    .trim()
+    .replace(/^@/, "")
+    .replace(/^https?:\/\/(www\.)?github\.com\//i, "")
+    .replace(/^(www\.)?github\.com\//i, "")
+    .replace(/^git@github\.com:/i, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, "");
+  const m = /^([A-Za-z0-9](?:-?[A-Za-z0-9]){0,38})\/([A-Za-z0-9._-]{1,100}?)(?:\/.*)?$/.exec(s);
+  if (!m) return null;
+  const name = m[2].replace(/\.git$/i, "");
+  if (!LOGIN_RE.test(m[1]) || !REPO_RE.test(name)) return null;
+  return { owner: m[1], name };
+}
+
 export interface ModelRequest {
   login: string;
   year: number;

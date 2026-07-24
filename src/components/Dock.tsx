@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { parseRepoInput } from "@/lib/request";
 import { SIZES, VARIANTS, fitsBed, sizeById, type SizeId } from "@/lib/build";
 import { printerById } from "@/lib/print";
 import { PALETTES, type Palette } from "@/lib/palettes";
@@ -158,6 +160,25 @@ export interface DockProps {
 export function Dock(props: DockProps) {
   const size = sizeById(props.sizeId);
   const yearIndex = props.years.indexOf(props.year);
+  /**
+   * One field for the repository, because nobody remembers "owner slash name"
+   * as two boxes: they paste the URL off the address bar. Parsed live into the
+   * owner/name the app state actually speaks; Enter rebuilds.
+   */
+  const [repoInput, setRepoInput] = useState(
+    props.repoOwner && props.repoName ? `${props.repoOwner}/${props.repoName}` : "",
+  );
+  const repoParsed = parseRepoInput(repoInput);
+
+  const commitRepo = () => {
+    if (!repoParsed) {
+      play("error");
+      return;
+    }
+    props.onRepoOwner(repoParsed.owner);
+    props.onRepoName(repoParsed.name);
+    props.onRebuild({ subject: "repo", repoOwner: repoParsed.owner, repoName: repoParsed.name });
+  };
 
   const stepYear = (delta: number) => {
     const next = props.years[yearIndex + delta];
@@ -203,7 +224,11 @@ export function Dock(props: DockProps) {
                     title="Render a repository's last-52-week commit skyline (M14)"
                     onClick={() => {
                       props.onSubject("repo");
-                      props.onRebuild({ subject: "repo", repoOwner: props.repoOwner, repoName: props.repoName });
+                      // Only rebuild when a repository is already known;
+                      // otherwise just reveal the field and wait for a paste.
+                      if (props.repoOwner && props.repoName) {
+                        props.onRebuild({ subject: "repo", repoOwner: props.repoOwner, repoName: props.repoName });
+                      }
                     }}
                   >
                     repo
@@ -211,28 +236,30 @@ export function Dock(props: DockProps) {
                 </Group>
 
                 {props.subject === "repo" ? (
-                  <Group label="Repository">
+                  <Group label={repoParsed ? `Repository · ${repoParsed.owner}/${repoParsed.name}` : "Repository · paste the URL"}>
                     <input
                       type="text"
-                      value={props.repoOwner}
-                      placeholder="owner"
-                      onChange={(e) => props.onRepoOwner(e.target.value.replace(/[^A-Za-z0-9-]/g, ""))}
+                      value={repoInput}
+                      placeholder="github.com/owner/repo"
+                      onChange={(e) => setRepoInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && props.repoOwner && props.repoName) props.onRebuild({ subject: "repo", repoOwner: props.repoOwner, repoName: props.repoName });
+                        if (e.key === "Enter") commitRepo();
                       }}
-                      className="h-9 w-[7ch] rounded-[5px] border border-line bg-transparent px-2 text-[0.68rem] text-fog outline-none placeholder:text-dim focus:border-edge sm:h-auto"
+                      className={`h-9 w-[24ch] rounded-[5px] border bg-transparent px-2 text-[0.68rem] text-fog outline-none placeholder:text-dim focus:border-edge sm:h-auto ${
+                        repoInput && !repoParsed ? "border-danger/50" : "border-line"
+                      }`}
                     />
-                    <span className="text-mute">/</span>
-                    <input
-                      type="text"
-                      value={props.repoName}
-                      placeholder="repo"
-                      onChange={(e) => props.onRepoName(e.target.value.replace(/[^A-Za-z0-9-._]/g, ""))}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && props.repoOwner && props.repoName) props.onRebuild({ subject: "repo", repoOwner: props.repoOwner, repoName: props.repoName });
-                      }}
-                      className="h-9 w-[9ch] rounded-[5px] border border-line bg-transparent px-2 text-[0.68rem] text-fog outline-none placeholder:text-dim focus:border-edge sm:h-auto"
-                    />
+                    <Hint label="Build this repository">
+                      <button
+                        type="button"
+                        onClick={commitRepo}
+                        disabled={!repoParsed}
+                        aria-label="Build repository"
+                        className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                      >
+                        →
+                      </button>
+                    </Hint>
                   </Group>
                 ) : (
                   <Group label="Span">
@@ -302,19 +329,56 @@ export function Dock(props: DockProps) {
                 )}
 
                 {props.subject === "user" && props.span === "range" && (
-                  <Group label="From – to">
+                  <Group label="Window">
+                    {/* The windows people actually mean, one press each. The
+                      date fields stay for the rest; presets pass the fresh
+                      dates through the rebuild so nothing waits on state. */}
+                    {(
+                      [
+                        ["12 mo", 1],
+                        ["3 yr", 3],
+                        ["5 yr", 5],
+                      ] as const
+                    ).map(([name, back]) => {
+                      const to = new Date().toISOString().slice(0, 10);
+                      const d = new Date();
+                      d.setUTCFullYear(d.getUTCFullYear() - back);
+                      const from = d.toISOString().slice(0, 10);
+                      const active = props.rangeFrom === from && props.rangeTo === to;
+                      return (
+                        <Pill
+                          key={name}
+                          layoutGroup="dock-range-preset"
+                          active={active}
+                          title={`${from} to today`}
+                          onClick={() => {
+                            play("step");
+                            props.onRangeFrom(from);
+                            props.onRangeTo(to);
+                            props.onRebuild({ span: "range", rangeFrom: from, rangeTo: to });
+                          }}
+                        >
+                          {name}
+                        </Pill>
+                      );
+                    })}
                     <input
                       type="date"
                       value={props.rangeFrom}
+                      max={props.rangeTo}
+                      aria-label="From"
                       onChange={(e) => props.onRangeFrom(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") props.onRebuild({ span: "range" });
                       }}
                       className="h-9 rounded-[5px] border border-line bg-transparent px-2 text-[0.62rem] text-fog outline-none focus:border-edge sm:h-auto"
                     />
+                    <span aria-hidden className="text-[0.6rem] uppercase text-dim">to</span>
                     <input
                       type="date"
                       value={props.rangeTo}
+                      min={props.rangeFrom}
+                      aria-label="To"
                       onChange={(e) => props.onRangeTo(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") props.onRebuild({ span: "range" });

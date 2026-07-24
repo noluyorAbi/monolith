@@ -210,7 +210,10 @@ export default function Scene({
 
   return (
     <Canvas
-      shadows="soft"
+      // "percentage" = PCFShadowMap. three r185 deprecated PCFSoftShadowMap
+      // and silently substitutes PCF anyway, so "soft" only bought a console
+      // warning per shadow pass, not a softer shadow.
+      shadows="percentage"
       dpr={[1, 2]}
       gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
       camera={{ fov: 30, position: [60, 130, 260] }}
