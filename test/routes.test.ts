@@ -332,6 +332,27 @@ test("the glb endpoint returns a valid binary glTF carrying vertex colours", asy
   assert.equal(json.materials[0].pbrMetallicRoughness.baseColorFactor.join(), "1,1,1,1");
   assert.deepEqual(Object.keys(json.meshes[0].primitives[0].attributes).sort(), ["COLOR_0", "POSITION"]);
   assert.ok(json.accessors[0].count > 0, "the geometry should have vertices");
+
+  // The spec demands the JSON chunk be padded with spaces (0x20): loaders
+  // JSON.parse the whole chunkLength, and a stray NUL kills them.
+  const jsonChunk = buf.subarray(20, 20 + jsonLen);
+  for (let i = jsonChunk.length - 1; i >= 0 && jsonChunk[i] !== 0x7d /* } */; i--) {
+    assert.equal(jsonChunk[i], 0x20, `JSON chunk padding byte ${i} must be a space, found 0x${jsonChunk[i].toString(16)}`);
+  }
+
+  // The BIN chunk is real, aligned, and its accessors fit inside it.
+  const binStart = 20 + jsonLen;
+  const binLen = buf.readUInt32LE(binStart);
+  assert.equal(buf.readUInt32LE(binStart + 4), 0x004e4942, "BIN chunk magic");
+  assert.equal(binStart + 8 + binLen, buf.readUInt32LE(8), "total length covers both chunks exactly");
+  for (const view of json.bufferViews) {
+    assert.ok(view.byteOffset % 4 === 0, "buffer views must be 4-byte aligned");
+    assert.ok(view.byteOffset + view.byteLength <= binLen, "buffer view must fit the BIN chunk");
+  }
+  // The first vertex is a finite little-endian float triple.
+  const firstX = buf.readFloatLE(binStart + 8);
+  assert.ok(Number.isFinite(firstX), "positions must be finite floats");
+
   // A bad handle is a 400, not a generated object.
   const bad = await getGlb(new Request(`${BASE}/glb?login=not%20a%20handle&year=2025`));
   assert.equal(bad.status, 400);
@@ -370,7 +391,17 @@ test("the contributions endpoint returns a multi-year roll-up as JSON", async ()
 });
 
 test("the compare endpoint returns both accounts and the delta", async () => {
-  stubGitHub();
+  // The two accounts get DIFFERENT years, so the delta and the winner are
+  // real assertions rather than tautologies over identical stub data.
+  vi.stubGlobal("fetch", async (input: Request | string) => {
+    const url = typeof input === "string" ? input : String(input.url);
+    const busy = url.includes("/users/noluyorAbi/");
+    const cells = busy
+      ? `<td data-date="2025-03-01" id="d0" data-level="4"></td><tool-tip for="d0">9 contributions on x.</tool-tip>` +
+        `<td data-date="2025-03-02" id="d1" data-level="2"></td><tool-tip for="d1">3 contributions on x.</tool-tip>`
+      : `<td data-date="2025-03-01" id="d0" data-level="1"></td><tool-tip for="d0">2 contributions on x.</tool-tip>`;
+    return new Response(cells, { status: 200 });
+  });
   const res = await getCompare(
     new Request(`${BASE}/compare?a=noluyorAbi&b=octocat&year=2025`),
   );
@@ -378,8 +409,10 @@ test("the compare endpoint returns both accounts and the delta", async () => {
   const body = await res.json();
   assert.equal(body.a.login, "noluyorAbi");
   assert.equal(body.b.login, "octocat");
-  assert.ok(typeof body.delta.total === "number");
-  assert.ok(["tie", "noluyorAbi", "octocat"].includes(body.delta.winner));
+  assert.equal(body.a.stats.total, 12);
+  assert.equal(body.b.stats.total, 2);
+  assert.equal(body.delta.total, 10, "the delta must reflect the two different years");
+  assert.equal(body.delta.winner, "noluyorAbi");
 });
 
 test("the compare endpoint rejects a missing login", async () => {
@@ -408,6 +441,93 @@ test("the share state round-trips dampening (M13)", () => {
   // Clamped: a wild value cannot produce a broken object.
   const wild = parseModelRequest(new URL("https://x/?login=octocat&dampening=5"));
   assert.equal(wild.dampening, 1, "dampening above 1 clamps to 1");
+});
+
+test("the share state round-trips span, range and repo subject (M11-M14)", () => {
+  // Lifetime.
+  const lifetime = parseModelRequest(new URL(`https://x/?${modelQuery({ login: "octocat", year: 2025, variant: "skyline", sizeMm: 180, span: "lifetime" })}`));
+  assert.equal(lifetime.span, "lifetime");
+
+  // Range.
+  const rangeQ = modelQuery({ login: "octocat", year: 2025, variant: "skyline", sizeMm: 180, span: "range", from: "2019-06-01", to: "2021-05-31" });
+  const range = parseModelRequest(new URL(`https://x/?${rangeQ}`));
+  assert.equal(range.span, "range");
+  assert.equal(range.from, "2019-06-01");
+  assert.equal(range.to, "2021-05-31");
+
+  // Repo subject.
+  const repoQ = modelQuery({ login: "vercel", year: 2025, variant: "skyline", sizeMm: 180, subject: "repo", repoOwner: "vercel", repoName: "next.js" });
+  const repo = parseModelRequest(new URL(`https://x/?${repoQ}`));
+  assert.equal(repo.subject, "repo");
+  assert.equal(repo.repoOwner, "vercel");
+  assert.equal(repo.repoName, "next.js");
+
+  // Malformed pieces degrade to the plain single year, never an error.
+  const junk = parseModelRequest(new URL("https://x/?login=octocat&span=range&from=junk&to=2021-05-31&subject=repo&owner=&repo="));
+  assert.equal(junk.span, "year");
+  assert.equal(junk.subject, "user");
+});
+
+test("a lifetime download carries the multi-year stack, not a single-year collapse", async () => {
+  // Every year answers with the same fixture days; what matters is that the
+  // kit route resolves span=lifetime into several years and the filename
+  // carries the span instead of one year.
+  stubGitHub();
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  const res = await getKit(
+    new Request(`${BASE}/kit?login=noluyorAbi&year=2025&variant=skyline&mm=120&span=lifetime`),
+  );
+  assert.equal(res.status, 200);
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  assert.match(disposition, /monolith-noluyorAbi-\d{4}-\d{4}-skyline-120mm-print-kit\.zip/, disposition);
+});
+
+test("a repo-subject GLB is built from the repository, not the owner's calendar", async () => {
+  const asked: string[] = [];
+  vi.stubGlobal("fetch", async (input: Request | string) => {
+    const url = typeof input === "string" ? input : String(input.url);
+    asked.push(url);
+    if (url.includes("/stats/commit_activity")) {
+      const rows = Array.from({ length: 52 }, (_, w) => ({
+        week: Math.floor(Date.UTC(2025, 0, 5 + w * 7) / 1000),
+        total: w % 5,
+        days: [0, 1, 1, 1, 1, 0, 0],
+      }));
+      return new Response(JSON.stringify(rows), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+  const res = await getGlb(
+    new Request(`${BASE}/glb?login=vercel&year=2025&variant=skyline&mm=180&subject=repo&owner=vercel&repo=next.js`),
+  );
+  assert.equal(res.status, 200);
+  assert.ok(
+    asked.every((u) => u.includes("/repos/vercel/next.js/stats/commit_activity")),
+    `only the repo stats endpoint may be hit, got ${asked}`,
+  );
+  assert.match(res.headers.get("Content-Disposition") ?? "", /vercel-next\.js/);
+});
+
+test("the card endpoint never mislabels its bytes and maps errors to statuses", async () => {
+  // ?format=png used to return SVG bytes under image/png; now the card is
+  // honestly SVG whatever the query asks.
+  stubGitHub();
+  const png = await getCard(
+    new Request(`${BASE}/card/noluyorAbi?year=2025&format=png`),
+    { params: Promise.resolve({ login: "noluyorAbi" }) },
+  );
+  assert.equal(png.status, 200);
+  assert.equal(png.headers.get("Content-Type"), "image/svg+xml");
+  assert.match(await png.text(), /^<\?xml/);
+
+  // A well-formed handle that does not exist is a 404, not a 500.
+  vi.stubGlobal("fetch", async () => new Response("", { status: 404 }));
+  const missing = await getCard(
+    new Request(`${BASE}/card/ghostuser99999`),
+    { params: Promise.resolve({ login: "ghostuser99999" }) },
+  );
+  assert.equal(missing.status, 404);
 });
 
 test("the repo route emits a 3MF from a repository's commit history", async () => {

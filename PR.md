@@ -246,4 +246,56 @@ path, so nothing was clickable. The Dock now has:
 Verified live in a browser: lifetime renders a side-by-side multi-year skyline,
 range shows date pickers, and repo renders a 5,620-commit skyline.
 
+---
+
+## Review hardening (multi-agent audit, 23 confirmed findings, all fixed)
+
+An adversarially-verified review pass over this branch surfaced 23 real defects;
+every one is fixed on this branch, with regression tests.
+
+**Share/export integrity (the branch's headline features were dead outside the viewer):**
+
+- Share URLs and `/s/[login]` deep links now carry and honour `span`, `from`/`to`,
+  `subject`, `owner`/`repo`, plus `variant`, `mm` and `dampening`. A shared lifetime
+  stack reopens as a lifetime stack, not a single-year default object.
+- The per-year permalink `/s/[login]/[year]` forwards the rest of its query string.
+- Every download route (kit / 3MF / STL / GLB) resolves the full subject+span via a
+  single `resolveModelSource()`; lifetime/range/repo downloads now contain the object
+  the viewer showed and priced. Filenames carry the span (`monolith-x-2016-2025-...`).
+- The print sheet forwards palette + dampening into downloads (GLB colours and the
+  exported geometry match the screen), and its README snippet uses the canonical
+  deployment URL rather than a hardcoded string or a preview origin.
+
+**API correctness:**
+
+- `fetchRepoActivity` handles GitHub's documented 202 (stats computing: two in-request
+  retries, then a 503 with `Retry-After`) and 204/empty (empty repo: flat 52-week plate).
+- `fetchContributionRange` splits multi-year windows at calendar boundaries (GraphQL
+  refuses >1 year), fetches slices in parallel and stitches them, deduping the
+  week-padding overlap. Ranges like 2014→2024 now return real data.
+- The card route maps NotFound/BadLogin to 404/400 instead of 500, no longer lets a
+  query parameter bypass the path's login validation, honours the shared palette and
+  dampening, and no longer mislabels SVG bytes as `image/png`.
+- GLB writer pads the JSON chunk with spaces (0x20) per spec; exports now load in
+  three.js/Blender for every mesh, not just the 25% whose JSON happened to align.
+- Commit-hours histogram counts `Z`-suffixed (UTC) timestamps, paginates up to 300
+  commits, and reports `sampled` vs `total` honestly.
+
+**Geometry:**
+
+- Skyline milestone engravings (JOINED / 1ST PR) extrude out of the plate wall
+  instead of being buried inside it, sit in opposite corners instead of overlapping,
+  and centre on their true rendered width.
+- `buildMultiYear` reports engrave-pixel and tower-gap in per-year millimetres, so
+  the print card no longer emits false "under the nozzle line" warnings.
+
+**Tests (76 → 88):** aliased GraphQL multi-year path, 202/204 repo stats, range
+stitching, Z-suffix hours, pagination caps, GLB BIN-chunk + padding validation,
+compare endpoint with differing data, share-state round-trips for span/subject.
+
+**New since the audit:** the HUD shows the M16 commit time-of-day histogram (24-bar,
+peak hour + chronotype, honest sampling caption) once a single user year is live;
+share uses the native share sheet on touch devices; the "star on github" chip shows
+the live star count.
+
 *Generated for review on `feat/market-features`. Merge target: `main`. Pushed; PR #6 open.*
