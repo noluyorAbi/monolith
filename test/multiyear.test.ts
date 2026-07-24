@@ -161,6 +161,32 @@ test("terraced years stand on ONE continuous base plate, not N loose plates", ()
   assert.ok(Math.abs(stacked.print.engravePixelMm - single.print.engravePixelMm) < 1e-6);
 });
 
+test("each terrace's year is engraved on the plate's right side wall", () => {
+  const parts = fakeMulti("octocat", [2022, 2023, 2024]);
+  const labelled = buildMultiYear(multiOf(parts), { variant: "skyline", sizeMm: 180, label: true });
+  const bare = buildMultiYear(multiOf(parts), { variant: "skyline", sizeMm: 180, label: false });
+  // The row-year text extrudes OUT of the +X wall, so the labelled build is
+  // wider than the plate by the engrave depth; the bare build is exactly 180.
+  assert.ok(Math.abs(bare.size.x - 180) < 1e-3, `bare width ${bare.size.x}`);
+  assert.ok(
+    labelled.size.x > 180.2 && labelled.size.x < 181,
+    `year labels should stand off the right wall (width ${labelled.size.x})`,
+  );
+  // One block of pixels per row: every row's Z band contains side-wall
+  // geometry past the plate wall. Only the year text reaches beyond
+  // bounds.max.x minus the engrave depth.
+  const zs: number[] = [];
+  const p = labelled.positions;
+  const textX = labelled.size.x / 2 - 0.3;
+  for (let i = 0; i < p.length; i += 3) {
+    if (p[i] > textX) zs.push(p[i + 2]);
+  }
+  zs.sort((a, b) => a - b);
+  let clusters = zs.length ? 1 : 0;
+  for (let i = 1; i < zs.length; i++) if (zs[i] - zs[i - 1] > 15) clusters++;
+  assert.equal(clusters, 3, `side-wall text should appear beside all 3 rows, got ${clusters} clusters`);
+});
+
 test("a multi-year stack deeper than the bed is caught by fitsBed", () => {
   const parts = fakeMulti("octocat", [2020, 2021, 2022, 2023, 2024, 2025]);
   const stacked = buildMultiYear(multiOf(parts), { variant: "skyline", sizeMm: 180, label: false });

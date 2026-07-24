@@ -101,6 +101,25 @@ function engraveWall(
   }
 }
 
+/**
+ * Raise text out of a +X-facing side wall. Seen from +X the reading direction
+ * runs along -Z, so the first letter sits at the highest Z (nearest the
+ * viewer's left) and the text is centred on `zCenter`.
+ */
+function engraveWallRight(
+  mb: MeshBuilder,
+  text: string,
+  opts: { x: number; y: number; px: number; zCenter: number },
+): void {
+  const width = measureText(text) * opts.px;
+  const zStart = opts.zCenter + width / 2;
+  for (const p of rasterise(text)) {
+    const z1 = zStart - p.col * opts.px;
+    const y0 = opts.y + p.row * opts.px;
+    mb.box(opts.x, y0, z1 - opts.px, opts.x + ENGRAVE_DEPTH, y0 + opts.px, z1);
+  }
+}
+
 /** Raise text out of a horizontal (+Y) surface, centred on (cx, cz). */
 function engraveTop(
   mb: MeshBuilder,
@@ -557,6 +576,13 @@ export function buildMultiYear(
         face: "back",
       });
     }
+    // Each terrace carries its own year on the plate's right side wall,
+    // centred on its row, so a stacked print still says which row is which.
+    const rowPx = px * 0.8;
+    const rowY = (BASE_H - GLYPH_H * rowPx) / 2;
+    multi.years.forEach((year, i) => {
+      engraveWallRight(mb, String(year.year), { x: px1, y: rowY, px: rowPx, zCenter: i * stride });
+    });
   }
   append(mb.finish(), 0);
 
