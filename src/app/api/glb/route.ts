@@ -1,6 +1,7 @@
 import { resolveModelSource } from "@/lib/github";
 import { LOGIN_RE, BadLoginError } from "@/lib/contributions";
 import { parseModelRequest } from "@/lib/request";
+import { buildOptionsFrom } from "@/lib/extras";
 import { buildMonolith, buildMultiYear } from "@/lib/build";
 import { modelErrorResponse } from "@/lib/responses";
 import { paletteById, defaultPalette } from "@/lib/palettes";
@@ -18,12 +19,7 @@ export async function GET(request: Request) {
     // mode (single year, lifetime stack, range, repo skyline).
     const src = await resolveModelSource(req);
     const palette = paletteById(req.paletteId) ?? defaultPalette();
-    const build = {
-      variant: req.variant,
-      sizeMm: req.sizeMm,
-      label: true,
-      dampening: req.dampening,
-    };
+    const build = buildOptionsFrom(req, src);
     const mesh = src.multi ? buildMultiYear(src.multi, build) : buildMonolith(src.data, build);
     const glb = writeGlb(mesh, palette);
     const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]+/g, "-");

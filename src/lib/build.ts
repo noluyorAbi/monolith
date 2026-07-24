@@ -140,7 +140,71 @@ function signature(data: ContributionYear): string {
   return data.login.toUpperCase();
 }
 
-function buildSkyline(data: ContributionYear, label: boolean, dampening = 0, plate = true): MeshBuilder {
+const SIGIL_H = 3.4;
+
+/**
+ * Raise the starsign out of a back wall: the sign's name plus its
+ * constellation, stars as dots and the connecting lines as strings of beads.
+ * Beads print at any angle where a thin angled prism would not, and a dotted
+ * line is how a star chart draws a figure anyway. Mirrored like all back-wall
+ * text so it reads correctly from that side.
+ */
+function engraveSigilBack(
+  mb: MeshBuilder,
+  sigil: NonNullable<BuildOptions["sigil"]>,
+  opts: { cx: number; z: number },
+): void {
+  const boxW = SIGIL_H * 1.5;
+  const namePx = (ENGRAVE_TEXT_MM / GLYPH_H) * 0.8;
+  const name = sigil.name.toUpperCase().replace(/^THE /, "");
+  const nameW = measureText(name) * namePx;
+  const gapW = 2.5;
+  const left = opts.cx - (boxW + gapW + nameW) / 2;
+  const zo = opts.z - ENGRAVE_DEPTH;
+  // Viewed from -Z the x axis mirrors; flip the figure so the printed chart
+  // matches the one on screen. SVG y runs down, wall y runs up: flip that too.
+  const at = ([nx, ny]: [number, number]): [number, number] => [
+    left + nameW + gapW + (1 - nx) * boxW,
+    (BASE_H - SIGIL_H) / 2 + (1 - ny) * SIGIL_H,
+  ];
+  for (const p of sigil.points) {
+    const [x, y] = at(p);
+    mb.box(x - 0.5, y - 0.5, zo, x + 0.5, y + 0.5, opts.z);
+  }
+  for (const [a, b] of sigil.edges) {
+    const [x1, y1] = at(sigil.points[a]);
+    const [x2, y2] = at(sigil.points[b]);
+    const beads = Math.max(2, Math.round(Math.hypot(x2 - x1, y2 - y1) / 0.9));
+    for (let i = 1; i < beads; i++) {
+      const t = i / beads;
+      const x = x1 + (x2 - x1) * t;
+      const y = y1 + (y2 - y1) * t;
+      mb.box(x - 0.3, y - 0.3, zo, x + 0.3, y + 0.3, opts.z);
+    }
+  }
+  engraveWall(mb, name, {
+    x: left,
+    y: (BASE_H - GLYPH_H * namePx) / 2,
+    px: namePx,
+    z: opts.z,
+    align: "left",
+    face: "back",
+  });
+}
+
+/** "PEAK 47 - 9 FEB" for the busiest day, or null for an empty window. */
+function peakText(days: Day[]): string | null {
+  let best: Day | null = null;
+  for (const d of days) if (d.count > 0 && (!best || d.count > best.count)) best = d;
+  if (!best) return null;
+  const m = Number(best.date.slice(5, 7)) - 1;
+  if (m < 0 || m > 11) return null;
+  return `PEAK ${best.count} - ${Number(best.date.slice(8, 10))} ${MONTHS[m]}`;
+}
+
+function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): MeshBuilder {
+  const label = o.label;
+  const dampening = o.dampening ?? 0;
   const mb = new MeshBuilder();
   const weeks = data.weeks;
   const cols = weeks.length;
@@ -170,6 +234,23 @@ function buildSkyline(data: ContributionYear, label: boolean, dampening = 0, pla
       const cz = z0 + PLATE_PAD + d * CELL;
       const at: Attribs = { level: day.level, order, baseY: BASE_H };
       mb.box(cx + GAP / 2, BASE_H, cz + GAP / 2, cx + CELL - GAP / 2, BASE_H + h, cz + CELL - GAP / 2, at);
+    }
+  }
+
+  // Opt-in extras live on the plate walls, so they need the plate. Both are
+  // independent of the signature label.
+  if (plate && o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: z0 });
+  if (plate && o.peak) {
+    const t = peakText(data.days);
+    if (t) {
+      const peakPx = (ENGRAVE_TEXT_MM / GLYPH_H) * 0.8;
+      engraveWall(mb, t, {
+        x: -(measureText(t) * peakPx) / 2,
+        y: (BASE_H - GLYPH_H * peakPx) / 2,
+        px: peakPx,
+        z: z0 + plateD,
+        align: "left",
+      });
     }
   }
 
@@ -225,7 +306,11 @@ function buildSkyline(data: ContributionYear, label: boolean, dampening = 0, pla
   return mb;
 }
 
-function buildRing(data: ContributionYear, label: boolean, dampening = 0, plate = true): MeshBuilder {
+// The ring has no flat wall, so the sigil and peak extras are skyline/wave/
+// multi-only for now; the flags are silently inert here.
+function buildRing(data: ContributionYear, o: BuildOptions, plate = true): MeshBuilder {
+  const label = o.label;
+  const dampening = o.dampening ?? 0;
   const mb = new MeshBuilder();
   const weeks = data.weeks;
   const cols = weeks.length;
@@ -268,7 +353,9 @@ function buildRing(data: ContributionYear, label: boolean, dampening = 0, plate 
   return mb;
 }
 
-function buildWave(data: ContributionYear, label: boolean, dampening = 0): MeshBuilder {
+function buildWave(data: ContributionYear, o: BuildOptions): MeshBuilder {
+  const label = o.label;
+  const dampening = o.dampening ?? 0;
   const mb = new MeshBuilder();
   const weeks = data.weeks;
   const cols = weeks.length;
@@ -346,6 +433,21 @@ function buildWave(data: ContributionYear, label: boolean, dampening = 0): MeshB
   }
   mb.quad([px(0), 0, pz(0)], [px(cols), 0, pz(0)], [px(cols), 0, pz(7)], [px(0), 0, pz(7)]);
 
+  if (o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: pz(0) });
+  if (o.peak) {
+    const t = peakText(data.days);
+    if (t) {
+      const peakPx = (ENGRAVE_TEXT_MM / GLYPH_H) * 0.8;
+      engraveWall(mb, t, {
+        x: px(cols) - 2,
+        y: (BASE_H - GLYPH_H * peakPx) / 2,
+        px: peakPx,
+        z: pz(7),
+        align: "right",
+      });
+    }
+  }
+
   if (!label) return mb;
   const tpx = ENGRAVE_TEXT_MM / GLYPH_H;
   engraveWall(mb, `${signature(data)} ${data.year}`, {
@@ -360,7 +462,11 @@ function buildWave(data: ContributionYear, label: boolean, dampening = 0): MeshB
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-function buildSpine(data: ContributionYear, label: boolean, dampening = 0, plate = true): MeshBuilder {
+// The spine's back wall carries the centred signature and its front wall the
+// month labels, so the sigil and peak extras are inert here too.
+function buildSpine(data: ContributionYear, o: BuildOptions, plate = true): MeshBuilder {
+  const label = o.label;
+  const dampening = o.dampening ?? 0;
   const mb = new MeshBuilder();
   const totals = new Array(12).fill(0);
   for (const day of data.days) {
@@ -418,7 +524,7 @@ function buildSpine(data: ContributionYear, label: boolean, dampening = 0, plate
 
 const BUILDERS: Record<
   Variant,
-  (data: ContributionYear, label: boolean, dampening?: number, plate?: boolean) => MeshBuilder
+  (data: ContributionYear, o: BuildOptions, plate?: boolean) => MeshBuilder
 > = {
   skyline: buildSkyline,
   ring: buildRing,
@@ -442,7 +548,7 @@ export function buildMonolith(data: ContributionYear, options: BuildOptions): Bu
     return scaleToSize(buildSlab().finish(), options.sizeMm * 0.28);
   }
   const builder = BUILDERS[options.variant] ?? buildSkyline;
-  const raw = builder(data, options.label, options.dampening ?? 0).finish();
+  const raw = builder(data, options).finish();
   const scaled = scaleToSize(raw, options.sizeMm);
 
   // Everything is modelled at a nominal size and then scaled, so the features
@@ -493,7 +599,8 @@ export function buildMultiYear(
   options: BuildOptions,
 ): BuiltMesh {
   const builder = BUILDERS[options.variant] ?? buildSkyline;
-  const rows = multi.years.map((y) => builder(y, false, options.dampening ?? 0, false).finish());
+  const rowOptions: BuildOptions = { ...options, label: false, sigil: null, peak: false };
+  const rows = multi.years.map((y) => builder(y, rowOptions, false).finish());
 
   // Nominal per-row footprint from the CALENDAR, not from whichever towers
   // happen to exist: a sparse or empty year still owns a full-size terrace,
@@ -583,6 +690,26 @@ export function buildMultiYear(
     multi.years.forEach((year, i) => {
       engraveWallRight(mb, String(year.year), { x: px1, y: rowY, px: rowPx, zCenter: i * stride });
     });
+  }
+  // Opt-in extras on the shared plate, independent of the signature label:
+  // the sigil in the centre of the back wall (milestones keep the corners),
+  // the peak day in the centre of the front wall (login and span keep those
+  // corners). The peak reads across every rendered year.
+  if (options.sigil) {
+    engraveSigilBack(mb, options.sigil, { cx: (px0 + px1) / 2, z: pz0 });
+  }
+  if (options.peak) {
+    const t = peakText(multi.years.flatMap((y) => y.days));
+    if (t) {
+      const peakPx = (ENGRAVE_TEXT_MM / GLYPH_H) * 0.8;
+      engraveWall(mb, t, {
+        x: (px0 + px1) / 2 - (measureText(t) * peakPx) / 2,
+        y: (BASE_H - GLYPH_H * peakPx) / 2,
+        px: peakPx,
+        z: pz1,
+        align: "left",
+      });
+    }
   }
   append(mb.finish(), 0);
 

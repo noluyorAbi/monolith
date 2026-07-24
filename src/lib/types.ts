@@ -117,6 +117,17 @@ export interface BuildOptions {
    * spike does not tower over the year. F7.
    */
   dampening?: number;
+  /**
+   * Opt-in: engrave the starsign on the plate. The constellation is raised
+   * out of the front wall beside the signature and the sign name joins it,
+   * so the persona is part of the print, not just the page.
+   */
+  sigil?: { points: [number, number][]; edges: [number, number][]; name: string } | null;
+  /**
+   * Opt-in: engrave the best day's date (e.g. "9 FEB") on top of the
+   * tallest tower, when that tower is wide enough to carry legible text.
+   */
+  peak?: boolean;
 }
 
 export interface BuiltMesh {

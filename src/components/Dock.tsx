@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { parseRepoInput } from "@/lib/request";
+import { parseRepoInput, type FlagId } from "@/lib/request";
 import { SIZES, VARIANTS, fitsBed, sizeById, type SizeId } from "@/lib/build";
 import { printerById } from "@/lib/print";
 import { PALETTES, type Palette } from "@/lib/palettes";
@@ -137,6 +137,9 @@ export interface DockProps {
   onPrinter: (id: string) => void;
   dampening: number;
   onDampening: (v: number) => void;
+  /** Opt-in extras; every flag defaults to off so the plain object stays the default. */
+  flags: FlagId[];
+  onFlags: (next: FlagId[]) => void;
   total: number;
   onPrint: () => void;
   spin: boolean;
@@ -496,6 +499,44 @@ export function Dock(props: DockProps) {
                     title="Flatten the busiest days so one spike does not tower over the year"
                     className="h-1 w-full cursor-pointer appearance-none rounded-full bg-edge accent-fog"
                   />
+                </Group>
+
+                <Group label="Extras">
+                  {(
+                    [
+                      {
+                        id: "sigil",
+                        name: "Starsign",
+                        hint: "Engrave your starsign constellation and name on the plate's back wall",
+                      },
+                      {
+                        id: "peak",
+                        name: "Peak day",
+                        hint: "Engrave your busiest day (count and date) on the plate's front wall",
+                      },
+                      {
+                        id: "twocolor",
+                        name: "Two-colour",
+                        hint: "3MF ships plate and towers as separate objects for AMS/MMU colour printing",
+                      },
+                    ] as { id: FlagId; name: string; hint: string }[]
+                  ).map((f) => (
+                    <Toggle
+                      key={f.id}
+                      active={props.flags.includes(f.id)}
+                      title={f.hint}
+                      onClick={() => {
+                        play("tick");
+                        props.onFlags(
+                          props.flags.includes(f.id)
+                            ? props.flags.filter((x) => x !== f.id)
+                            : [...props.flags, f.id],
+                        );
+                      }}
+                    >
+                      {f.name}
+                    </Toggle>
+                  ))}
                 </Group>
 
                 <Group label="Studio">

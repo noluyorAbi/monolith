@@ -423,6 +423,35 @@ test("an empty repository (204 / empty stats) still yields a buildable flat plat
   assert.ok(mesh.triangles > 0, "the flat plate builds instead of crashing");
 });
 
+test("the sigil and peak-day engravings are opt-in and add real geometry", () => {
+  const year = fakeMulti("octocat", [2025])[0];
+  const sigil = {
+    points: [[0.1, 0.2], [0.5, 0.8], [0.9, 0.3]] as [number, number][],
+    edges: [[0, 1], [1, 2]] as [number, number][],
+    name: "The Comet",
+  };
+  const plain = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true });
+  const withSigil = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true, sigil });
+  const withPeak = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true, peak: true });
+  assert.ok(withSigil.triangles > plain.triangles, "the sigil must add back-wall geometry");
+  assert.ok(withPeak.triangles > plain.triangles, "the peak date must add front-wall geometry");
+  // Off means off: no flag, byte-identical geometry.
+  const again = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true });
+  assert.equal(again.triangles, plain.triangles);
+
+  // The same extras land on a multi-year stack's shared plate.
+  const parts = fakeMulti("octocat", [2024, 2025]);
+  const stackPlain = buildMultiYear(multiOf(parts), { variant: "skyline", sizeMm: 180, label: true });
+  const stackExtra = buildMultiYear(multiOf(parts), {
+    variant: "skyline",
+    sizeMm: 180,
+    label: true,
+    sigil,
+    peak: true,
+  });
+  assert.ok(stackExtra.triangles > stackPlain.triangles);
+});
+
 test("commit time-of-day is bucketed into 24 local hours (M16)", async () => {
   vi.stubGlobal("fetch", async (input: Request) => {
     const url = typeof input === "string" ? input : String(input.url);

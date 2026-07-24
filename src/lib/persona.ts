@@ -295,6 +295,31 @@ function castSigil(seed: string): Persona["sigil"] {
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
+/** Every sign id the share contract may carry. */
+export const SIGN_IDS = SIGNS.map((s) => s.id);
+
+export function signName(id: string): string | null {
+  return SIGNS.find((s) => s.id === id)?.name ?? null;
+}
+
+/**
+ * The engraving payload for a known sign: the same deterministic
+ * constellation the card shows, cast from login + sign + window. The sign id
+ * travels in the share URL so an hour-refined reading (which the download
+ * routes cannot re-derive without the rate-limited search API) still engraves
+ * exactly what the page showed.
+ */
+export function sigilFor(
+  login: string,
+  signId: string,
+  spanKey: string,
+): { points: [number, number][]; edges: [number, number][]; name: string } | null {
+  const name = signName(signId);
+  if (!name) return null;
+  const sigil = castSigil(`${login.toLowerCase()}:${signId}${spanKey ? `:${spanKey}` : ""}`);
+  return { points: sigil.points, edges: sigil.edges, name };
+}
+
 /** The one measurement that made this sign fire; leads the evidence chips. */
 function signatureTrait(id: string, m: PersonaMetrics): string | null {
   switch (id) {

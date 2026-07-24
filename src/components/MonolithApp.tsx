@@ -30,7 +30,7 @@ import {
   subscribeSound,
 } from "@/lib/sound";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { modelQuery, type ModelSpan, type ModelSubject } from "@/lib/request";
+import { modelQuery, type FlagId, type ModelSpan, type ModelSubject } from "@/lib/request";
 import { derivePersona } from "@/lib/persona";
 import type { SizeId } from "@/lib/build";
 import type {
@@ -74,6 +74,7 @@ export function MonolithApp({
   initialSubject,
   initialRepoOwner,
   initialRepoName,
+  initialFlags,
 }: {
   initialLogin?: string;
   initialYear?: number;
@@ -87,6 +88,7 @@ export function MonolithApp({
   initialSubject?: ModelSubject;
   initialRepoOwner?: string;
   initialRepoName?: string;
+  initialFlags?: FlagId[];
 }) {
   const years = useMemo(() => availableYears(SELECTABLE_YEARS), []);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -118,6 +120,8 @@ export function MonolithApp({
   const [sizeId, setSizeId] = useState<SizeId>(nearestSizeId(initialSizeMm));
   const [printerId, setPrinterId] = useState(DEFAULT_PRINTER_ID);
   const [dampening, setDampening] = useState(initialDampening ?? 0);
+  /** Opt-in extras (sigil engraving, peak-day text, two-colour 3MF, ...). */
+  const [flags, setFlags] = useState<FlagId[]>(initialFlags ?? []);
   const [data, setData] = useState<ContributionYear | null>(null);
   /** A multi-year roll-up (lifetime / several years). Set alongside `data` so
    * the viewer can render it with buildMultiYear. M1 / marktanalyse 5.4. */
@@ -178,6 +182,8 @@ export function MonolithApp({
     variant: Variant;
     sizeMm: number;
     dampening: number;
+    /** Which opt-in engravings the mesh was built with; "|" means none. */
+    extrasKey: string;
     mesh: BuiltMesh;
   } | null>(null);
   const runId = useRef(0);
@@ -220,6 +226,44 @@ export function MonolithApp({
     if (next.paletteId) setStoryPaletteId(next.paletteId);
   }, []);
 
+  /** The histogram, only when it describes exactly the object on screen. */
+  const hoursForHud =
+    commitHours &&
+    subject === "user" &&
+    span === "year" &&
+    commitHours.year === year &&
+    commitHours.login.toLowerCase() === login.toLowerCase()
+      ? commitHours
+      : null;
+
+  // The developer starsign: cast from the calendar on screen, refined by the
+  // hour histogram once it lands. A repository has working hours but not a
+  // temperament, so the sign is a user-only reading. For a multi-year object
+  // the reading spans every rendered year: mixing one year's days with the
+  // roll-up's stats once produced "active 525% of days".
+  const persona = useMemo(() => {
+    if (!data || !stats || subject !== "user") return null;
+    if (multi) {
+      const days = multi.years.flatMap((y) => y.days);
+      const merged = { ...data, days, total: multi.totalCommits };
+      return derivePersona(merged, computeStats(merged), null, yearLabel);
+    }
+    return derivePersona(data, stats, hoursForHud, yearLabel);
+  }, [data, stats, multi, subject, hoursForHud, yearLabel]);
+
+  // The opt-in engravings the mesh should wear right now. The sigil follows
+  // the persona on screen (hour-refined included), so toggling the flag or a
+  // late histogram both rebuild the object; the key makes that comparable
+  // against what the forge built.
+  const sigilOpt = useMemo(
+    () =>
+      flags.includes("sigil") && persona
+        ? { points: persona.sigil.points, edges: persona.sigil.edges, name: persona.name }
+        : null,
+    [flags, persona],
+  );
+  const extrasKey = `${sigilOpt && persona ? persona.id : ""}|${flags.includes("peak") ? "p" : ""}`;
+
   const mesh = useMemo(() => {
     if (!data) return null;
     // The forge already built this mesh to report its triangle count. Reuse it
@@ -227,13 +271,19 @@ export function MonolithApp({
     // exactly this data and configuration: a control touched during the forge's
     // scripted pauses would otherwise leave the readout describing an object
     // that never gets rendered.
-    if (built && built.data === data && built.variant === variant && built.sizeMm === sizeMm && built.dampening === dampening) {
+    if (
+      built &&
+      built.data === data &&
+      built.variant === variant &&
+      built.sizeMm === sizeMm &&
+      built.dampening === dampening &&
+      built.extrasKey === extrasKey
+    ) {
       return built.mesh;
     }
-    return multi
-      ? buildMultiYear(multi, { variant, sizeMm, label: true, dampening })
-      : buildMonolith(data, { variant, sizeMm, label: true, dampening });
-  }, [data, multi, built, variant, sizeMm, dampening]);
+    const o = { variant, sizeMm, label: true, dampening, sigil: sigilOpt, peak: flags.includes("peak") };
+    return multi ? buildMultiYear(multi, o) : buildMonolith(data, o);
+  }, [data, multi, built, variant, sizeMm, dampening, sigilOpt, extrasKey, flags]);
 
   const forge = useCallback(
     async (
@@ -385,7 +435,9 @@ export function MonolithApp({
       const forged = payload.multi
         ? buildMultiYear(payload.multi, { variant, sizeMm, label: true, dampening })
         : buildMonolith(yearData!, { variant, sizeMm, label: true, dampening });
-      setBuilt({ data: yearData!, variant, sizeMm, dampening, mesh: forged });
+      // The forge builds the plain object; when extras are toggled on, the
+      // mesh memo rebuilds once with the engravings after the persona lands.
+      setBuilt({ data: yearData!, variant, sizeMm, dampening, extrasKey: "|", mesh: forged });
       push(
         {
           label: "extruding",
@@ -454,6 +506,19 @@ export function MonolithApp({
     [variant, sizeMm, reduceMotion, paletteId, dampening, subject, span, repoOwner, repoName, rangeFrom, rangeTo],
   );
 
+  // Keep the address bar honest about the extras: toggling a flag (or the
+  // hour histogram refining the sign) after the forge must land in the URL,
+  // or a copied link would drop the engravings the object on screen wears.
+  useEffect(() => {
+    if (phase !== "live") return;
+    const url = new URL(window.location.href);
+    if (flags.length) url.searchParams.set("flags", flags.join(","));
+    else url.searchParams.delete("flags");
+    if (flags.includes("sigil") && persona) url.searchParams.set("sign", persona.id);
+    else url.searchParams.delete("sign");
+    window.history.replaceState(null, "", url);
+  }, [phase, flags, persona]);
+
   // Deep-link boot. The guard is what makes this run once, rather than an
   // rebuilt whenever the form or size changes, and without the ref a shared
   // link would rebuild itself every time you touched a control.
@@ -500,31 +565,6 @@ export function MonolithApp({
       cancelled = true;
     };
   }, [phase, subject, span, login, year]);
-
-  /** The histogram, only when it describes exactly the object on screen. */
-  const hoursForHud =
-    commitHours &&
-    subject === "user" &&
-    span === "year" &&
-    commitHours.year === year &&
-    commitHours.login.toLowerCase() === login.toLowerCase()
-      ? commitHours
-      : null;
-
-  // The developer starsign: cast from the calendar on screen, refined by the
-  // hour histogram once it lands. A repository has working hours but not a
-  // temperament, so the sign is a user-only reading. For a multi-year object
-  // the reading spans every rendered year: mixing one year's days with the
-  // roll-up's stats once produced "active 525% of days".
-  const persona = useMemo(() => {
-    if (!data || !stats || subject !== "user") return null;
-    if (multi) {
-      const days = multi.years.flatMap((y) => y.days);
-      const merged = { ...data, days, total: multi.totalCommits };
-      return derivePersona(merged, computeStats(merged), null, yearLabel);
-    }
-    return derivePersona(data, stats, hoursForHud, yearLabel);
-  }, [data, stats, multi, subject, hoursForHud, yearLabel]);
 
   const reset = useCallback(() => {
     runId.current++;
@@ -598,6 +638,8 @@ export function MonolithApp({
       subject,
       repoOwner,
       repoName,
+      flags,
+      sign: persona?.id,
     })}`;
     // On touch devices the native share sheet reaches the places a copied
     // link is actually headed; everywhere else the clipboard stays quickest.
@@ -1019,6 +1061,8 @@ export function MonolithApp({
           onPrinter={setPrinterId}
           dampening={dampening}
           onDampening={setDampening}
+          flags={flags}
+          onFlags={setFlags}
           total={stats?.total ?? 0}
           onPrint={() => setPrinting(true)}
           spin={spin && !reduceMotion}
@@ -1053,6 +1097,8 @@ export function MonolithApp({
               subject={subject}
               repoOwner={repoOwner}
               repoName={repoName}
+              flags={flags}
+              sign={persona?.id ?? ""}
             />
           </>
         )}

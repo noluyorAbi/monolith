@@ -5,6 +5,7 @@ import { buildMonolith, buildMultiYear } from "@/lib/build";
 import { printableParts } from "@/lib/parts";
 import { buildKit, kitStem } from "@/lib/kit";
 import { parseModelRequest } from "@/lib/request";
+import { buildOptionsFrom } from "@/lib/extras";
 import { PROJECT } from "@/lib/project";
 
 export const runtime = "nodejs";
@@ -17,12 +18,7 @@ export async function GET(request: Request) {
     // the viewer showed (lifetime stack, range, repo skyline), not a
     // single-year collapse of it.
     const src = await resolveModelSource(options);
-    const build = {
-      variant: options.variant,
-      sizeMm: options.sizeMm,
-      label: true,
-      dampening: options.dampening,
-    };
+    const build = buildOptionsFrom(options, src);
     const mesh = src.multi ? buildMultiYear(src.multi, build) : buildMonolith(src.data, build);
     const parts = printableParts(mesh);
 

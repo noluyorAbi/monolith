@@ -5,6 +5,7 @@ import { buildMonolith, buildMultiYear } from "@/lib/build";
 import { printableParts } from "@/lib/parts";
 import { buildKitThreeMf, kitStem } from "@/lib/kit";
 import { parseModelRequest } from "@/lib/request";
+import { buildOptionsFrom } from "@/lib/extras";
 import { PROJECT } from "@/lib/project";
 
 export const runtime = "nodejs";
@@ -16,12 +17,7 @@ export async function GET(request: Request) {
     // Same resolver as every download: the 3MF matches the viewer in every
     // mode (single year, lifetime stack, range, repo skyline).
     const src = await resolveModelSource(options);
-    const build = {
-      variant: options.variant,
-      sizeMm: options.sizeMm,
-      label: true,
-      dampening: options.dampening,
-    };
+    const build = buildOptionsFrom(options, src);
     const mesh = src.multi ? buildMultiYear(src.multi, build) : buildMonolith(src.data, build);
     const parts = printableParts(mesh);
 

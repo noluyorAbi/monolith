@@ -2,6 +2,7 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { computePersonaMetrics, derivePersona } from "@/lib/persona";
+import { buildOptionsFrom } from "@/lib/extras";
 import { parseRepoInput } from "@/lib/request";
 import { computeStats, yearFromDays } from "@/lib/contributions";
 import type { CommitHoursData, Day } from "@/lib/types";
@@ -155,6 +156,26 @@ test("the same sign wears a different constellation for a different window", () 
   );
   // Still deterministic per window.
   assert.deepEqual(derivePersona(data, stats, null, "2026").sigil, y2026.sigil);
+});
+
+test("buildOptionsFrom honours the carried sign and derives one when absent", () => {
+  const data = year(() => 3);
+  const src = { data, multi: null, spanLabel: "2025", who: "octocat" };
+  const base = { variant: "skyline" as const, sizeMm: 180, dampening: 0 };
+
+  const carried = buildOptionsFrom({ ...base, flags: ["sigil", "peak"], sign: "comet" }, src);
+  assert.equal(carried.sigil?.name, "The Comet", "the page's sign wins");
+  assert.equal(carried.peak, true);
+
+  const derived = buildOptionsFrom({ ...base, flags: ["sigil"], sign: "" }, src);
+  assert.equal(derived.sigil?.name, "The Perennial", "no sign carried: derive from the calendar");
+  assert.ok(derived.peak === undefined || derived.peak === false);
+
+  const off = buildOptionsFrom({ ...base, flags: [], sign: "comet" }, src);
+  assert.ok(!off.sigil && !off.peak, "no flags, no extras");
+
+  const junk = buildOptionsFrom({ ...base, flags: ["sigil"], sign: "notasign" }, src);
+  assert.equal(junk.sigil?.name, "The Perennial", "an unknown sign id falls back to deriving");
 });
 
 test("parseRepoInput accepts what people actually paste", () => {
