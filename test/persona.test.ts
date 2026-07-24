@@ -142,6 +142,21 @@ test("every shape of year gets a sign, and the sigil is stable and in bounds", (
   }
 });
 
+test("the same sign wears a different constellation for a different window", () => {
+  const data = year(() => 3);
+  const stats = computeStats(data);
+  const y2026 = derivePersona(data, stats, null, "2026");
+  const range = derivePersona(data, stats, null, "2023-2026");
+  assert.equal(y2026.id, range.id, "same shape, same sign");
+  assert.notDeepEqual(
+    y2026.sigil.points,
+    range.sigil.points,
+    "the reading belongs to the window, so the stars must differ",
+  );
+  // Still deterministic per window.
+  assert.deepEqual(derivePersona(data, stats, null, "2026").sigil, y2026.sigil);
+});
+
 test("parseRepoInput accepts what people actually paste", () => {
   for (const raw of [
     "https://github.com/vercel/next.js",

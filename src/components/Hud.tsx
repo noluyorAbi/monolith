@@ -105,7 +105,7 @@ const TIER_COLOR: Record<Persona["tier"], string> = {
   common: "var(--color-dim)",
 };
 
-function PersonaCard({ persona }: { persona: Persona }) {
+function PersonaCard({ persona, yearLabel }: { persona: Persona; yearLabel: string }) {
   const px = (v: number) => v * 100;
   const [bx, by] = persona.sigil.points[persona.sigil.brightest];
   return (
@@ -208,7 +208,9 @@ function PersonaCard({ persona }: { persona: Persona }) {
         </svg>
         <div className="min-w-0">
           <div className="flex items-baseline gap-2">
-            <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">starsign</span>
+            <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+              starsign · {yearLabel}
+            </span>
             <span
               className="text-[0.55rem] tracking-[0.18em] uppercase"
               style={{ color: TIER_COLOR[persona.tier] }}
@@ -349,7 +351,7 @@ export function Hud({
           )}
         </motion.div>
         {commitHours && <HourHistogram hours={commitHours} />}
-        {persona && <PersonaCard persona={persona} />}
+        {persona && <PersonaCard persona={persona} yearLabel={yearLabel ?? String(data.year)} />}
       </div>
       )}
 

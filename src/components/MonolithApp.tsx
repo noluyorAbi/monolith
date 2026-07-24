@@ -521,10 +521,10 @@ export function MonolithApp({
     if (multi) {
       const days = multi.years.flatMap((y) => y.days);
       const merged = { ...data, days, total: multi.totalCommits };
-      return derivePersona(merged, computeStats(merged), null);
+      return derivePersona(merged, computeStats(merged), null, yearLabel);
     }
-    return derivePersona(data, stats, hoursForHud);
-  }, [data, stats, multi, subject, hoursForHud]);
+    return derivePersona(data, stats, hoursForHud, yearLabel);
+  }, [data, stats, multi, subject, hoursForHud, yearLabel]);
 
   const reset = useCallback(() => {
     runId.current++;

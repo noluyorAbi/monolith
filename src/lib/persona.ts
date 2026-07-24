@@ -326,6 +326,13 @@ export function derivePersona(
   data: ContributionYear,
   stats: Stats,
   hours?: CommitHoursData | null,
+  /**
+   * Identifies the window being read ("2026", "2023-2026", "2019-2026" for a
+   * lifetime). It seeds the sigil alongside login and sign, so the same
+   * account under the same sign still wears a different constellation for a
+   * different period: the reading belongs to the window, not the login.
+   */
+  spanKey?: string,
 ): Persona {
   const metrics = computePersonaMetrics(data, stats, hours);
   const idx = SIGNS.findIndex((s) => s.when(metrics));
@@ -356,6 +363,8 @@ export function derivePersona(
     traits: traits.slice(0, 3),
     ascendant: asc ? { id: asc.id, name: asc.name } : null,
     metrics,
-    sigil: castSigil(`${data.login.toLowerCase()}:${sign.id}`),
+    sigil: castSigil(
+      `${data.login.toLowerCase()}:${sign.id}${spanKey ? `:${spanKey}` : ""}`,
+    ),
   };
 }
