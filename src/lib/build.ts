@@ -121,7 +121,7 @@ function signature(data: ContributionYear): string {
   return data.login.toUpperCase();
 }
 
-function buildSkyline(data: ContributionYear, label: boolean, dampening = 0): MeshBuilder {
+function buildSkyline(data: ContributionYear, label: boolean, dampening = 0, plate = true): MeshBuilder {
   const mb = new MeshBuilder();
   const weeks = data.weeks;
   const cols = weeks.length;
@@ -132,7 +132,9 @@ function buildSkyline(data: ContributionYear, label: boolean, dampening = 0): Me
   const x0 = -plateW / 2;
   const z0 = -plateD / 2;
 
-  mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
+  // plate=false when the multi-year assembly provides one shared base plate
+  // for all rows; the towers then sit directly on that shared plate.
+  if (plate) mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
 
   const max = maxCount(data.days);
   const total = Math.max(1, data.days.length);
@@ -204,7 +206,7 @@ function buildSkyline(data: ContributionYear, label: boolean, dampening = 0): Me
   return mb;
 }
 
-function buildRing(data: ContributionYear, label: boolean, dampening = 0): MeshBuilder {
+function buildRing(data: ContributionYear, label: boolean, dampening = 0, plate = true): MeshBuilder {
   const mb = new MeshBuilder();
   const weeks = data.weeks;
   const cols = weeks.length;
@@ -213,7 +215,7 @@ function buildRing(data: ContributionYear, label: boolean, dampening = 0): MeshB
   const outerR = innerR + 7 * bandT;
   const plateR = outerR + PLATE_PAD;
 
-  mb.cylinder(plateR, 0, BASE_H, 128);
+  if (plate) mb.cylinder(plateR, 0, BASE_H, 128);
 
   const max = maxCount(data.days);
   const total = Math.max(1, data.days.length);
@@ -339,7 +341,7 @@ function buildWave(data: ContributionYear, label: boolean, dampening = 0): MeshB
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-function buildSpine(data: ContributionYear, label: boolean, dampening = 0): MeshBuilder {
+function buildSpine(data: ContributionYear, label: boolean, dampening = 0, plate = true): MeshBuilder {
   const mb = new MeshBuilder();
   const totals = new Array(12).fill(0);
   for (const day of data.days) {
@@ -356,7 +358,7 @@ function buildSpine(data: ContributionYear, label: boolean, dampening = 0): Mesh
   const x0 = -plateW / 2;
   const z0 = -plateD / 2;
 
-  mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
+  if (plate) mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
 
   for (let m = 0; m < 12; m++) {
     const d = clamp01(dampening);
@@ -395,7 +397,10 @@ function buildSpine(data: ContributionYear, label: boolean, dampening = 0): Mesh
   return mb;
 }
 
-const BUILDERS: Record<Variant, (data: ContributionYear, label: boolean, dampening?: number) => MeshBuilder> = {
+const BUILDERS: Record<
+  Variant,
+  (data: ContributionYear, label: boolean, dampening?: number, plate?: boolean) => MeshBuilder
+> = {
   skyline: buildSkyline,
   ring: buildRing,
   wave: buildWave,
@@ -455,98 +460,146 @@ export function sizesForPrinter(printer: Printer): Array<SizeDef & { fits: boole
 
 /**
  * Stack several years into one object, oldest at the back, newest at the
- * front. Each year is built at the same `sizeMm` and placed one row deeper
- * than the next (the Z axis), so ten years read as terraces of a hillside
- * rather than a two-metre-wide strip: the width stays one year's width and
- * only the depth grows, which is also what a print bed can actually hold.
- * The caller still checks `fitsBed` against the resulting depth.
+ * front. Years are terraces along Z (the width stays one year's width, only
+ * the depth grows), and every row stands on ONE continuous base plate, so the
+ * result is a single connected solid rather than N loose plates with air
+ * between them. Rows are built plate-less in raw units and share one scale
+ * factor, so a partial year comes out proportionally narrower with the same
+ * cell size as its neighbours. The signature, the year span and the account
+ * milestones are engraved on the shared plate's walls. The caller still
+ * checks `fitsBed` against the resulting depth.
  */
 export function buildMultiYear(
   multi: MultiYearData,
   options: BuildOptions,
 ): BuiltMesh {
-  // Every row must wear ONE physical scale, or a half year re-slices from an
-  // arbitrary range would blow its cells up to twice the size of its
-  // neighbours. Each year's raw width is known from its week count, so each
-  // is built to a proportionally smaller target and all rows come out with
-  // identical cell sizes.
-  const rawWidth = (weeks: number): number =>
-    options.variant === "skyline"
-      ? weeks * CELL + PLATE_PAD * 2
-      : options.variant === "wave"
-        ? weeks * CELL
-        : 1; // ring and spine have a fixed footprint regardless of weeks
-  const maxRaw = Math.max(...multi.years.map((y) => rawWidth(y.weeks.length)));
-  const targetFor = (y: ContributionYear): number =>
-    options.sizeMm * (rawWidth(y.weeks.length) / maxRaw);
+  const builder = BUILDERS[options.variant] ?? buildSkyline;
+  const rows = multi.years.map((y) => builder(y, false, options.dampening ?? 0, false).finish());
 
-  const meshes = multi.years.map((year, i) =>
-    buildMonolith(year, {
-      ...options,
-      sizeMm: targetFor(year),
-      label: i === multi.years.length - 1,
-    }),
-  );
+  // Row pitch: the deepest row plus a readable gap of plate between years.
+  const rowDepth = Math.max(...rows.map((r) => r.size.z));
+  const rowGap = CELL * 2.5;
+  const stride = rowDepth + rowGap;
 
-  const maxDepth = Math.max(...meshes.map((m) => m.size.z));
-  const gutter = maxDepth * 0.18;
-  const stride = maxDepth + gutter;
   const positions: number[] = [];
   const levels: number[] = [];
   const order: number[] = [];
   const baseY: number[] = [];
-  // The engraving and the tower gaps live inside each per-year mesh, already
-  // scaled by the shared factor. The roll-up must report those real
-  // millimetres, not re-derive them from the N-years-deep total footprint,
-  // which would understate them by a factor of N and trip false print
-  // warnings. Engraving is on the labelled (last) year; the gap warning takes
-  // the tightest year.
-  let engravePixelMm = 0;
-  let gapMm: number | null = null;
-
-  meshes.forEach((mesh, i) => {
-    if (i === meshes.length - 1) engravePixelMm = mesh.print?.engravePixelMm ?? 0;
-    const g = mesh.print?.gapMm;
-    if (g != null && (gapMm == null || g < gapMm)) gapMm = g;
-    // Oldest year deepest, newest in front; the newest year carries the
-    // signature, so the engraved wall stays the outermost face.
-    const dz = i * stride;
+  const append = (mesh: BuiltMesh, dz: number): void => {
     for (let v = 0; v < mesh.positions.length; v += 3) {
       positions.push(mesh.positions[v], mesh.positions[v + 1], mesh.positions[v + 2] + dz);
       levels.push(mesh.levels[v / 3]);
       order.push(mesh.order[v / 3]);
       baseY.push(mesh.baseY[v / 3]);
     }
-  });
+  };
+  // Oldest year deepest, newest in front, so the signature wall stays the
+  // outermost face.
+  rows.forEach((mesh, i) => append(mesh, i * stride));
 
-  const pos = new Float32Array(positions);
-  const bounds = { min: [Infinity, Infinity, Infinity] as [number, number, number], max: [-Infinity, -Infinity, -Infinity] as [number, number, number] };
-  for (let i = 0; i < pos.length; i += 3) {
-    for (let a = 0; a < 3; a++) {
-      bounds.min[a] = Math.min(bounds.min[a], pos[i + a]);
-      bounds.max[a] = Math.max(bounds.max[a], pos[i + a]);
+  // Tower footprint across all rows, before the plate is added.
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < positions.length; i += 3) {
+    if (positions[i] < minX) minX = positions[i];
+    if (positions[i] > maxX) maxX = positions[i];
+    if (positions[i + 2] < minZ) minZ = positions[i + 2];
+    if (positions[i + 2] > maxZ) maxZ = positions[i + 2];
+  }
+  if (!Number.isFinite(minX)) {
+    minX = maxX = minZ = maxZ = 0;
+  }
+
+  // One complete plate under every row. Towers are inset GAP/2 from their
+  // grid cell, so the margin adds that half gap back and the plate edge lands
+  // exactly PLATE_PAD outside the grid, same as a single year's plate.
+  const margin = PLATE_PAD + GAP / 2;
+  const px0 = minX - margin;
+  const px1 = maxX + margin;
+  const pz0 = minZ - margin;
+  const pz1 = maxZ + margin;
+  const mb = new MeshBuilder();
+  mb.box(px0, 0, pz0, px1, BASE_H, pz1);
+
+  if (options.label) {
+    const last = multi.years[multi.years.length - 1];
+    const px = ENGRAVE_TEXT_MM / GLYPH_H;
+    const textY = (BASE_H - ENGRAVE_TEXT_MM) / 2;
+    const span =
+      multi.fromYear === multi.toYear
+        ? String(multi.toYear)
+        : `${multi.fromYear}-${multi.toYear}`;
+    engraveWall(mb, signature(last), { x: px0 + PLATE_PAD, y: textY, px, z: pz1, align: "left" });
+    engraveWall(mb, span, { x: px1 - PLATE_PAD, y: textY, px, z: pz1, align: "right" });
+    // Milestones live on the min-Z wall (the outermost back face), one per
+    // corner, exactly like the single-year plate.
+    const yearOf = (iso?: string) => (iso ? iso.slice(0, 4) : undefined);
+    const milestonePx = px * 0.8;
+    const milestoneY = (BASE_H - GLYPH_H * milestonePx) / 2;
+    const joined = yearOf(last.joinedAt);
+    if (joined) {
+      engraveWall(mb, `JOINED ${joined}`, {
+        x: px0 + PLATE_PAD,
+        y: milestoneY,
+        px: milestonePx,
+        z: pz0,
+        align: "left",
+        face: "back",
+      });
+    }
+    const firstPr = yearOf(last.firstPrAt);
+    if (firstPr) {
+      engraveWall(mb, `1ST PR ${firstPr}`, {
+        x: px1 - PLATE_PAD,
+        y: milestoneY,
+        px: milestonePx,
+        z: pz0,
+        align: "right",
+        face: "back",
+      });
     }
   }
-  const size = {
-    x: bounds.max[0] - bounds.min[0],
-    y: bounds.max[1] - bounds.min[1],
-    z: bounds.max[2] - bounds.min[2],
-  };
-  // Re-centre on X and Z so the object sits in the middle of the build plate,
-  // and lift so the base sits at y=0.
-  const cx = (bounds.min[0] + bounds.max[0]) / 2;
-  const cz = (bounds.min[2] + bounds.max[2]) / 2;
+  append(mb.finish(), 0);
+
+  // Width carries the single-year meaning of sizeMm; the depth grows with the
+  // year count and is reported honestly for the bed check. Scaled by the plate
+  // width so k matches a single year's scale factor exactly.
+  const k = options.sizeMm / Math.max(1e-6, px1 - px0);
+
+  const pos = new Float32Array(positions);
+  let bMinX = Infinity, bMaxX = -Infinity, bMinY = Infinity, bMinZ = Infinity, bMaxZ = -Infinity, bMaxY = -Infinity;
   for (let i = 0; i < pos.length; i += 3) {
-    pos[i] -= cx;
-    pos[i + 1] -= bounds.min[1];
-    pos[i + 2] -= cz;
+    if (pos[i] < bMinX) bMinX = pos[i];
+    if (pos[i] > bMaxX) bMaxX = pos[i];
+    if (pos[i + 1] < bMinY) bMinY = pos[i + 1];
+    if (pos[i + 1] > bMaxY) bMaxY = pos[i + 1];
+    if (pos[i + 2] < bMinZ) bMinZ = pos[i + 2];
+    if (pos[i + 2] > bMaxZ) bMaxZ = pos[i + 2];
   }
-  const print = { engravePixelMm, gapMm };
+  // Re-centre on X and Z, drop the base to y=0, and scale to millimetres.
+  const cx = (bMinX + bMaxX) / 2;
+  const cz = (bMinZ + bMaxZ) / 2;
+  for (let i = 0; i < pos.length; i += 3) {
+    pos[i] = (pos[i] - cx) * k;
+    pos[i + 1] = (pos[i + 1] - bMinY) * k;
+    pos[i + 2] = (pos[i + 2] - cz) * k;
+  }
+  const scaledBaseY = new Float32Array(baseY.length);
+  for (let i = 0; i < baseY.length; i++) scaledBaseY[i] = baseY[i] * k;
+
+  const size = {
+    x: (bMaxX - bMinX) * k,
+    y: (bMaxY - bMinY) * k,
+    z: (bMaxZ - bMinZ) * k,
+  };
+  const print = {
+    engravePixelMm: options.label ? (ENGRAVE_TEXT_MM / GLYPH_H) * k : 0,
+    gapMm: GAPPED.includes(options.variant) ? GAP * k : null,
+  };
   return {
     positions: pos,
     levels: new Float32Array(levels),
     order: new Float32Array(order),
-    baseY: new Float32Array(baseY),
+    baseY: scaledBaseY,
     triangles: pos.length / 9,
     bounds: {
       min: [-size.x / 2, 0, -size.z / 2],

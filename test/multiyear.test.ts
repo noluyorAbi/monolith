@@ -139,6 +139,28 @@ test("buildMultiYear stacks years in depth, keeping one year's width", () => {
   assert.ok(minZ < 0 && maxZ > 0, "object is centred on Z");
 });
 
+test("terraced years stand on ONE continuous base plate, not N loose plates", () => {
+  const parts = fakeMulti("octocat", [2022, 2023, 2024]);
+  const stacked = buildMultiYear(multiOf(parts), { variant: "skyline", sizeMm: 180, label: true });
+  const one = buildMonolith(parts[0], { variant: "skyline", sizeMm: 180, label: false });
+  // A single bottom face must span the WHOLE footprint. With per-row plates
+  // the largest bottom triangle only ever covers one row's depth.
+  let bottomSpan = 0;
+  const p = stacked.positions;
+  for (let t = 0; t < p.length; t += 9) {
+    if (p[t + 1] !== 0 || p[t + 4] !== 0 || p[t + 7] !== 0) continue;
+    const zs = [p[t + 2], p[t + 5], p[t + 8]];
+    bottomSpan = Math.max(bottomSpan, Math.max(...zs) - Math.min(...zs));
+  }
+  assert.ok(
+    bottomSpan > one.size.z * 2,
+    `the base plate must be one piece spanning all rows (bottom span ${bottomSpan} vs one row ${one.size.z})`,
+  );
+  // And the engraving scale on the shared plate matches a single year's.
+  const single = buildMonolith(parts[2], { variant: "skyline", sizeMm: 180, label: true });
+  assert.ok(Math.abs(stacked.print.engravePixelMm - single.print.engravePixelMm) < 1e-6);
+});
+
 test("a multi-year stack deeper than the bed is caught by fitsBed", () => {
   const parts = fakeMulti("octocat", [2020, 2021, 2022, 2023, 2024, 2025]);
   const stacked = buildMultiYear(multiOf(parts), { variant: "skyline", sizeMm: 180, label: false });
