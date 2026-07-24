@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { SIZES, VARIANTS, sizeById, type SizeId } from "@/lib/build";
+import { parseRepoInput } from "@/lib/request";
+import { SIZES, VARIANTS, fitsBed, sizeById, type SizeId } from "@/lib/build";
+import { printerById } from "@/lib/print";
 import { PALETTES, type Palette } from "@/lib/palettes";
 import type { StudioLights, Variant } from "@/lib/types";
 import { play } from "@/lib/sound";
@@ -73,19 +76,22 @@ function Pill({
   children,
   layoutGroup,
   title,
+  disabled,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
   layoutGroup: string;
   title?: string;
+  disabled?: boolean;
 }) {
   const button = (
     <button
       type="button"
       aria-pressed={active}
+      disabled={disabled}
       onClick={onClick}
-      className={`relative min-h-9 rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] sm:min-h-0 ${
+      className={`relative min-h-9 rounded-[5px] border px-2.5 py-1.5 text-[0.68rem] tracking-[0.1em] uppercase transition-colors duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 ${
         active ? "border-transparent" : "border-line hover:border-edge"
       }`}
     >
@@ -109,12 +115,28 @@ export interface DockProps {
   year: number;
   years: number[];
   onYear: (y: number) => void;
+  subject: "user" | "repo";
+  onSubject: (s: "user" | "repo") => void;
+  repoOwner: string;
+  onRepoOwner: (v: string) => void;
+  repoName: string;
+  onRepoName: (v: string) => void;
+  span: "year" | "lifetime" | "range";
+  onSpan: (s: "year" | "lifetime" | "range") => void;
+  rangeFrom: string;
+  onRangeFrom: (v: string) => void;
+  rangeTo: string;
+  onRangeTo: (v: string) => void;
   variant: Variant;
   onVariant: (v: Variant) => void;
   palette: Palette;
   onPalette: (id: string) => void;
   sizeId: SizeId;
   onSize: (id: SizeId) => void;
+  printerId: string;
+  onPrinter: (id: string) => void;
+  dampening: number;
+  onDampening: (v: number) => void;
   total: number;
   onPrint: () => void;
   spin: boolean;
@@ -123,12 +145,40 @@ export interface DockProps {
   onSound: (next: boolean) => void;
   studio: StudioLights;
   onStudio: (next: StudioLights) => void;
+  /** Re-run the forge with the current subject/span/repo (repo inputs commit on Enter). */
+  onRebuild: (over?: {
+    subject?: "user" | "repo";
+    span?: "year" | "lifetime" | "range";
+    repoOwner?: string;
+    repoName?: string;
+    rangeFrom?: string;
+    rangeTo?: string;
+  }) => void;
   visible: boolean;
 }
 
 export function Dock(props: DockProps) {
   const size = sizeById(props.sizeId);
   const yearIndex = props.years.indexOf(props.year);
+  /**
+   * One field for the repository, because nobody remembers "owner slash name"
+   * as two boxes: they paste the URL off the address bar. Parsed live into the
+   * owner/name the app state actually speaks; Enter rebuilds.
+   */
+  const [repoInput, setRepoInput] = useState(
+    props.repoOwner && props.repoName ? `${props.repoOwner}/${props.repoName}` : "",
+  );
+  const repoParsed = parseRepoInput(repoInput);
+
+  const commitRepo = () => {
+    if (!repoParsed) {
+      play("error");
+      return;
+    }
+    props.onRepoOwner(repoParsed.owner);
+    props.onRepoName(repoParsed.name);
+    props.onRebuild({ subject: "repo", repoOwner: repoParsed.owner, repoName: repoParsed.name });
+  };
 
   const stepYear = (delta: number) => {
     const next = props.years[yearIndex + delta];
@@ -157,33 +207,196 @@ export function Dock(props: DockProps) {
           <div className="flex flex-col sm:flex-row sm:items-stretch">
             <div className="relative min-w-0 flex-1">
               <div className="flex items-end gap-7 overflow-x-auto px-5 py-4 sm:px-7 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <Group label="Year">
-                  <Hint label="Earlier year">
-                  <button
-                    type="button"
-                    onClick={() => stepYear(1)}
-                    aria-label="Previous year"
-                    className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
-                    disabled={yearIndex >= props.years.length - 1}
+                <Group label="Subject">
+                  <Pill
+                    layoutGroup="dock-subject"
+                    active={props.subject === "user"}
+                    onClick={() => {
+                      props.onSubject("user");
+                      props.onRebuild({ subject: "user" });
+                    }}
                   >
-                    ‹
-                  </button>
-                  </Hint>
-                  <span className="w-[4ch] text-center text-[0.78rem] tabular-nums text-fog">
-                    {props.year}
-                  </span>
-                  <Hint label="Later year">
-                  <button
-                    type="button"
-                    onClick={() => stepYear(-1)}
-                    aria-label="Next year"
-                    className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
-                    disabled={yearIndex <= 0}
+                    user
+                  </Pill>
+                  <Pill
+                    layoutGroup="dock-subject"
+                    active={props.subject === "repo"}
+                    title="Render a repository's last-52-week commit skyline (M14)"
+                    onClick={() => {
+                      props.onSubject("repo");
+                      // Only rebuild when a repository is already known;
+                      // otherwise just reveal the field and wait for a paste.
+                      if (props.repoOwner && props.repoName) {
+                        props.onRebuild({ subject: "repo", repoOwner: props.repoOwner, repoName: props.repoName });
+                      }
+                    }}
                   >
-                    ›
-                  </button>
-                  </Hint>
+                    repo
+                  </Pill>
                 </Group>
+
+                {props.subject === "repo" ? (
+                  <Group label={repoParsed ? `Repository · ${repoParsed.owner}/${repoParsed.name}` : "Repository · paste the URL"}>
+                    <input
+                      type="text"
+                      value={repoInput}
+                      placeholder="github.com/owner/repo"
+                      onChange={(e) => setRepoInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitRepo();
+                      }}
+                      className={`h-9 w-[24ch] rounded-[5px] border bg-transparent px-2 text-[0.68rem] text-fog outline-none placeholder:text-dim focus:border-edge sm:h-auto ${
+                        repoInput && !repoParsed ? "border-danger/50" : "border-line"
+                      }`}
+                    />
+                    <Hint label="Build this repository">
+                      <button
+                        type="button"
+                        onClick={commitRepo}
+                        disabled={!repoParsed}
+                        aria-label="Build repository"
+                        className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                      >
+                        →
+                      </button>
+                    </Hint>
+                  </Group>
+                ) : (
+                  <Group label="Span">
+                    <Pill
+                      layoutGroup="dock-span"
+                      active={props.span === "year"}
+                      onClick={() => {
+                        props.onSpan("year");
+                        props.onRebuild({ span: "year" });
+                      }}
+                    >
+                      year
+                    </Pill>
+                    <Pill
+                      layoutGroup="dock-span"
+                      active={props.span === "lifetime"}
+                      title="Every year the account has, side by side (M12)"
+                      onClick={() => {
+                        props.onSpan("lifetime");
+                        props.onRebuild({ span: "lifetime" });
+                      }}
+                    >
+                      lifetime
+                    </Pill>
+                    <Pill
+                      layoutGroup="dock-span"
+                      active={props.span === "range"}
+                      title='An arbitrary window, e.g. "last 12 months" (M11)'
+                      onClick={() => {
+                        props.onSpan("range");
+                        props.onRebuild({ span: "range" });
+                      }}
+                    >
+                      range
+                    </Pill>
+                  </Group>
+                )}
+
+                {props.subject === "user" && props.span === "year" && (
+                  <>
+                    <Hint label="Earlier year">
+                    <button
+                      type="button"
+                      onClick={() => stepYear(1)}
+                      aria-label="Previous year"
+                      className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                      disabled={yearIndex >= props.years.length - 1}
+                    >
+                      ‹
+                    </button>
+                    </Hint>
+                    <span className="w-[4ch] text-center text-[0.78rem] tabular-nums text-fog">
+                      {props.year}
+                    </span>
+                    <Hint label="Later year">
+                    <button
+                      type="button"
+                      onClick={() => stepYear(-1)}
+                      aria-label="Next year"
+                      className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                      disabled={yearIndex <= 0}
+                    >
+                      ›
+                    </button>
+                    </Hint>
+                  </>
+                )}
+
+                {props.subject === "user" && props.span === "range" && (
+                  <Group label="Window">
+                    {/* The windows people actually mean, one press each. The
+                      date fields stay for the rest; presets pass the fresh
+                      dates through the rebuild so nothing waits on state. */}
+                    {(
+                      [
+                        ["12 mo", 1],
+                        ["3 yr", 3],
+                        ["5 yr", 5],
+                      ] as const
+                    ).map(([name, back]) => {
+                      const to = new Date().toISOString().slice(0, 10);
+                      const d = new Date();
+                      d.setUTCFullYear(d.getUTCFullYear() - back);
+                      const from = d.toISOString().slice(0, 10);
+                      const active = props.rangeFrom === from && props.rangeTo === to;
+                      return (
+                        <Pill
+                          key={name}
+                          layoutGroup="dock-range-preset"
+                          active={active}
+                          title={`${from} to today`}
+                          onClick={() => {
+                            play("step");
+                            props.onRangeFrom(from);
+                            props.onRangeTo(to);
+                            props.onRebuild({ span: "range", rangeFrom: from, rangeTo: to });
+                          }}
+                        >
+                          {name}
+                        </Pill>
+                      );
+                    })}
+                    <input
+                      type="date"
+                      value={props.rangeFrom}
+                      max={props.rangeTo}
+                      aria-label="From"
+                      onChange={(e) => props.onRangeFrom(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") props.onRebuild({ span: "range" });
+                      }}
+                      className="h-9 rounded-[5px] border border-line bg-transparent px-2 text-[0.62rem] text-fog outline-none focus:border-edge sm:h-auto"
+                    />
+                    <span aria-hidden className="text-[0.6rem] uppercase text-dim">to</span>
+                    <input
+                      type="date"
+                      value={props.rangeTo}
+                      min={props.rangeFrom}
+                      aria-label="To"
+                      onChange={(e) => props.onRangeTo(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") props.onRebuild({ span: "range" });
+                      }}
+                      className="h-9 rounded-[5px] border border-line bg-transparent px-2 text-[0.62rem] text-fog outline-none focus:border-edge sm:h-auto"
+                    />
+                    <Hint label="Rebuild for this window">
+                      <button
+                        type="button"
+                        onClick={() => props.onRebuild({ span: "range" })}
+                        aria-label="Apply date range"
+                        className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                      >
+                        →
+                      </button>
+                    </Hint>
+                  </Group>
+                )}
 
                 <Group label="Form">
                   {VARIANTS.map((v) => (
@@ -247,20 +460,42 @@ export function Dock(props: DockProps) {
                 </Group>
 
                 <Group label={`Size · ${size.mm}mm`}>
-                  {SIZES.map((s) => (
-                    <Pill
-                      key={s.id}
-                      layoutGroup="dock-size"
-                      active={props.sizeId === s.id}
-                      title={s.blurb}
-                      onClick={() => {
-                        if (props.sizeId !== s.id) play("step");
-                        props.onSize(s.id);
-                      }}
-                    >
-                      {s.name}
-                    </Pill>
-                  ))}
+                  {SIZES.map((s) => {
+                    // F16: a size the chosen printer cannot print is marked, not
+                    // silently offered. Picking it would queue a print that fails
+                    // on the first layer, so we show why instead of enabling it.
+                    const fits = fitsBed(printerById(props.printerId), s.mm);
+                    return (
+                      <Pill
+                        key={s.id}
+                        layoutGroup="dock-size"
+                        active={props.sizeId === s.id}
+                        title={fits ? s.blurb : `${s.blurb} · too big for this printer`}
+                        disabled={!fits}
+                        onClick={() => {
+                          if (!fits) return;
+                          if (props.sizeId !== s.id) play("step");
+                          props.onSize(s.id);
+                        }}
+                      >
+                        {s.name}
+                        {!fits ? " · bed" : ""}
+                      </Pill>
+                    );
+                  })}
+                </Group>
+
+                <Group label={`Outlier compression · ${Math.round(props.dampening * 100)}%`}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={props.dampening}
+                    onChange={(e) => props.onDampening(Number(e.target.value))}
+                    title="Flatten the busiest days so one spike does not tower over the year"
+                    className="h-1 w-full cursor-pointer appearance-none rounded-full bg-edge accent-fog"
+                  />
                 </Group>
 
                 <Group label="Studio">

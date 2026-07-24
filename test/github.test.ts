@@ -6,9 +6,14 @@ import {
   LOGIN_RE,
   NotFoundError,
   availableYears,
+  availableYearsFor,
   normaliseLogin,
+  pack,
   syntheticYear,
 } from "@/lib/contributions";
+import { biggestSizeFor, buildMonolith, fitsBed, sizeById, sizesForPrinter } from "@/lib/build";
+import { printerById } from "@/lib/print";
+import type { ContributionYear } from "@/lib/types";
 
 /**
  * The handle is the only user input the whole app takes, and it reaches an
@@ -115,11 +120,27 @@ test("synthetic years are deterministic and shaped like a calendar", () => {
   assert.equal(a.demo, true);
 });
 
-test("available years run backwards from the current one", () => {
-  const years = availableYears(4);
-  assert.equal(years.length, 4);
-  assert.equal(years[0], new Date().getUTCFullYear());
-  for (let i = 1; i < years.length; i++) assert.equal(years[i], years[i - 1] - 1);
+test("available years follow the account when GitHub says so", () => {
+  const now = new Date().getUTCFullYear();
+  // No data yet: the recent fixed window.
+  assert.deepEqual(availableYearsFor(null, 7), availableYears(7));
+  // A 2011 account: its real years appear, no guessing at the empty recent ones.
+  const oldYear = {
+    login: "veteran",
+    name: "veteran",
+    year: 2011,
+    total: 0,
+    days: [],
+    weeks: [],
+    demo: false,
+    source: "graphql" as const,
+    contributionYears: [2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015, 2014, 2013, 2012, 2011],
+  };
+  const offered = availableYearsFor(oldYear as unknown as ContributionYear, 7);
+  assert.ok(offered.includes(2024) && offered.includes(2011));
+  // Newest first, and nothing from the future.
+  assert.equal(offered[0], 2024);
+  assert.ok(offered.every((y) => y <= now));
 });
 
 test("the GraphQL path maps levels, sorts days and reports a missing account", async () => {
@@ -171,4 +192,91 @@ test("GraphQL reporting a missing account is not answered with invented data", a
     async () => new Response(JSON.stringify({ errors: [{ type: "NOT_FOUND", message: "no" }] }), { status: 200 }),
   );
   await assert.rejects(() => fetchContributionYear("ghost", 2025), NotFoundError);
+});
+
+test("the free scalar fields arrive in one query, at no extra cost", async () => {
+  vi.stubEnv("GITHUB_TOKEN", "test-token");
+  const payload = {
+    data: {
+      user: {
+        login: "octocat",
+        name: "The Octocat",
+        contributionYears: [2025, 2024, 2023],
+        contributionsCollection: {
+          contributionCalendar: {
+            colors: ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"],
+            isHalloween: true,
+            weeks: [
+              {
+                contributionDays: [
+                  { date: "2025-03-02", contributionCount: 9, contributionLevel: "FOURTH_QUARTILE", weekday: 7 },
+                  { date: "2025-01-01", contributionCount: 0, contributionLevel: "NONE", weekday: 3 },
+                  { date: "2025-02-01", contributionCount: 2, contributionLevel: "SECOND_QUARTILE", weekday: 6 },
+                ],
+              },
+            ],
+          },
+          totalCommitContributions: 11,
+          totalIssueContributions: 2,
+          totalPullRequestContributions: 3,
+          totalPullRequestReviewContributions: 1,
+          totalRepositoriesWithContributedCommits: 4,
+          joinedGitHubContribution: { occurredAt: "2011-05-20T00:00:00Z" },
+          firstPullRequestContribution: { occurredAt: "2012-08-01T00:00:00Z" },
+          firstIssueContribution: null,
+          firstRepositoryContribution: null,
+        },
+      },
+    },
+  };
+  vi.stubGlobal("fetch", async () => new Response(JSON.stringify(payload), { status: 200 }));
+
+  const year = await fetchContributionYear("octocat", 2025);
+  assert.equal(year.source, "graphql");
+  assert.deepEqual(year.contributionYears, [2025, 2024, 2023]);
+  assert.equal(year.isHalloween, true);
+  assert.deepEqual(year.colors, ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"]);
+  assert.equal(year.totalIssues, 2);
+  assert.equal(year.totalPullRequests, 3);
+  assert.equal(year.totalReviews, 1);
+  assert.equal(year.totalRepos, 4);
+  assert.equal(year.joinedAt, "2011-05-20");
+  assert.equal(year.firstPrAt, "2012-08-01");
+  assert.equal(year.firstIssueAt, undefined);
+});
+
+test("the size picker marks what the chosen printer cannot print", () => {
+  const p1s = printerById("p1s");
+  const mini = printerById("a1m");
+  const statement = sizeById("statement");
+
+  // The A1 mini bed is 180 mm; the statement size is 260 mm and must be
+  // flagged, while desk and shelf still fit.
+  assert.equal(fitsBed(mini, statement.mm), false);
+  assert.equal(fitsBed(mini, sizeById("shelf").mm), true);
+  assert.equal(fitsBed(p1s, sizeById("shelf").mm), true);
+
+  const forMini = sizesForPrinter(mini);
+  const statementEntry = forMini.find((s) => s.id === "statement");
+  assert.equal(statementEntry?.fits, false);
+  // biggestSizeFor never returns a size the bed cannot hold.
+  assert.equal(biggestSizeFor(mini).mm <= mini.bedMm[0], true);
+  assert.equal(biggestSizeFor(mini).id, "shelf");
+});
+
+test("outlier compression flattens the busiest days", () => {
+  // Build a year with one extreme day dwarfing the rest, so the tallest bar
+  // must drop as dampening rises. F7: one slider should visibly compress it.
+  const days: { date: string; count: number; level: number }[] = [];
+  for (let i = 0; i < 365; i++) {
+    const count = i === 100 ? 200 : 4 + (i % 3);
+    const date = new Date(Date.UTC(2025, 0, 1 + i)).toISOString().slice(0, 10);
+    days.push({ date, count, level: count === 0 ? 0 : Math.min(4, Math.ceil(count / 40)) });
+  }
+  const year = pack("octocat", "octocat", 2025, days as unknown as never[], "graphql");
+  const flat = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true, dampening: 0 });
+  const damped = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true, dampening: 1 });
+  assert.ok(flat.bounds.max[1] > damped.bounds.max[1], "dampening should lower the tallest point");
+  const def = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true });
+  assert.equal(def.bounds.max[1], flat.bounds.max[1]);
 });

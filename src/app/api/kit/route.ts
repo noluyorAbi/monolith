@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { fetchContributionYear } from "@/lib/github";
+import { resolveModelSource } from "@/lib/github";
 import { modelErrorResponse } from "@/lib/responses";
-import { buildMonolith } from "@/lib/build";
+import { buildMonolith, buildMultiYear } from "@/lib/build";
 import { printableParts } from "@/lib/parts";
 import { buildKit, kitStem } from "@/lib/kit";
 import { parseModelRequest } from "@/lib/request";
@@ -13,24 +13,30 @@ export async function GET(request: Request) {
   const options = parseModelRequest(new URL(request.url));
 
   try {
-    const data = await fetchContributionYear(options.login, options.year);
-    const mesh = buildMonolith(data, {
+    // The query names a subject and a span; the kit must contain the object
+    // the viewer showed (lifetime stack, range, repo skyline), not a
+    // single-year collapse of it.
+    const src = await resolveModelSource(options);
+    const build = {
       variant: options.variant,
       sizeMm: options.sizeMm,
       label: true,
-    });
+      dampening: options.dampening,
+    };
+    const mesh = src.multi ? buildMultiYear(src.multi, build) : buildMonolith(src.data, build);
     const parts = printableParts(mesh);
 
     const file = buildKit(parts, mesh, {
       ...options,
-      login: data.login,
-      year: data.year,
+      login: src.who,
+      year: src.data.year,
+      spanLabel: src.spanLabel,
       sourceUrl: PROJECT.url,
       modelLicence: PROJECT.modelLicence,
-      sampleData: data.demo,
+      sampleData: src.demo,
     });
 
-    const name = `${kitStem({ ...options, login: data.login, year: data.year })}-print-kit.zip`;
+    const name = `${kitStem({ ...options, login: src.who, year: src.data.year, spanLabel: src.spanLabel })}-print-kit.zip`;
     return new NextResponse(new Uint8Array(file), {
       headers: {
         "Content-Type": "application/zip",
@@ -38,7 +44,7 @@ export async function GET(request: Request) {
         "Content-Disposition": `attachment; filename="${name}"`,
         "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
         "X-Monolith-Parts": String(parts.length),
-        "X-Monolith-Sample-Data": String(data.demo),
+        "X-Monolith-Sample-Data": String(src.demo),
       },
     });
   } catch (err) {

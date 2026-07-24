@@ -84,6 +84,17 @@ export const PALETTES: Palette[] = [
     unlockAt: 2000,
     note: "Unlocked past 2,000 contributions",
   },
+  {
+    id: "halloween",
+    name: "Halloween",
+    base: "#140a1a",
+    ramp: ["#241430", "#5b2a8c", "#9b2fae", "#e0551f", "#f5a623"],
+    roughness: 0.5,
+    metalness: 0.1,
+    glow: 0.6,
+    rim: 0.42,
+    note: "GitHub's October palette, real for the year it shipped in",
+  },
 ];
 
 /**

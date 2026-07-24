@@ -20,6 +20,78 @@ export interface ContributionYear {
   /** True when GitHub was unreachable and the shape is synthesised. */
   demo: boolean;
   source: "graphql" | "html" | "synthetic";
+  /**
+   * Everything below is read from the GraphQL response. It is optional because
+   * the token-less HTML fallback returns none of it, and the production
+   * geometry path must keep type-checking against that fallback. F4/F6 spend
+   * these; until then they are inert data.
+   */
+  /** The exact years this account has contributed in, newest first. */
+  contributionYears?: number[];
+  /** GitHub's own hex ramp for the rendered calendar. */
+  colors?: string[];
+  /** A real seasonal palette flag nobody else turns into a finish. */
+  isHalloween?: boolean;
+  /** Composition totals, all from the same single query. */
+  totalIssues?: number;
+  totalPullRequests?: number;
+  totalReviews?: number;
+  totalRepos?: number;
+  /** Milestone dates, for engraving on the base plate. */
+  joinedAt?: string;
+  firstPrAt?: string;
+  firstIssueAt?: string;
+  firstRepoAt?: string;
+}
+
+/**
+ * Several years of one account, fetched and stacked as a single object.
+ * Drives the multi-year / lifetime / arbitrary date-range models (marktanalyse
+ * section 5.4 / 6.1). `years` is ordered oldest-first so the stack reads left
+ * to right; `days`/`weeks` are the concatenation used by the single-year
+ * geometry builders after they have been re-gridded onto one timeline.
+ */
+export interface MultiYearData {
+  login: string;
+  name: string;
+  /** Oldest first. */
+  years: ContributionYear[];
+  /** Inclusive span actually covered. */
+  fromYear: number;
+  toYear: number;
+  /** True when any constituent year was synthesised (GitHub unreachable). */
+  demo: boolean;
+  source: ContributionYear["source"];
+  contributionYears?: number[];
+  colors?: string[];
+  isHalloween?: boolean;
+  /** Summed composition across every year. */
+  totalCommits: number;
+  totalIssues: number;
+  totalPullRequests: number;
+  totalReviews: number;
+  totalRepos: number;
+  joinedAt?: string;
+  firstPrAt?: string;
+  firstIssueAt?: string;
+  firstRepoAt?: string;
+}
+
+/**
+ * The hour-of-day histogram of a user's commits, in their own local timezone
+ * (M16 / marktanalyse 5.1). Shared between the server fetcher and the HUD.
+ */
+export interface CommitHoursData {
+  login: string;
+  year: number;
+  /** 24 buckets, index = local hour 0..23. */
+  hours: number[];
+  /** The year's true commit count, which may exceed what was sampled. */
+  total: number;
+  /** How many commits actually landed in the histogram buckets. */
+  sampled: number;
+  /** True when total > sampled: the histogram is a sample, not the census. */
+  capped: boolean;
 }
 
 export interface Stats {
@@ -39,6 +111,12 @@ export interface BuildOptions {
   /** Target size of the longest footprint edge, in millimetres. */
   sizeMm: number;
   label: boolean;
+  /**
+   * Outlier compression, 0..1. 0 keeps busy days at their true relative
+   * height; 1 strongly flattens the busiest days toward the rest so a single
+   * spike does not tower over the year. F7.
+   */
+  dampening?: number;
 }
 
 export interface BuiltMesh {
