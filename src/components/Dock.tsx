@@ -514,11 +514,6 @@ export function Dock(props: DockProps) {
                         name: "Peak day",
                         hint: "Engrave your busiest day (count and date) on the plate's front wall",
                       },
-                      {
-                        id: "twocolor",
-                        name: "Two-colour",
-                        hint: "3MF ships plate and towers as separate objects for AMS/MMU colour printing",
-                      },
                     ] as { id: FlagId; name: string; hint: string }[]
                   ).map((f) => (
                     <Toggle

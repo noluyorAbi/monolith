@@ -32,11 +32,13 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * parser, so an old link with a retired flag still resolves.
  *
  *  - sigil: engrave the starsign constellation + name on the base plate
- *  - peak: engrave the best day's date on top of the tallest tower
- *  - twocolor: 3MF ships plate and towers as separate objects for AMS/MMU
+ *  - peak: engrave the best day's count and date on the plate's front wall
  *  - noog: share page opts out of the OG preview image
+ *
+ * Multi-colour is NOT a flag: the 3MF has always shipped one object per
+ * intensity level, bound to filament slots via the existing `slots` param.
  */
-export const FLAG_IDS = ["sigil", "peak", "twocolor", "noog"] as const;
+export const FLAG_IDS = ["sigil", "peak", "noog"] as const;
 export type FlagId = (typeof FLAG_IDS)[number];
 
 export function parseFlags(raw: string | null): FlagId[] {
