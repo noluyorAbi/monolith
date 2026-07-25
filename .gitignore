@@ -13,3 +13,6 @@ tsconfig.tsbuildinfo
 
 # local agent config
 .claude/
+
+# launch skill run state
+.launch
