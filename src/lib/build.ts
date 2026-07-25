@@ -231,10 +231,12 @@ const LOOP_OUT_MM = 5.0;
 const LOOP_IN_MM = 2.2;
 
 /**
- * A flat annulus standing the plate's full height, fused to it so the object
- * hangs off a keyring. Positions are raw units; the caller passes radii
- * already divided by its own eventual scale factor, so the printed loop is
- * always ~10mm across with a ~4.4mm hole regardless of object size.
+ * A flat annulus fused to the plate so the object hangs off a keyring.
+ * Positions are raw units; the caller passes radii and thickness already
+ * divided by its own eventual scale factor, so the printed loop is always
+ * ~10mm across with a ~4.4mm hole and at least ~3.2mm thick regardless of
+ * object size. A loop thinner than that (the plate itself at keyring sizes)
+ * snaps on the first pocket.
  */
 function loopAt(
   mb: MeshBuilder,
@@ -242,6 +244,7 @@ function loopAt(
   cz: number,
   R: number,
   r: number,
+  h: number,
 ): void {
   const seg = 40;
   const p = (rad: number, a: number, y: number): [number, number, number] => [
@@ -252,22 +255,29 @@ function loopAt(
   for (let i = 0; i < seg; i++) {
     const s = (i / seg) * Math.PI * 2;
     const e = ((i + 1) / seg) * Math.PI * 2;
-    mb.quad(p(r, s, BASE_H), p(R, s, BASE_H), p(R, e, BASE_H), p(r, e, BASE_H));
+    mb.quad(p(r, s, h), p(R, s, h), p(R, e, h), p(r, e, h));
     mb.quad(p(r, e, 0), p(R, e, 0), p(R, s, 0), p(r, s, 0));
-    mb.quad(p(R, s, 0), p(R, e, 0), p(R, e, BASE_H), p(R, s, BASE_H));
-    mb.quad(p(r, e, 0), p(r, s, 0), p(r, s, BASE_H), p(r, e, BASE_H));
+    mb.quad(p(R, s, 0), p(R, e, 0), p(R, e, h), p(R, s, h));
+    mb.quad(p(r, e, 0), p(r, s, 0), p(r, s, h), p(r, e, h));
   }
 }
 
+/** At least this thick in print millimetres, whatever the plate height is. */
+function loopHeight(k: number): number {
+  return Math.max(BASE_H, 3.2 / k);
+}
+
 /**
- * The loop for a rectangular plate: diagonally off the back-left corner,
- * overlapping it enough to fuse, hole fully clear of both edges.
+ * The loop for a rectangular plate: tangent to the LEFT wall, centred on it.
+ * A wall weld gives the joint an ~8.7mm chord of fused material; the first
+ * version kissed the plate corner diagonally with ~1.5mm of contact, which
+ * is a snap waiting to happen. The hole stays 0.3mm clear of the wall.
  */
-function loopAtCorner(mb: MeshBuilder, x0: number, z0: number, k: number): void {
+function loopAtLeftWall(mb: MeshBuilder, x0: number, zCenter: number, k: number): void {
   const R = LOOP_OUT_MM / k;
   const r = LOOP_IN_MM / k;
   const c = r + 0.3 / k;
-  loopAt(mb, x0 - c, z0 - c, R, r);
+  loopAt(mb, x0 - c, zCenter, R, r, loopHeight(k));
 }
 
 /** "PEAK 47 - 9 FEB" for the busiest day, or null for an empty window. */
@@ -317,7 +327,7 @@ function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): Me
 
   // Opt-in extras live on the plate walls, so they need the plate. All are
   // independent of the signature label.
-  if (plate && o.loop) loopAtCorner(mb, x0, z0, o.sizeMm / plateW);
+  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW);
   if (plate && o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: z0 });
   if (plate && o.peak) {
     const t = peakText(data.days);
@@ -431,7 +441,7 @@ function buildRing(data: ContributionYear, o: BuildOptions, plate = true): MeshB
   if (plate && o.loop) {
     const k = o.sizeMm / (2 * plateR);
     const dist = plateR + LOOP_IN_MM / k + 0.2 / k;
-    loopAt(mb, -dist * Math.SQRT1_2, -dist * Math.SQRT1_2, LOOP_OUT_MM / k, LOOP_IN_MM / k);
+    loopAt(mb, -dist * Math.SQRT1_2, -dist * Math.SQRT1_2, LOOP_OUT_MM / k, LOOP_IN_MM / k, loopHeight(k));
   }
   if (plate && o.sigil) {
     engraveSigilTop(mb, o.sigil, { cx: 0, cz: -15, y: BASE_H, w: 13.5, h: 9 });
@@ -534,7 +544,7 @@ function buildWave(data: ContributionYear, o: BuildOptions): MeshBuilder {
   }
   mb.quad([px(0), 0, pz(0)], [px(cols), 0, pz(0)], [px(cols), 0, pz(7)], [px(0), 0, pz(7)]);
 
-  if (o.loop) loopAtCorner(mb, px(0), pz(0), o.sizeMm / gridW);
+  if (o.loop) loopAtLeftWall(mb, px(0), 0, o.sizeMm / gridW);
   if (o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: pz(0) });
   if (o.peak) {
     const t = peakText(data.days);
@@ -586,7 +596,7 @@ function buildSpine(data: ContributionYear, o: BuildOptions, plate = true): Mesh
   const z0 = -plateD / 2;
 
   if (plate) mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
-  if (plate && o.loop) loopAtCorner(mb, x0, z0, o.sizeMm / plateW);
+  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW);
 
   for (let m = 0; m < 12; m++) {
     const d = clamp01(dampening);
@@ -798,7 +808,7 @@ export function buildMultiYear(
   // the sigil in the centre of the back wall (milestones keep the corners),
   // the peak day in the centre of the front wall (login and span keep those
   // corners). The peak reads across every rendered year.
-  if (options.loop) loopAtCorner(mb, px0, pz0, options.sizeMm / (px1 - px0));
+  if (options.loop) loopAtLeftWall(mb, px0, (pz0 + pz1) / 2, options.sizeMm / (px1 - px0));
   if (options.sigil) {
     engraveSigilBack(mb, options.sigil, { cx: (px0 + px1) / 2, z: pz0 });
   }
@@ -914,7 +924,7 @@ export function buildDuel(
   mb.box(px0, 0, pz0, px1, BASE_H, pz1);
 
   const k = options.sizeMm / (px1 - px0);
-  if (options.loop) loopAtCorner(mb, px0, pz0, k);
+  if (options.loop) loopAtLeftWall(mb, px0, 0, k);
   if (options.label) {
     const px = ENGRAVE_TEXT_MM / GLYPH_H;
     const textY = (BASE_H - ENGRAVE_TEXT_MM) / 2;
