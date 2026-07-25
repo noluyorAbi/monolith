@@ -435,6 +435,27 @@ test("the sigil and peak-day engravings are opt-in and add real geometry", () =>
   const withPeak = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true, peak: true });
   assert.ok(withSigil.triangles > plain.triangles, "the sigil must add back-wall geometry");
   assert.ok(withPeak.triangles > plain.triangles, "the peak date must add front-wall geometry");
+
+  // The ring has no flat wall; its extras land on the clear plate centre and
+  // must stay inside the band's inner circle (raw innerR 30 at plate top).
+  const ringPlain = buildMonolith(year, { variant: "ring", sizeMm: 180, label: true });
+  const ringExtra = buildMonolith(year, { variant: "ring", sizeMm: 180, label: true, sigil, peak: true });
+  assert.ok(ringExtra.triangles > ringPlain.triangles, "ring extras must add centre geometry");
+  const kRing = 180 / 137; // sizeMm over the ring's raw footprint (2 * plateR)
+  const innerMm = 30 * kRing;
+  const topMm = 5 * kRing; // plate top; extras are raised ~0.9mm out of it
+  const p = ringExtra.positions;
+  let engraved = 0;
+  for (let i = 0; i < p.length; i += 3) {
+    const y = p[i + 1];
+    // Strictly above the plate top and below the shortest bar: only the
+    // raised engravings live in this band.
+    if (y <= topMm + 1e-3 || y > topMm + 1.0) continue;
+    engraved++;
+    const r = Math.hypot(p[i], p[i + 2]);
+    assert.ok(r < innerMm, `engraving at r=${r.toFixed(1)} runs under the band (inner ${innerMm.toFixed(1)})`);
+  }
+  assert.ok(engraved > 0, "the centre engravings must exist in the band above the plate");
   // Off means off: no flag, byte-identical geometry.
   const again = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true });
   assert.equal(again.triangles, plain.triangles);

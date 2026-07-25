@@ -192,6 +192,39 @@ function engraveSigilBack(
   });
 }
 
+/**
+ * The same starsign, laid flat on a horizontal (+Y) surface: the ring has no
+ * flat wall, but its band encloses a clear centre. Viewed from above the
+ * figure reads exactly like the on-screen card (x right, screen-down toward
+ * the viewer), so no mirroring.
+ */
+function engraveSigilTop(
+  mb: MeshBuilder,
+  sigil: NonNullable<BuildOptions["sigil"]>,
+  opts: { cx: number; cz: number; y: number; w: number; h: number },
+): void {
+  const at = ([nx, ny]: [number, number]): [number, number] => [
+    opts.cx + (nx - 0.5) * opts.w,
+    opts.cz + (ny - 0.5) * opts.h,
+  ];
+  const y1 = opts.y + ENGRAVE_DEPTH;
+  for (const p of sigil.points) {
+    const [x, z] = at(p);
+    mb.box(x - 0.5, opts.y, z - 0.5, x + 0.5, y1, z + 0.5);
+  }
+  for (const [a, b] of sigil.edges) {
+    const [x1, z1] = at(sigil.points[a]);
+    const [x2, z2] = at(sigil.points[b]);
+    const beads = Math.max(2, Math.round(Math.hypot(x2 - x1, z2 - z1) / 0.9));
+    for (let i = 1; i < beads; i++) {
+      const t = i / beads;
+      const x = x1 + (x2 - x1) * t;
+      const z = z1 + (z2 - z1) * t;
+      mb.box(x - 0.3, opts.y, z - 0.3, x + 0.3, y1, z + 0.3);
+    }
+  }
+}
+
 /** "PEAK 47 - 9 FEB" for the busiest day, or null for an empty window. */
 function peakText(days: Day[]): string | null {
   let best: Day | null = null;
@@ -306,8 +339,6 @@ function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): Me
   return mb;
 }
 
-// The ring has no flat wall, so the sigil and peak extras are skyline/wave/
-// multi-only for now; the flags are silently inert here.
 function buildRing(data: ContributionYear, o: BuildOptions, plate = true): MeshBuilder {
   const label = o.label;
   const dampening = o.dampening ?? 0;
@@ -343,6 +374,24 @@ function buildRing(data: ContributionYear, o: BuildOptions, plate = true): MeshB
         order,
         baseY: BASE_H,
       });
+    }
+  }
+
+  // The ring has no flat wall, so its extras live on the clear centre of the
+  // plate top, in rows: constellation deep, signature centre, sign name and
+  // peak day toward the viewer. Every row is narrower than the chord of the
+  // inner circle at its z, so nothing runs under the band.
+  if (plate && o.sigil) {
+    engraveSigilTop(mb, o.sigil, { cx: 0, cz: -15, y: BASE_H, w: 13.5, h: 9 });
+    const name = o.sigil.name.toUpperCase().replace(/^THE /, "");
+    const namePx = Math.min(0.5, (innerR * 1.4) / Math.max(1, measureText(name)));
+    engraveTop(mb, name, { cx: 0, cz: 8.5, px: namePx, y: BASE_H });
+  }
+  if (plate && o.peak) {
+    const t = peakText(data.days);
+    if (t) {
+      const peakPx = Math.min(0.5, (innerR * 1.5) / Math.max(1, measureText(t)));
+      engraveTop(mb, t, { cx: 0, cz: 15, px: peakPx, y: BASE_H });
     }
   }
 

@@ -507,12 +507,12 @@ export function Dock(props: DockProps) {
                       {
                         id: "sigil",
                         name: "Starsign",
-                        hint: "Engrave your starsign constellation and name on the plate's back wall",
+                        hint: "Engrave your starsign constellation and name on the plate (back wall; ring: plate centre)",
                       },
                       {
                         id: "peak",
                         name: "Peak day",
-                        hint: "Engrave your busiest day (count and date) on the plate's front wall",
+                        hint: "Engrave your busiest day (count and date) on the plate (front wall; ring: plate centre)",
                       },
                     ] as { id: FlagId; name: string; hint: string }[]
                   ).map((f) => (
