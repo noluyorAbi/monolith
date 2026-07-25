@@ -522,6 +522,8 @@ export interface ResolvedModel {
   data: ContributionYear;
   /** Set when the object is a multi-year stack; build with buildMultiYear. */
   multi: MultiYearData | null;
+  /** The duel opponent's year, when the request carried `vs`; build with buildDuel. */
+  vsData: ContributionYear | null;
   /** Whose object this is, for filenames and engraving: login or owner/repo. */
   who: string;
   /** The span, human-readable: "2025", "2016-2025", "2023-06-01..2024-06-01". */
@@ -538,6 +540,7 @@ export async function resolveModelSource(req: {
   subject: "user" | "repo";
   repoOwner: string;
   repoName: string;
+  vs?: string;
 }): Promise<ResolvedModel> {
   if (req.subject === "repo") {
     const activity = await fetchRepoActivity(req.repoOwner, req.repoName);
@@ -545,6 +548,7 @@ export async function resolveModelSource(req: {
     return {
       data,
       multi: null,
+      vsData: null,
       who: `${req.repoOwner}/${req.repoName}`,
       spanLabel: "52-weeks",
       demo: data.demo,
@@ -555,6 +559,7 @@ export async function resolveModelSource(req: {
     return {
       data: multi.years[multi.years.length - 1],
       multi: multi.years.length > 1 ? multi : null,
+      vsData: null,
       who: multi.login,
       spanLabel: `${multi.fromYear}-${multi.toYear}`,
       demo: multi.demo,
@@ -568,13 +573,29 @@ export async function resolveModelSource(req: {
     return {
       data,
       multi,
+      vsData: null,
       who: data.login,
       spanLabel: `${req.from}..${req.to}`,
       demo: data.demo,
     };
   }
+  // The duel: two single years fetched side by side, rendered back to back.
+  if (req.vs) {
+    const [data, vsData] = await Promise.all([
+      fetchContributionYear(req.login, req.year),
+      fetchContributionYear(req.vs, req.year),
+    ]);
+    return {
+      data,
+      multi: null,
+      vsData,
+      who: `${data.login}-vs-${vsData.login}`,
+      spanLabel: String(data.year),
+      demo: data.demo || vsData.demo,
+    };
+  }
   const data = await fetchContributionYear(req.login, req.year);
-  return { data, multi: null, who: data.login, spanLabel: String(data.year), demo: data.demo };
+  return { data, multi: null, vsData: null, who: data.login, spanLabel: String(data.year), demo: data.demo };
 }
 
 /**

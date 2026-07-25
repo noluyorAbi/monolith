@@ -76,6 +76,7 @@ export default async function SharePage({ params, searchParams }: Props) {
       initialRepoOwner={req.repoOwner}
       initialRepoName={req.repoName}
       initialFlags={req.flags}
+      initialVs={req.vs}
     />
   );
 }

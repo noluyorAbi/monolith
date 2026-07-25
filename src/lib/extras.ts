@@ -26,6 +26,7 @@ export function buildOptionsFrom(
     dampening: req.dampening,
   };
   if (req.flags.includes("peak")) o.peak = true;
+  if (req.flags.includes("loop")) o.loop = true;
   if (req.flags.includes("sigil")) {
     let id = req.sign && signName(req.sign) ? req.sign : "";
     if (!id) {

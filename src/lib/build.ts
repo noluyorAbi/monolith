@@ -27,7 +27,7 @@ export const VARIANTS: { id: Variant; name: string; blurb: string }[] = [
   { id: "spine", name: "Spine", blurb: "Twelve months, twelve towers" },
 ];
 
-export type SizeId = "desk" | "shelf" | "statement";
+export type SizeId = "keyring" | "desk" | "shelf" | "statement";
 
 export interface SizeDef {
   id: SizeId;
@@ -37,6 +37,7 @@ export interface SizeDef {
 }
 
 export const SIZES: SizeDef[] = [
+  { id: "keyring", name: "Keyring", mm: 60, blurb: "A year on your keys" },
   { id: "desk", name: "Desk", mm: 120, blurb: "Fits beside a keyboard" },
   { id: "shelf", name: "Shelf", mm: 180, blurb: "The default trophy" },
   { id: "statement", name: "Statement", mm: 260, blurb: "You want it seen" },
@@ -225,6 +226,50 @@ function engraveSigilTop(
   }
 }
 
+/** Keyring loop, physical millimetres (applied via the builder's own scale). */
+const LOOP_OUT_MM = 5.0;
+const LOOP_IN_MM = 2.2;
+
+/**
+ * A flat annulus standing the plate's full height, fused to it so the object
+ * hangs off a keyring. Positions are raw units; the caller passes radii
+ * already divided by its own eventual scale factor, so the printed loop is
+ * always ~10mm across with a ~4.4mm hole regardless of object size.
+ */
+function loopAt(
+  mb: MeshBuilder,
+  cx: number,
+  cz: number,
+  R: number,
+  r: number,
+): void {
+  const seg = 40;
+  const p = (rad: number, a: number, y: number): [number, number, number] => [
+    cx + Math.cos(a) * rad,
+    y,
+    cz - Math.sin(a) * rad,
+  ];
+  for (let i = 0; i < seg; i++) {
+    const s = (i / seg) * Math.PI * 2;
+    const e = ((i + 1) / seg) * Math.PI * 2;
+    mb.quad(p(r, s, BASE_H), p(R, s, BASE_H), p(R, e, BASE_H), p(r, e, BASE_H));
+    mb.quad(p(r, e, 0), p(R, e, 0), p(R, s, 0), p(r, s, 0));
+    mb.quad(p(R, s, 0), p(R, e, 0), p(R, e, BASE_H), p(R, s, BASE_H));
+    mb.quad(p(r, e, 0), p(r, s, 0), p(r, s, BASE_H), p(r, e, BASE_H));
+  }
+}
+
+/**
+ * The loop for a rectangular plate: diagonally off the back-left corner,
+ * overlapping it enough to fuse, hole fully clear of both edges.
+ */
+function loopAtCorner(mb: MeshBuilder, x0: number, z0: number, k: number): void {
+  const R = LOOP_OUT_MM / k;
+  const r = LOOP_IN_MM / k;
+  const c = r + 0.3 / k;
+  loopAt(mb, x0 - c, z0 - c, R, r);
+}
+
 /** "PEAK 47 - 9 FEB" for the busiest day, or null for an empty window. */
 function peakText(days: Day[]): string | null {
   let best: Day | null = null;
@@ -270,8 +315,9 @@ function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): Me
     }
   }
 
-  // Opt-in extras live on the plate walls, so they need the plate. Both are
+  // Opt-in extras live on the plate walls, so they need the plate. All are
   // independent of the signature label.
+  if (plate && o.loop) loopAtCorner(mb, x0, z0, o.sizeMm / plateW);
   if (plate && o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: z0 });
   if (plate && o.peak) {
     const t = peakText(data.days);
@@ -380,7 +426,13 @@ function buildRing(data: ContributionYear, o: BuildOptions, plate = true): MeshB
   // The ring has no flat wall, so its extras live on the clear centre of the
   // plate top, in rows: constellation deep, signature centre, sign name and
   // peak day toward the viewer. Every row is narrower than the chord of the
-  // inner circle at its z, so nothing runs under the band.
+  // inner circle at its z, so nothing runs under the band. The keyring loop
+  // hangs off the plinth's back-left edge, its hole clear of the circle.
+  if (plate && o.loop) {
+    const k = o.sizeMm / (2 * plateR);
+    const dist = plateR + LOOP_IN_MM / k + 0.2 / k;
+    loopAt(mb, -dist * Math.SQRT1_2, -dist * Math.SQRT1_2, LOOP_OUT_MM / k, LOOP_IN_MM / k);
+  }
   if (plate && o.sigil) {
     engraveSigilTop(mb, o.sigil, { cx: 0, cz: -15, y: BASE_H, w: 13.5, h: 9 });
     const name = o.sigil.name.toUpperCase().replace(/^THE /, "");
@@ -482,6 +534,7 @@ function buildWave(data: ContributionYear, o: BuildOptions): MeshBuilder {
   }
   mb.quad([px(0), 0, pz(0)], [px(cols), 0, pz(0)], [px(cols), 0, pz(7)], [px(0), 0, pz(7)]);
 
+  if (o.loop) loopAtCorner(mb, px(0), pz(0), o.sizeMm / gridW);
   if (o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: pz(0) });
   if (o.peak) {
     const t = peakText(data.days);
@@ -533,6 +586,7 @@ function buildSpine(data: ContributionYear, o: BuildOptions, plate = true): Mesh
   const z0 = -plateD / 2;
 
   if (plate) mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
+  if (plate && o.loop) loopAtCorner(mb, x0, z0, o.sizeMm / plateW);
 
   for (let m = 0; m < 12; m++) {
     const d = clamp01(dampening);
@@ -648,7 +702,7 @@ export function buildMultiYear(
   options: BuildOptions,
 ): BuiltMesh {
   const builder = BUILDERS[options.variant] ?? buildSkyline;
-  const rowOptions: BuildOptions = { ...options, label: false, sigil: null, peak: false };
+  const rowOptions: BuildOptions = { ...options, label: false, sigil: null, peak: false, loop: false };
   const rows = multi.years.map((y) => builder(y, rowOptions, false).finish());
 
   // Nominal per-row footprint from the CALENDAR, not from whichever towers
@@ -744,6 +798,7 @@ export function buildMultiYear(
   // the sigil in the centre of the back wall (milestones keep the corners),
   // the peak day in the centre of the front wall (login and span keep those
   // corners). The peak reads across every rendered year.
+  if (options.loop) loopAtCorner(mb, px0, pz0, options.sizeMm / (px1 - px0));
   if (options.sigil) {
     engraveSigilBack(mb, options.sigil, { cx: (px0 + px1) / 2, z: pz0 });
   }
@@ -809,5 +864,109 @@ export function buildMultiYear(
     },
     size,
     print,
+  };
+}
+
+/**
+ * Two people, one plate: A's skyline reads from the front, B's is turned
+ * 180 degrees so it reads from the back, back to back like a duel. Always
+ * skyline rows regardless of variant: facing calendars are the point, and
+ * both walls are needed for the two names, so the sigil/peak extras stay
+ * off this object. The keyring loop still works.
+ */
+export function buildDuel(
+  a: ContributionYear,
+  b: ContributionYear,
+  options: BuildOptions,
+): BuiltMesh {
+  const rowOptions: BuildOptions = { ...options, label: false, sigil: null, peak: false, loop: false };
+  const rowA = buildSkyline(a, rowOptions, false).finish();
+  const rowB = buildSkyline(b, rowOptions, false).finish();
+
+  const rowDepth = 7 * CELL;
+  const spine = CELL * 2; // shared plate between the two grids
+  const offset = (rowDepth + spine) / 2;
+
+  const positions: number[] = [];
+  const levels: number[] = [];
+  const order: number[] = [];
+  const baseY: number[] = [];
+  const append = (mesh: BuiltMesh, rotate: boolean, dz: number): void => {
+    for (let v = 0; v < mesh.positions.length; v += 3) {
+      const x = mesh.positions[v];
+      const z = mesh.positions[v + 2];
+      // A 180-degree turn about Y (a rotation, so the winding survives).
+      positions.push(rotate ? -x : x, mesh.positions[v + 1], (rotate ? -z : z) + dz);
+      levels.push(mesh.levels[v / 3]);
+      order.push(mesh.order[v / 3]);
+      baseY.push(mesh.baseY[v / 3]);
+    }
+  };
+  append(rowA, false, offset);
+  append(rowB, true, -offset);
+
+  const halfW = (Math.max(a.weeks.length, b.weeks.length) * CELL) / 2;
+  const px0 = -halfW - PLATE_PAD;
+  const px1 = halfW + PLATE_PAD;
+  const pz1 = offset + rowDepth / 2 + PLATE_PAD;
+  const pz0 = -pz1;
+  const mb = new MeshBuilder();
+  mb.box(px0, 0, pz0, px1, BASE_H, pz1);
+
+  const k = options.sizeMm / (px1 - px0);
+  if (options.loop) loopAtCorner(mb, px0, pz0, k);
+  if (options.label) {
+    const px = ENGRAVE_TEXT_MM / GLYPH_H;
+    const textY = (BASE_H - ENGRAVE_TEXT_MM) / 2;
+    // Each duellist's wall carries their own name; the year sits opposite.
+    engraveWall(mb, signature(a), { x: px0 + PLATE_PAD, y: textY, px, z: pz1, align: "left" });
+    engraveWall(mb, String(a.year), { x: px1 - PLATE_PAD, y: textY, px, z: pz1, align: "right" });
+    engraveWall(mb, signature(b), { x: px0 + PLATE_PAD, y: textY, px, z: pz0, align: "left", face: "back" });
+    engraveWall(mb, String(b.year), { x: px1 - PLATE_PAD, y: textY, px, z: pz0, align: "right", face: "back" });
+  }
+  const plate = mb.finish();
+  for (let v = 0; v < plate.positions.length; v += 3) {
+    positions.push(plate.positions[v], plate.positions[v + 1], plate.positions[v + 2]);
+    levels.push(plate.levels[v / 3]);
+    order.push(plate.order[v / 3]);
+    baseY.push(plate.baseY[v / 3]);
+  }
+
+  const pos = new Float32Array(positions);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < pos.length; i += 3) {
+    if (pos[i] < minX) minX = pos[i];
+    if (pos[i] > maxX) maxX = pos[i];
+    if (pos[i + 1] < minY) minY = pos[i + 1];
+    if (pos[i + 1] > maxY) maxY = pos[i + 1];
+    if (pos[i + 2] < minZ) minZ = pos[i + 2];
+    if (pos[i + 2] > maxZ) maxZ = pos[i + 2];
+  }
+  const cx = (minX + maxX) / 2;
+  const cz = (minZ + maxZ) / 2;
+  for (let i = 0; i < pos.length; i += 3) {
+    pos[i] = (pos[i] - cx) * k;
+    pos[i + 1] = (pos[i + 1] - minY) * k;
+    pos[i + 2] = (pos[i + 2] - cz) * k;
+  }
+  const scaledBaseY = new Float32Array(baseY.length);
+  for (let i = 0; i < baseY.length; i++) scaledBaseY[i] = baseY[i] * k;
+
+  const size = { x: (maxX - minX) * k, y: (maxY - minY) * k, z: (maxZ - minZ) * k };
+  return {
+    positions: pos,
+    levels: new Float32Array(levels),
+    order: new Float32Array(order),
+    baseY: scaledBaseY,
+    triangles: pos.length / 9,
+    bounds: {
+      min: [-size.x / 2, 0, -size.z / 2],
+      max: [size.x / 2, size.y, size.z / 2],
+    },
+    size,
+    print: {
+      engravePixelMm: options.label ? (ENGRAVE_TEXT_MM / GLYPH_H) * k : 0,
+      gapMm: GAP * k,
+    },
   };
 }

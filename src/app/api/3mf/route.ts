@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveModelSource } from "@/lib/github";
 import { modelErrorResponse } from "@/lib/responses";
-import { buildMonolith, buildMultiYear } from "@/lib/build";
+import { buildDuel, buildMonolith, buildMultiYear } from "@/lib/build";
 import { printableParts } from "@/lib/parts";
 import { buildKitThreeMf, kitStem } from "@/lib/kit";
 import { parseModelRequest } from "@/lib/request";
@@ -18,7 +18,11 @@ export async function GET(request: Request) {
     // mode (single year, lifetime stack, range, repo skyline).
     const src = await resolveModelSource(options);
     const build = buildOptionsFrom(options, src);
-    const mesh = src.multi ? buildMultiYear(src.multi, build) : buildMonolith(src.data, build);
+    const mesh = src.vsData
+      ? buildDuel(src.data, src.vsData, build)
+      : src.multi
+        ? buildMultiYear(src.multi, build)
+        : buildMonolith(src.data, build);
     const parts = printableParts(mesh);
 
     const file = buildKitThreeMf(parts, mesh, {

@@ -92,6 +92,8 @@ export interface PrintSheetProps {
   /** Opt-in extras plus the sign on screen, so every export engraves what the page shows. */
   flags: FlagId[];
   sign: string;
+  /** The duel opponent on screen, or empty. */
+  vs: string;
 }
 
 export function PrintSheet(props: PrintSheetProps) {
@@ -190,6 +192,7 @@ export function PrintSheet(props: PrintSheetProps) {
     repoName: props.repoName,
     flags: props.flags,
     sign: props.sign,
+    vs: props.vs,
   });
 
   const fits = fitsBed(props.mesh.size, printer);

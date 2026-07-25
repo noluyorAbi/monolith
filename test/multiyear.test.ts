@@ -3,7 +3,7 @@ import assert from "node:assert";
 
 import { fetchContributionYears, fetchContributionRange, fetchLifetime, fetchRepoActivity, repoActivityToYear, fetchCommitHours, StatsPendingError, type RepoActivity } from "@/lib/github";
 import { pack, splitRangeByYear, syntheticYear, computeStats, BadLoginError } from "@/lib/contributions";
-import { buildMultiYear, buildMonolith, fitsBed } from "@/lib/build";
+import { buildDuel, buildMultiYear, buildMonolith, fitsBed } from "@/lib/build";
 import { printerById } from "@/lib/print";
 import type { ContributionYear } from "@/lib/types";
 
@@ -471,6 +471,62 @@ test("the sigil and peak-day engravings are opt-in and add real geometry", () =>
     peak: true,
   });
   assert.ok(stackExtra.triangles > stackPlain.triangles);
+});
+
+test("the duel puts two years back to back on one shared plate", () => {
+  const [a, b] = fakeMulti("octocat", [2025, 2025]);
+  const bNamed = { ...b, login: "torvalds", name: "torvalds" };
+  const single = buildMonolith(a, { variant: "skyline", sizeMm: 180, label: true });
+  const duel = buildDuel(a, bNamed, { variant: "skyline", sizeMm: 180, label: true });
+  // One year's width, roughly two years' depth, centred.
+  assert.ok(Math.abs(duel.size.x - 180) < 1, `duel width ${duel.size.x}`);
+  assert.ok(duel.size.z > single.size.z * 1.6, `two grids expected, depth ${duel.size.z}`);
+  // Both calendars present: the label-less duel carries roughly twice the
+  // label-less single object's towers.
+  const singleBare = buildMonolith(a, { variant: "skyline", sizeMm: 180, label: false });
+  const duelBare = buildDuel(a, bNamed, { variant: "skyline", sizeMm: 180, label: false });
+  assert.ok(
+    duelBare.triangles > singleBare.triangles * 1.7,
+    `both calendars must be present (${duelBare.triangles} vs ${singleBare.triangles})`,
+  );
+  // One continuous bottom face spanning the whole footprint: one object.
+  let bottomSpan = 0;
+  const p = duel.positions;
+  for (let t = 0; t < p.length; t += 9) {
+    if (p[t + 1] !== 0 || p[t + 4] !== 0 || p[t + 7] !== 0) continue;
+    const zs = [p[t + 2], p[t + 5], p[t + 8]];
+    bottomSpan = Math.max(bottomSpan, Math.max(...zs) - Math.min(...zs));
+  }
+  assert.ok(bottomSpan > single.size.z * 1.6, `one shared plate expected, span ${bottomSpan}`);
+  // Names on both walls: geometry protrudes past the plate on BOTH z sides.
+  const bare = buildDuel(a, bNamed, { variant: "skyline", sizeMm: 180, label: false });
+  assert.ok(duel.triangles > bare.triangles, "the two names add wall geometry");
+  // Deterministic.
+  assert.equal(buildDuel(a, bNamed, { variant: "skyline", sizeMm: 180, label: true }).triangles, duel.triangles);
+});
+
+test("the keyring loop fuses to the plate and keeps its physical size", () => {
+  const year = fakeMulti("octocat", [2025])[0];
+  const plain = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true });
+  const looped = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true, loop: true });
+  assert.ok(looped.triangles > plain.triangles, "the loop adds geometry");
+  // scaleToSize pins the longest edge to sizeMm, so the loop shows up as an
+  // ASYMMETRY: it protrudes past the plate on the -x/-z corner.
+  assert.ok(
+    looped.bounds.min[0] < plain.bounds.min[0] - 1,
+    `the loop should protrude past the corner (${looped.bounds.min[0]} vs ${plain.bounds.min[0]})`,
+  );
+  // Physical millimetres at any size: the protrusion (asymmetry between the
+  // -x reach and the +x reach) is hand-sized at 180mm AND at the 60mm
+  // keyring size, instead of scaling down with the object.
+  const protrusion = (m: { bounds: { min: number[]; max: number[] } }) =>
+    Math.abs(m.bounds.min[0]) - Math.abs(m.bounds.max[0]);
+  const small = buildMonolith(year, { variant: "skyline", sizeMm: 60, label: true, loop: true });
+  const p180 = protrusion(looped);
+  const p60 = protrusion(small);
+  assert.ok(p180 > 3 && p180 < 10, `loop protrusion at 180mm: ${p180.toFixed(1)}mm`);
+  assert.ok(p60 > 3 && p60 < 10, `loop protrusion at 60mm: ${p60.toFixed(1)}mm`);
+  assert.ok(Math.abs(p60 - p180) < 3, `physical size holds (${p60.toFixed(1)} vs ${p180.toFixed(1)})`);
 });
 
 test("commit time-of-day is bucketed into 24 local hours (M16)", async () => {

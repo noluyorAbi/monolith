@@ -128,6 +128,12 @@ export interface BuildOptions {
    * tallest tower, when that tower is wide enough to carry legible text.
    */
   peak?: boolean;
+  /**
+   * Opt-in: fuse a keyring loop to the plate's back-left corner (ring: the
+   * band's back-left edge), sized in physical millimetres so the hole fits a
+   * split ring at any object size.
+   */
+  loop?: boolean;
 }
 
 export interface BuiltMesh {

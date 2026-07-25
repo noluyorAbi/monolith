@@ -18,7 +18,7 @@ import { PrintSheet } from "./PrintSheet";
 import { CursorField } from "./CursorField";
 import { Story } from "./Story";
 import { PROJECT } from "@/lib/project";
-import { SIZES, VARIANTS, buildMonolith, buildMultiYear, sizeById } from "@/lib/build";
+import { SIZES, VARIANTS, buildDuel, buildMonolith, buildMultiYear, sizeById } from "@/lib/build";
 import { DEFAULT_PRINTER_ID } from "@/lib/print";
 import { SELECTABLE_YEARS, availableYears, availableYearsFor, computeStats, splitRangeByYear, yearFromDays } from "@/lib/contributions";
 import { AMBIENT_PALETTE, DEFAULT_PALETTE_ID, PALETTES, paletteById } from "@/lib/palettes";
@@ -75,6 +75,7 @@ export function MonolithApp({
   initialRepoOwner,
   initialRepoName,
   initialFlags,
+  initialVs,
 }: {
   initialLogin?: string;
   initialYear?: number;
@@ -89,6 +90,7 @@ export function MonolithApp({
   initialRepoOwner?: string;
   initialRepoName?: string;
   initialFlags?: FlagId[];
+  initialVs?: string;
 }) {
   const years = useMemo(() => availableYears(SELECTABLE_YEARS), []);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -120,8 +122,12 @@ export function MonolithApp({
   const [sizeId, setSizeId] = useState<SizeId>(nearestSizeId(initialSizeMm));
   const [printerId, setPrinterId] = useState(DEFAULT_PRINTER_ID);
   const [dampening, setDampening] = useState(initialDampening ?? 0);
-  /** Opt-in extras (sigil engraving, peak-day text, two-colour 3MF, ...). */
+  /** Opt-in extras (sigil engraving, peak-day text, keyring loop, ...). */
   const [flags, setFlags] = useState<FlagId[]>(initialFlags ?? []);
+  /** The duel opponent's login; empty means a normal single object. */
+  const [duelVs, setDuelVs] = useState(initialVs ?? "");
+  /** The opponent's fetched year, present while a duel is on screen. */
+  const [duelData, setDuelData] = useState<ContributionYear | null>(null);
   const [data, setData] = useState<ContributionYear | null>(null);
   /** A multi-year roll-up (lifetime / several years). Set alongside `data` so
    * the viewer can render it with buildMultiYear. M1 / marktanalyse 5.4. */
@@ -285,7 +291,12 @@ export function MonolithApp({
         : null,
     [flags, persona],
   );
-  const extrasKey = `${sigilOpt && persona ? persona.id : ""}|${flags.includes("peak") ? "p" : ""}`;
+  const extrasKey = [
+    sigilOpt && persona ? persona.id : "",
+    flags.includes("peak") ? "p" : "",
+    flags.includes("loop") ? "l" : "",
+    duelData?.login ?? "",
+  ].join("|");
 
   const mesh = useMemo(() => {
     if (!data) return null;
@@ -304,9 +315,18 @@ export function MonolithApp({
     ) {
       return built.mesh;
     }
-    const o = { variant, sizeMm, label: true, dampening, sigil: sigilOpt, peak: flags.includes("peak") };
+    const o = {
+      variant,
+      sizeMm,
+      label: true,
+      dampening,
+      sigil: sigilOpt,
+      peak: flags.includes("peak"),
+      loop: flags.includes("loop"),
+    };
+    if (duelData) return buildDuel(data, duelData, o);
     return multi ? buildMultiYear(multi, o) : buildMonolith(data, o);
-  }, [data, multi, built, variant, sizeMm, dampening, sigilOpt, extrasKey, flags]);
+  }, [data, multi, duelData, built, variant, sizeMm, dampening, sigilOpt, extrasKey, flags]);
 
   const forge = useCallback(
     async (
@@ -327,6 +347,8 @@ export function MonolithApp({
           repoName?: string;
           rangeFrom?: string;
           rangeTo?: string;
+          /** The duel opponent; an empty string ends the duel. */
+          vs?: string;
         };
       },
     ) => {
@@ -338,6 +360,9 @@ export function MonolithApp({
       const effRepoName = opts?.over?.repoName ?? repoName;
       const effRangeFrom = opts?.over?.rangeFrom ?? rangeFrom;
       const effRangeTo = opts?.over?.rangeTo ?? rangeTo;
+      // The duel exists only in the plain single-year user mode.
+      const effVs =
+        effSubject === "user" && effSpan === "year" ? (opts?.over?.vs ?? duelVs) : "";
       const fail = (message: string) => {
         setError(message);
         setSteps([]);
@@ -405,6 +430,30 @@ export function MonolithApp({
       }
       if (!alive()) return;
 
+      // The duel opponent's year, fetched after the challenger's so a bad
+      // opponent handle fails with its own message rather than a mixed one.
+      let vsYear: ContributionYear | null = null;
+      if (effVs) {
+        try {
+          const res = await fetch(
+            `/api/contributions?login=${encodeURIComponent(effVs)}&year=${forYear}`,
+          );
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.message ?? `GitHub would not answer for ${effVs}.`);
+          }
+          const opp: { data?: ContributionYear } = await res.json();
+          if (!opp.data) throw new Error(`No calendar for ${effVs}.`);
+          vsYear = opp.data;
+        } catch (err) {
+          if (!alive()) return;
+          fail(err instanceof Error ? err.message : "Something broke.");
+          return;
+        }
+        if (!alive()) return;
+        push({ label: "challenger", value: `${vsYear.total.toLocaleString("en-GB")} from ${vsYear.login}` }, 0.44);
+      }
+
       // A range that crosses calendar years renders as the same depth-wise
       // terrace stack a lifetime object uses; one plate 150 weeks long is not
       // an object, it is a ruler. User subject only: a repo's 52-week window
@@ -455,12 +504,21 @@ export function MonolithApp({
       // Same arguments the memo will use, kept so the readout describes the
       // object that actually gets rendered.
       const yearData = payload.data;
-      const forged = payload.multi
-        ? buildMultiYear(payload.multi, { variant, sizeMm, label: true, dampening })
-        : buildMonolith(yearData!, { variant, sizeMm, label: true, dampening });
+      const forged = vsYear
+        ? buildDuel(yearData!, vsYear, { variant, sizeMm, label: true, dampening })
+        : payload.multi
+          ? buildMultiYear(payload.multi, { variant, sizeMm, label: true, dampening })
+          : buildMonolith(yearData!, { variant, sizeMm, label: true, dampening });
       // The forge builds the plain object; when extras are toggled on, the
       // mesh memo rebuilds once with the engravings after the persona lands.
-      setBuilt({ data: yearData!, variant, sizeMm, dampening, extrasKey: "|", mesh: forged });
+      setBuilt({
+        data: yearData!,
+        variant,
+        sizeMm,
+        dampening,
+        extrasKey: `|||${vsYear?.login ?? ""}`,
+        mesh: forged,
+      });
       push(
         {
           label: "extruding",
@@ -486,6 +544,8 @@ export function MonolithApp({
       if (!alive()) return;
       setData(payload.multi ? payload.multi.years[payload.multi.years.length - 1] : yearData!);
       setMulti(payload.multi ?? null);
+      setDuelData(vsYear);
+      setDuelVs(vsYear ? effVs : "");
       setStats(payload.stats);
       setLogin(payload.multi?.login ?? yearData!.login);
       setYearLabel(yearLabel);
@@ -523,10 +583,11 @@ export function MonolithApp({
           subject: effSubject,
           repoOwner: effRepoOwner,
           repoName: effRepoName,
+          vs: effVs,
         })}`,
       );
     },
-    [variant, sizeMm, reduceMotion, paletteId, dampening, subject, span, repoOwner, repoName, rangeFrom, rangeTo],
+    [variant, sizeMm, reduceMotion, paletteId, dampening, subject, span, repoOwner, repoName, rangeFrom, rangeTo, duelVs],
   );
 
   // Keep the address bar honest about the extras: toggling a flag (or the
@@ -599,6 +660,8 @@ export function MonolithApp({
     setProgress(0);
     setError(null);
     setCommitHours(null);
+    setDuelData(null);
+    setDuelVs("");
     window.history.replaceState(null, "", "/");
   }, []);
 
@@ -661,6 +724,7 @@ export function MonolithApp({
       subject,
       repoOwner,
       repoName,
+      vs: duelData ? duelVs : "",
       flags,
       sign: persona?.id,
     })}`;
@@ -1086,6 +1150,8 @@ export function MonolithApp({
           onDampening={setDampening}
           flags={flags}
           onFlags={setFlags}
+          duelVs={duelVs}
+          onDuelVs={setDuelVs}
           total={stats?.total ?? 0}
           onPrint={() => setPrinting(true)}
           spin={spin && !reduceMotion}
@@ -1122,6 +1188,7 @@ export function MonolithApp({
               repoName={repoName}
               flags={flags}
               sign={persona?.id ?? ""}
+              vs={duelData ? duelVs : ""}
             />
           </>
         )}

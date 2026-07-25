@@ -133,6 +133,29 @@ test("opt-in flags round trip in canonical order; unknown tokens are dropped", (
   assert.ok(!noSigil.includes("sign="));
 });
 
+test("the duel opponent rides the link only in single-year user mode", () => {
+  const query = modelQuery({
+    login: "octocat",
+    year: 2025,
+    variant: "skyline",
+    sizeMm: 180,
+    vs: "torvalds",
+  });
+  assert.ok(query.includes("vs=torvalds"));
+  const parsed = parseModelRequest(new URL(`${BASE}/kit?${query}`));
+  assert.equal(parsed.vs, "torvalds");
+
+  // A lifetime, range or repo link never carries an opponent.
+  const lifetime = modelQuery({
+    login: "octocat", year: 2025, variant: "skyline", sizeMm: 180, span: "lifetime", vs: "torvalds",
+  });
+  assert.ok(!lifetime.includes("vs="));
+  const crossed = parseModelRequest(new URL(`${BASE}/kit?login=octocat&span=lifetime&vs=torvalds`));
+  assert.equal(crossed.vs, "", "a hand-edited lifetime link drops the opponent");
+  const badVs = parseModelRequest(new URL(`${BASE}/kit?login=octocat&vs=not%20a%20login`));
+  assert.equal(badVs.vs, "");
+});
+
 test("nonsense parameters fall back rather than reaching the generator", () => {
   const parsed = parseModelRequest(
     new URL(`${BASE}/kit?login=octocat&variant=teapot&mm=99999&printer=laser&material=steel&quality=perfect&slots=7`),
