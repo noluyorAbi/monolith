@@ -183,6 +183,15 @@ test("buildOptionsFrom honours the carried sign and derives one when absent", ()
 
   const junk = buildOptionsFrom({ ...base, flags: ["sigil"], sign: "notasign" }, src);
   assert.equal(junk.sigil?.name, "The Perennial", "an unknown sign id falls back to deriving");
+
+  // The languages ring: only the flag AND a non-empty split dress the object.
+  const split = [{ name: "TypeScript", color: "#3178c6", share: 1 }];
+  const langsOn = buildOptionsFrom({ ...base, flags: ["langs"], sign: "" }, src, split);
+  assert.deepEqual(langsOn.langs, split);
+  const langsOff = buildOptionsFrom({ ...base, flags: [], sign: "" }, src, split);
+  assert.ok(!langsOff.langs, "no flag, no ring, whatever was fetched");
+  const langsEmpty = buildOptionsFrom({ ...base, flags: ["langs"], sign: "" }, src, []);
+  assert.ok(!langsEmpty.langs, "an empty split leaves the object plain");
 });
 
 test("parseRepoInput accepts what people actually paste", () => {

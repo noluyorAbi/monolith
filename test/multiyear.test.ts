@@ -1,7 +1,9 @@
 import { afterEach, test, vi } from "vitest";
 import assert from "node:assert";
 
-import { fetchContributionYears, fetchContributionRange, fetchLifetime, fetchRepoActivity, repoActivityToYear, fetchCommitHours, StatsPendingError, type RepoActivity } from "@/lib/github";
+import { fetchContributionYears, fetchContributionRange, fetchLifetime, fetchRepoActivity, repoActivityToYear, fetchCommitHours, fetchTopLanguages, fetchRepoLanguages, StatsPendingError, type RepoActivity } from "@/lib/github";
+import { splitByLevel } from "@/lib/parts";
+import { slotForLevel } from "@/lib/slots";
 import { pack, splitRangeByYear, syntheticYear, computeStats, BadLoginError } from "@/lib/contributions";
 import { buildDuel, buildMultiYear, buildMonolith, fitsBed } from "@/lib/build";
 import { printerById } from "@/lib/print";
@@ -596,3 +598,116 @@ test("a histogram cut off by the search cap says how much of the year it sampled
   assert.equal(hours.hours.reduce((a, b) => a + b, 0), hours.sampled, "buckets sum to the sample size");
 });
 
+
+test("the languages ring is opt-in: proportional segments, own levels, own parts", () => {
+  const year = fakeMulti("octocat", [2025])[0];
+  const langs = [
+    { name: "TypeScript", color: "#3178c6", share: 0.5 },
+    { name: "Python", color: "#3572A5", share: 0.3 },
+    { name: "Rust", color: "#dea584", share: 0.2 },
+  ];
+  const plain = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true });
+  const withLangs = buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true, langs });
+  assert.ok(withLangs.triangles > plain.triangles, "the bar adds geometry");
+  assert.deepEqual(withLangs.langs?.map((l) => l.name), ["TypeScript", "Python", "Rust"]);
+
+  // Segments carry levels 10..12 and sit raised on the plate top.
+  const k = 180 / (year.weeks.length * 4 + 7); // sizeMm over the raw plate width
+  const topMm = 5 * k;
+  const spans = new Map<number, { min: number; max: number }>();
+  const p = withLangs.positions;
+  for (let i = 0; i < withLangs.levels.length; i++) {
+    const level = withLangs.levels[i];
+    if (level < 10) continue;
+    const y = p[i * 3 + 1];
+    assert.ok(y >= topMm - 1e-3 && y <= topMm + 0.8 * k + 1e-3, `segment vertex at y=${y.toFixed(2)}`);
+    const s = spans.get(level) ?? { min: Infinity, max: -Infinity };
+    s.min = Math.min(s.min, p[i * 3]);
+    s.max = Math.max(s.max, p[i * 3]);
+    spans.set(level, s);
+  }
+  assert.deepEqual([...spans.keys()].sort((a, b) => a - b), [10, 11, 12]);
+  const widthOf = (lvl: number) => spans.get(lvl)!.max - spans.get(lvl)!.min;
+  const total = widthOf(10) + widthOf(11) + widthOf(12);
+  assert.ok(widthOf(10) > widthOf(11) && widthOf(11) > widthOf(12), "bigger share, longer segment");
+  assert.ok(Math.abs(widthOf(10) / total - 0.5) < 0.05, `top share holds half the bar (${(widthOf(10) / total).toFixed(2)})`);
+
+  // One closed 3MF object per language, named after it.
+  const parts = splitByLevel(withLangs);
+  for (const name of ["TypeScript", "Python", "Rust"]) {
+    const part = parts.find((pt) => pt.name === name);
+    assert.ok(part, `part "${name}" must exist`);
+    assert.ok(part!.closed, `part "${name}" must be a closed solid`);
+  }
+
+  // Slot binding: base plate keeps slot 1, languages cycle the accent slots.
+  assert.equal(slotForLevel(10, 1), 1);
+  assert.equal(slotForLevel(11, 2), 2);
+  assert.deepEqual([10, 11, 12, 13].map((l) => slotForLevel(l, 4)), [2, 3, 4, 2]);
+
+  // Ring variant: arcs around the plinth border, clear OUTSIDE the data band.
+  const ringPlain = buildMonolith(year, { variant: "ring", sizeMm: 180, label: true });
+  const ringLangs = buildMonolith(year, { variant: "ring", sizeMm: 180, label: true, langs });
+  assert.ok(ringLangs.triangles > ringPlain.triangles, "the ring gains its arcs");
+  const kR = 180 / 137;
+  const bandOuterMm = 65 * kR;
+  let arcVerts = 0;
+  for (let i = 0; i < ringLangs.levels.length; i++) {
+    if (ringLangs.levels[i] < 10) continue;
+    arcVerts++;
+    const r = Math.hypot(ringLangs.positions[i * 3], ringLangs.positions[i * 3 + 2]);
+    assert.ok(r > bandOuterMm, `arc vertex at r=${r.toFixed(1)} runs under the band (outer ${bandOuterMm.toFixed(1)})`);
+  }
+  assert.ok(arcVerts > 0, "the arcs must exist");
+
+  // Wave has no plate border: the flag is inert there, honestly.
+  const wavePlain = buildMonolith(year, { variant: "wave", sizeMm: 180, label: true });
+  const waveLangs = buildMonolith(year, { variant: "wave", sizeMm: 180, label: true, langs });
+  assert.equal(waveLangs.triangles, wavePlain.triangles);
+  assert.equal(waveLangs.langs, undefined, "no geometry, no part names");
+
+  // The multi-year shared plate carries the bar in its own front border.
+  const years = fakeMulti("octocat", [2024, 2025]);
+  const stackPlain = buildMultiYear(multiOf(years), { variant: "skyline", sizeMm: 180, label: true });
+  const stackLangs = buildMultiYear(multiOf(years), { variant: "skyline", sizeMm: 180, label: true, langs });
+  assert.ok(stackLangs.triangles > stackPlain.triangles);
+  assert.equal(stackLangs.langs?.length, 3);
+
+  // Off means off: no flag, byte-identical geometry.
+  assert.equal(buildMonolith(year, { variant: "skyline", sizeMm: 180, label: true }).triangles, plain.triangles);
+});
+
+test("fetchTopLanguages keeps the top six at 4%+ and renormalises the shares", async () => {
+  vi.stubGlobal("fetch", async (input: RequestInfo | Request) => {
+    const url = typeof input === "string" ? input : String((input as Request).url);
+    if (url.includes("graphql")) {
+      // Token path (when the env has one): answer empty so the REST census runs.
+      return new Response(JSON.stringify({ data: { user: null } }), { status: 200 });
+    }
+    const repos = [
+      { language: "TypeScript", size: 500, fork: false },
+      { language: "Python", size: 300, fork: false },
+      { language: "Rust", size: 190, fork: false },
+      { language: "Lua", size: 10, fork: false }, // 1%: below the 4% floor
+      { language: "C", size: 9000, fork: true }, // forks do not count
+      { language: null, size: 400, fork: false },
+    ];
+    return new Response(JSON.stringify(repos), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  const langs = await fetchTopLanguages("octocat");
+  assert.deepEqual(langs.map((l) => l.name), ["TypeScript", "Python", "Rust"]);
+  const sum = langs.reduce((a, l) => a + l.share, 0);
+  assert.ok(Math.abs(sum - 1) < 1e-9, `shares must renormalise to 1, got ${sum}`);
+  assert.equal(langs[0].color, "#3178c6", "known languages wear GitHub's colour");
+
+  // A repository's split comes off the public languages endpoint, bytes exact.
+  vi.stubGlobal("fetch", async () =>
+    new Response(JSON.stringify({ Go: 750, HCL: 250 }), { status: 200, headers: { "content-type": "application/json" } }),
+  );
+  const repo = await fetchRepoLanguages("hashicorp", "terraform");
+  assert.deepEqual(repo.map((l) => [l.name, l.share]), [["Go", 0.75], ["HCL", 0.25]]);
+
+  // GitHub silent: an empty list, never a throw, so the flag degrades cleanly.
+  vi.stubGlobal("fetch", async () => new Response(null, { status: 403 }));
+  assert.deepEqual(await fetchTopLanguages("octocat"), []);
+});

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveModelSource } from "@/lib/github";
+import { fetchModelLanguages, resolveModelSource } from "@/lib/github";
 import { modelErrorResponse } from "@/lib/responses";
 import { buildDuel, buildMonolith, buildMultiYear } from "@/lib/build";
 import { printableParts } from "@/lib/parts";
@@ -17,8 +17,11 @@ export async function GET(request: Request) {
     // The query names a subject and a span; the kit must contain the object
     // the viewer showed (lifetime stack, range, repo skyline), not a
     // single-year collapse of it.
-    const src = await resolveModelSource(options);
-    const build = buildOptionsFrom(options, src);
+    const [src, langs] = await Promise.all([
+      resolveModelSource(options),
+      options.flags.includes("langs") ? fetchModelLanguages(options) : null,
+    ]);
+    const build = buildOptionsFrom(options, src, langs);
     const mesh = src.vsData
       ? buildDuel(src.data, src.vsData, build)
       : src.multi

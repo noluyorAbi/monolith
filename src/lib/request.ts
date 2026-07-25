@@ -34,12 +34,14 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  *  - sigil: engrave the starsign constellation + name on the base plate
  *  - peak: engrave the best day's count and date on the plate's front wall
  *  - loop: fuse a keyring loop to the plate corner (any size; pairs with 60mm)
+ *  - langs: the top-languages ring, raised segments on the plate top sized by
+ *    each language's share, one 3MF object per language
  *  - noog: share page opts out of the OG preview image
  *
  * Multi-colour is NOT a flag: the 3MF has always shipped one object per
  * intensity level, bound to filament slots via the existing `slots` param.
  */
-export const FLAG_IDS = ["sigil", "peak", "loop", "noog"] as const;
+export const FLAG_IDS = ["sigil", "peak", "loop", "langs", "noog"] as const;
 export type FlagId = (typeof FLAG_IDS)[number];
 
 export function parseFlags(raw: string | null): FlagId[] {

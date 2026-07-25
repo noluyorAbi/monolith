@@ -1,6 +1,6 @@
 import { MeshBuilder, scaleToSize, type Attribs } from "./mesh";
 import { GLYPH_H, measureText, rasterise } from "./font5x7";
-import type { BuildOptions, BuiltMesh, ContributionYear, Day, MultiYearData, Variant } from "./types";
+import type { BuildOptions, BuiltMesh, ContributionYear, Day, LangShare, MultiYearData, Variant } from "./types";
 import type { Printer } from "./print";
 
 /** Millimetres. Chosen so a default skyline lands close to a 210mm desk piece. */
@@ -280,6 +280,82 @@ function loopAtLeftWall(mb: MeshBuilder, x0: number, zCenter: number, k: number)
   loopAt(mb, x0 - c, zCenter, R, r, loopHeight(k));
 }
 
+/**
+ * The languages ring. Each kept language becomes its own solid at level
+ * LANG_LEVEL + index, which is what makes it its own 3MF object (parts.ts
+ * splits by level) and its own colour in the viewer and the GLB (both read
+ * BuiltMesh.langs by the same index).
+ */
+const LANG_LEVEL = 10;
+/** Raised enough to survive four 0.2mm layers at the default 180mm. */
+const LANG_H = 0.8;
+/** Strip depth + inset fit inside PLATE_PAD with 0.7 clear of the towers. */
+const LANG_DEPTH = 2.2;
+const LANG_INSET = 0.6;
+const LANG_GAP = 0.8;
+
+/** Defensive re-normalisation; the data layer already keeps top six at 4%+. */
+function keptLangs(langs: LangShare[] | null | undefined): LangShare[] {
+  const kept = (langs ?? []).filter((l) => l.share > 0).slice(0, 6);
+  const sum = kept.reduce((a, l) => a + l.share, 0);
+  return sum > 0 ? kept.map((l) => ({ ...l, share: l.share / sum })) : [];
+}
+
+/**
+ * The ring as a bar: proportional segments on the plate top just inside the
+ * front edge, reading left to right like GitHub's own language bar. The strip
+ * lives in the plate's PLATE_PAD border, so it never touches a tower.
+ */
+function langBarTop(
+  mb: MeshBuilder,
+  langs: LangShare[],
+  x0: number,
+  x1: number,
+  zFront: number,
+): void {
+  const kept = keptLangs(langs);
+  if (kept.length === 0) return;
+  const z1 = zFront - LANG_INSET;
+  const usable = x1 - x0 - LANG_GAP * (kept.length - 1);
+  if (usable <= 0) return;
+  let x = x0;
+  kept.forEach((l, i) => {
+    const w = usable * l.share;
+    mb.box(x, BASE_H, z1 - LANG_DEPTH, x + w, BASE_H + LANG_H, z1, {
+      level: LANG_LEVEL + i,
+      order: 0.97,
+      baseY: BASE_H,
+    });
+    x += w + LANG_GAP;
+  });
+}
+
+/**
+ * The ring variant's version is a literal ring: proportional arcs around the
+ * plinth's outer border, the PLATE_PAD annulus between the data band and the
+ * plate edge, so it wraps the whole object.
+ */
+function langRingTop(mb: MeshBuilder, langs: LangShare[], plateR: number): void {
+  const kept = keptLangs(langs);
+  if (kept.length === 0) return;
+  const r1 = plateR - LANG_INSET;
+  const r0 = r1 - LANG_DEPTH;
+  const gapA = LANG_GAP / ((r0 + r1) / 2);
+  const usable = Math.PI * 2 - gapA * kept.length;
+  if (usable <= 0) return;
+  // Start at the back and sweep the full circle, biggest share first.
+  let a = Math.PI / 2;
+  for (let i = 0; i < kept.length; i++) {
+    const sweep = usable * kept[i].share;
+    mb.wedge(r0, r1, a, a + sweep, BASE_H, BASE_H + LANG_H, Math.max(2, Math.ceil(sweep / 0.1)), {
+      level: LANG_LEVEL + i,
+      order: 0.97,
+      baseY: BASE_H,
+    });
+    a += sweep + gapA;
+  }
+}
+
 /** "PEAK 47 - 9 FEB" for the busiest day, or null for an empty window. */
 function peakText(days: Day[]): string | null {
   let best: Day | null = null;
@@ -329,6 +405,9 @@ function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): Me
   // independent of the signature label.
   if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW);
   if (plate && o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: z0 });
+  if (plate && o.langs?.length) {
+    langBarTop(mb, o.langs, x0 + PLATE_PAD, x0 + plateW - PLATE_PAD, z0 + plateD);
+  }
   if (plate && o.peak) {
     const t = peakText(data.days);
     if (t) {
@@ -456,6 +535,7 @@ function buildRing(data: ContributionYear, o: BuildOptions, plate = true): MeshB
       engraveTop(mb, t, { cx: 0, cz: 15, px: peakPx, y: BASE_H });
     }
   }
+  if (plate && o.langs?.length) langRingTop(mb, o.langs, plateR);
 
   if (!label) return mb;
   const text = `${signature(data)} ${data.year}`;
@@ -597,6 +677,9 @@ function buildSpine(data: ContributionYear, o: BuildOptions, plate = true): Mesh
 
   if (plate) mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
   if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW);
+  if (plate && o.langs?.length) {
+    langBarTop(mb, o.langs, x0 + PLATE_PAD, x0 + plateW - PLATE_PAD, z0 + plateD);
+  }
 
   for (let m = 0; m < 12; m++) {
     const d = clamp01(dampening);
@@ -671,6 +754,10 @@ export function buildMonolith(data: ContributionYear, options: BuildOptions): Bu
     engravePixelMm: options.label ? (ENGRAVE_TEXT_MM / GLYPH_H) * k : 0,
     gapMm: GAPPED.includes(options.variant) ? GAP * k : null,
   };
+  // The list that names and colours the language levels, in the exact order
+  // the geometry used. Wave built none (no plate border), so it carries none.
+  const langs = options.variant === "wave" ? [] : keptLangs(options.langs);
+  if (langs.length) scaled.langs = langs;
   return scaled;
 }
 
@@ -825,6 +912,11 @@ export function buildMultiYear(
       });
     }
   }
+  // The languages bar sits in the shared plate's own front border, clear of
+  // the front row's terrace whatever the variant of the rows.
+  if (options.langs?.length) {
+    langBarTop(mb, options.langs, px0 + PLATE_PAD, px1 - PLATE_PAD, pz1);
+  }
   append(mb.finish(), 0);
 
   // Width carries the single-year meaning of sizeMm; the depth grows with the
@@ -862,6 +954,7 @@ export function buildMultiYear(
     engravePixelMm: options.label ? (ENGRAVE_TEXT_MM / GLYPH_H) * k : 0,
     gapMm: GAPPED.includes(options.variant) ? GAP * k : null,
   };
+  const langs = keptLangs(options.langs);
   return {
     positions: pos,
     levels: new Float32Array(levels),
@@ -874,6 +967,7 @@ export function buildMultiYear(
     },
     size,
     print,
+    ...(langs.length ? { langs } : {}),
   };
 }
 
@@ -925,6 +1019,11 @@ export function buildDuel(
 
   const k = options.sizeMm / (px1 - px0);
   if (options.loop) loopAtLeftWall(mb, px0, 0, k);
+  // The two grids leave a clear spine of shared plate between them; the
+  // languages bar runs along it, readable from A's side.
+  if (options.langs?.length) {
+    langBarTop(mb, options.langs, px0 + PLATE_PAD, px1 - PLATE_PAD, LANG_DEPTH / 2 + LANG_INSET);
+  }
   if (options.label) {
     const px = ENGRAVE_TEXT_MM / GLYPH_H;
     const textY = (BASE_H - ENGRAVE_TEXT_MM) / 2;
@@ -963,6 +1062,7 @@ export function buildDuel(
   for (let i = 0; i < baseY.length; i++) scaledBaseY[i] = baseY[i] * k;
 
   const size = { x: (maxX - minX) * k, y: (maxY - minY) * k, z: (maxZ - minZ) * k };
+  const langs = keptLangs(options.langs);
   return {
     positions: pos,
     levels: new Float32Array(levels),
@@ -978,5 +1078,6 @@ export function buildDuel(
       engravePixelMm: options.label ? (ENGRAVE_TEXT_MM / GLYPH_H) * k : 0,
       gapMm: GAP * k,
     },
+    ...(langs.length ? { langs } : {}),
   };
 }

@@ -38,6 +38,7 @@ import type {
   CommitHoursData,
   ContributionYear,
   Day,
+  LangShare,
   MultiYearData,
   Stats,
   StudioLights,
@@ -128,6 +129,9 @@ export function MonolithApp({
   const [duelVs, setDuelVs] = useState(initialVs ?? "");
   /** The opponent's fetched year, present while a duel is on screen. */
   const [duelData, setDuelData] = useState<ContributionYear | null>(null);
+  /** The top-languages split, fetched once the langs flag asks for it,
+   * remembered with whose split it is so a subject switch cannot wear it. */
+  const [langsData, setLangsData] = useState<{ who: string; langs: LangShare[] } | null>(null);
   const [data, setData] = useState<ContributionYear | null>(null);
   /** A multi-year roll-up (lifetime / several years). Set alongside `data` so
    * the viewer can render it with buildMultiYear. M1 / marktanalyse 5.4. */
@@ -291,11 +295,46 @@ export function MonolithApp({
         : null,
     [flags, persona],
   );
+  // The language split the mesh should wear right now: fetched lazily when
+  // the flag first asks for it, keyed to the subject on screen so a stale
+  // answer for someone else never dresses the current object. An empty
+  // answer (GitHub silent, brand-new account) leaves the object plain.
+  const langsWho =
+    subject === "repo" && repoOwner && repoName
+      ? `${repoOwner}/${repoName}`.toLowerCase()
+      : login.toLowerCase();
+  const langsOpt =
+    flags.includes("langs") && langsData?.who === langsWho && langsData.langs.length
+      ? langsData.langs
+      : null;
+  useEffect(() => {
+    if (!flags.includes("langs") || !login) return;
+    let dead = false;
+    const who =
+      subject === "repo" && repoOwner && repoName
+        ? `${repoOwner}/${repoName}`.toLowerCase()
+        : login.toLowerCase();
+    const q =
+      subject === "repo" && repoOwner && repoName
+        ? `owner=${encodeURIComponent(repoOwner)}&repo=${encodeURIComponent(repoName)}`
+        : `login=${encodeURIComponent(login)}`;
+    fetch(`/api/langs?${q}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { langs?: LangShare[] } | null) => {
+        if (!dead && json?.langs) setLangsData({ who, langs: json.langs });
+      })
+      .catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, [flags, login, subject, repoOwner, repoName]);
+
   const extrasKey = [
     sigilOpt && persona ? persona.id : "",
     flags.includes("peak") ? "p" : "",
     flags.includes("loop") ? "l" : "",
     duelData?.login ?? "",
+    langsOpt ? langsOpt.map((l) => l.name).join(",") : "",
   ].join("|");
 
   const mesh = useMemo(() => {
@@ -323,10 +362,11 @@ export function MonolithApp({
       sigil: sigilOpt,
       peak: flags.includes("peak"),
       loop: flags.includes("loop"),
+      langs: langsOpt,
     };
     if (duelData) return buildDuel(data, duelData, o);
     return multi ? buildMultiYear(multi, o) : buildMonolith(data, o);
-  }, [data, multi, duelData, built, variant, sizeMm, dampening, sigilOpt, extrasKey, flags]);
+  }, [data, multi, duelData, built, variant, sizeMm, dampening, sigilOpt, langsOpt, extrasKey, flags]);
 
   const forge = useCallback(
     async (
@@ -516,7 +556,7 @@ export function MonolithApp({
         variant,
         sizeMm,
         dampening,
-        extrasKey: `|||${vsYear?.login ?? ""}`,
+        extrasKey: `|||${vsYear?.login ?? ""}|`,
         mesh: forged,
       });
       push(

@@ -12,7 +12,7 @@ import {
   assembleMultiYear,
   splitRangeByYear,
 } from "./contributions";
-import type { CommitHoursData, ContributionYear, Day, Level, MultiYearData } from "./types";
+import type { CommitHoursData, ContributionYear, Day, LangShare, Level, MultiYearData } from "./types";
 
 /**
  * Reaching GitHub. Server only: it reads GITHUB_TOKEN and scrapes a page, and
@@ -596,6 +596,162 @@ export async function resolveModelSource(req: {
   }
   const data = await fetchContributionYear(req.login, req.year);
   return { data, multi: null, vsData: null, who: data.login, spanLabel: String(data.year), demo: data.demo };
+}
+
+/**
+ * The languages ring's data. With a token, one GraphQL call sums the byte
+ * sizes GitHub itself reports per repository (the same numbers behind the
+ * profile's language bar), colours included. Without one, the public repo
+ * list still names each repository's primary language and its size, which is
+ * a coarser census but an honest one. Either way the result is the top six
+ * languages at 4%+ of the total, shares renormalised to sum to 1. Failure
+ * returns [] so the flag degrades to a plain object instead of an error.
+ */
+const LANG_KEEP = 6;
+const LANG_MIN_SHARE = 0.04;
+
+/** GitHub's own colours for the languages the token-less path can meet. */
+const LANG_COLORS: Record<string, string> = {
+  JavaScript: "#f1e05a",
+  TypeScript: "#3178c6",
+  Python: "#3572A5",
+  Java: "#b07219",
+  C: "#555555",
+  "C++": "#f34b7d",
+  "C#": "#178600",
+  Go: "#00ADD8",
+  Rust: "#dea584",
+  Ruby: "#701516",
+  PHP: "#4F5D95",
+  Swift: "#F05138",
+  Kotlin: "#A97BFF",
+  HTML: "#e34c26",
+  CSS: "#563d7c",
+  Shell: "#89e051",
+  Vue: "#41b883",
+  Svelte: "#ff3e00",
+  Dart: "#00B4AB",
+  Scala: "#c22d40",
+  Haskell: "#5e5086",
+  Elixir: "#6e4a7e",
+  Lua: "#000080",
+  R: "#198CE7",
+  "Jupyter Notebook": "#DA5B0B",
+  "Objective-C": "#438eff",
+  Zig: "#ec915c",
+};
+
+function topShares(sizes: Map<string, { bytes: number; color: string }>): LangShare[] {
+  const total = [...sizes.values()].reduce((a, v) => a + v.bytes, 0);
+  if (total <= 0) return [];
+  const kept = [...sizes.entries()]
+    .map(([name, v]) => ({ name, color: v.color, share: v.bytes / total }))
+    .filter((l) => l.share >= LANG_MIN_SHARE)
+    .sort((a, b) => b.share - a.share)
+    .slice(0, LANG_KEEP);
+  const sum = kept.reduce((a, l) => a + l.share, 0);
+  return sum > 0 ? kept.map((l) => ({ ...l, share: l.share / sum })) : [];
+}
+
+export async function fetchTopLanguages(rawLogin: string): Promise<LangShare[]> {
+  const login = normaliseLogin(rawLogin);
+  if (!LOGIN_RE.test(login)) throw new BadLoginError(rawLogin);
+  const sizes = new Map<string, { bytes: number; color: string }>();
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  try {
+    if (token) {
+      const query = `query($login:String!){ user(login:$login){
+        repositories(first:100, ownerAffiliations:OWNER, isFork:false, orderBy:{field:PUSHED_AT,direction:DESC}){
+          nodes{ languages(first:10, orderBy:{field:SIZE,direction:DESC}){ edges{ size node{ name color } } } }
+        } } }`;
+      const res = await fetch("https://api.github.com/graphql", {
+        method: "POST",
+        headers: {
+          Authorization: `bearer ${token}`,
+          "Content-Type": "application/json",
+          "User-Agent": "monolith",
+        },
+        body: JSON.stringify({ query, variables: { login } }),
+        next: { revalidate: 3600 },
+      });
+      if (res.ok) {
+        const json = (await res.json()) as {
+          data?: {
+            user?: {
+              repositories: {
+                nodes: ({ languages: { edges: ({ size: number; node: { name: string; color: string | null } } | null)[] } | null } | null)[];
+              };
+            } | null;
+          };
+        };
+        for (const repo of json.data?.user?.repositories.nodes ?? []) {
+          for (const edge of repo?.languages?.edges ?? []) {
+            if (!edge) continue;
+            const seen = sizes.get(edge.node.name);
+            sizes.set(edge.node.name, {
+              bytes: (seen?.bytes ?? 0) + edge.size,
+              color: edge.node.color ?? LANG_COLORS[edge.node.name] ?? "#8b949e",
+            });
+          }
+        }
+        if (sizes.size > 0) return topShares(sizes);
+      }
+    }
+    // Token-less: the public repo list carries each repository's primary
+    // language and its size in KB; weight by that so a large project counts
+    // for more than a gist-sized one.
+    const res = await fetch(
+      `https://api.github.com/users/${encodeURIComponent(login)}/repos?per_page=100&sort=pushed`,
+      { headers: { Accept: "application/vnd.github+json", "User-Agent": "monolith" }, next: { revalidate: 3600 } },
+    );
+    if (!res.ok) return [];
+    const repos = (await res.json()) as { language: string | null; size: number; fork: boolean }[];
+    if (!Array.isArray(repos)) return [];
+    for (const repo of repos) {
+      if (!repo.language || repo.fork) continue;
+      const seen = sizes.get(repo.language);
+      sizes.set(repo.language, {
+        bytes: (seen?.bytes ?? 0) + Math.max(1, repo.size),
+        color: LANG_COLORS[repo.language] ?? "#8b949e",
+      });
+    }
+    return topShares(sizes);
+  } catch (err) {
+    console.error(`[monolith] languages lookup failed for ${login}:`, err);
+    return [];
+  }
+}
+
+/** One repository's language split. The REST endpoint is public and exact. */
+export async function fetchRepoLanguages(owner: string, repo: string): Promise<LangShare[]> {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/languages`,
+      { headers: { Accept: "application/vnd.github+json", "User-Agent": "monolith" }, next: { revalidate: 3600 } },
+    );
+    if (!res.ok) return [];
+    const bytes = (await res.json()) as Record<string, number>;
+    const sizes = new Map<string, { bytes: number; color: string }>();
+    for (const [name, b] of Object.entries(bytes)) {
+      sizes.set(name, { bytes: b, color: LANG_COLORS[name] ?? "#8b949e" });
+    }
+    return topShares(sizes);
+  } catch (err) {
+    console.error(`[monolith] languages lookup failed for ${owner}/${repo}:`, err);
+    return [];
+  }
+}
+
+/** The right language split for a parsed model request, subject-aware. */
+export async function fetchModelLanguages(req: {
+  subject: "user" | "repo";
+  login: string;
+  repoOwner: string;
+  repoName: string;
+}): Promise<LangShare[]> {
+  return req.subject === "repo"
+    ? fetchRepoLanguages(req.repoOwner, req.repoName)
+    : fetchTopLanguages(req.login);
 }
 
 /**

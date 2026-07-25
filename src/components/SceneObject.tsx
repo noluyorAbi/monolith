@@ -25,6 +25,8 @@ interface Uniforms {
   uRim: { value: number };
   uBase: { value: THREE.Color };
   uRamp: { value: THREE.Color[] };
+  /** Language segment colours, index = level - 10. */
+  uLang: { value: THREE.Color[] };
   /** Where the pointer meets the plate, in the mesh's own coordinates. */
   uPoint: { value: THREE.Vector2 };
   /** Radius of the lit pool around that point. */
@@ -40,6 +42,7 @@ function useMonolithMaterial(finish: Palette) {
     uRim: { value: finish.rim },
     uBase: { value: new THREE.Color(finish.base) },
     uRamp: { value: finish.ramp.map((c) => new THREE.Color(c)) },
+    uLang: { value: Array.from({ length: 6 }, () => new THREE.Color("#808080")) },
     uPoint: { value: new THREE.Vector2(1e6, 1e6) },
     uPointR: { value: 1 },
     uTouch: { value: 0 },
@@ -53,6 +56,7 @@ function useMonolithMaterial(finish: Palette) {
       shader.uniforms.uRim = uniforms.current.uRim;
       shader.uniforms.uBase = uniforms.current.uBase;
       shader.uniforms.uRamp = uniforms.current.uRamp;
+      shader.uniforms.uLang = uniforms.current.uLang;
       shader.uniforms.uPoint = uniforms.current.uPoint;
       shader.uniforms.uPointR = uniforms.current.uPointR;
       shader.uniforms.uTouch = uniforms.current.uTouch;
@@ -84,6 +88,7 @@ function useMonolithMaterial(finish: Palette) {
       shader.fragmentShader =
         `uniform vec3 uBase;
          uniform vec3 uRamp[5];
+         uniform vec3 uLang[6];
          uniform float uGlow;
          uniform float uRim;
          uniform vec2 uPoint;
@@ -110,6 +115,14 @@ function useMonolithMaterial(finish: Palette) {
                if (vLevel > 1.5) { mono = uRamp[2]; lit = 0.62; }
                if (vLevel > 2.5) { mono = uRamp[3]; lit = 0.82; }
                if (vLevel > 3.5) { mono = uRamp[4]; lit = 1.0; }
+               // Levels 10+ are the languages ring: each segment wears its
+               // language's own colour instead of the finish's ramp.
+               if (vLevel > 9.5) { mono = uLang[0]; lit = 0.55; }
+               if (vLevel > 10.5) { mono = uLang[1]; }
+               if (vLevel > 11.5) { mono = uLang[2]; }
+               if (vLevel > 12.5) { mono = uLang[3]; }
+               if (vLevel > 13.5) { mono = uLang[4]; }
+               if (vLevel > 14.5) { mono = uLang[5]; }
              }
              // Freshly risen geometry glows for a beat, so the build reads as
              // heat. The glow fades in over the first fifth of the rise rather
@@ -219,6 +232,15 @@ export function Monolith({
   useEffect(() => {
     uniforms.uReveal.value = 0;
   }, [revealToken, uniforms]);
+
+  // The languages ring's colours ride on the mesh itself, so a rebuilt object
+  // recolours its segments without a second prop having to arrive in sync.
+  useEffect(() => {
+    const langs = mesh.langs ?? [];
+    for (let i = 0; i < uniforms.uLang.value.length; i++) {
+      uniforms.uLang.value[i].set(langs[i]?.color ?? "#808080");
+    }
+  }, [mesh, uniforms]);
 
   useFrame(({ raycaster, pointer, camera }, delta) => {
     const u = uniforms.uReveal;

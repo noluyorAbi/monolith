@@ -117,6 +117,10 @@ test("opt-in flags round trip in canonical order; unknown tokens are dropped", (
   assert.deepEqual(junk.flags, ["sigil", "peak"], "known tokens survive, case-insensitively");
   assert.equal(junk.sign, "");
 
+  // The languages ring travels as its own token, canonical position included.
+  const withLangs = parseModelRequest(new URL(`${BASE}/kit?login=octocat&flags=noog,langs,sigil`));
+  assert.deepEqual(withLangs.flags, ["sigil", "langs", "noog"]);
+
   // No flags: the parameter never appears, so old links stay byte-identical.
   const plain = modelQuery({ login: "octocat", year: 2025, variant: "skyline", sizeMm: 180 });
   assert.ok(!plain.includes("flags="));

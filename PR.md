@@ -62,13 +62,24 @@ millimetres so the hole fits a split ring at any object size, plus a 60mm
 engravings lay flat on the clear centre of the plate top, every row inside
 the band's inner circle.
 
+**Languages ring (flag `langs`).** The account's (or repository's) top
+languages as raised, proportional segments on the plate top: a bar along the
+front border on skyline/spine/multi/duel, a literal ring around the plinth on
+the ring variant. Each language is its own closed 3MF object named after it
+(extruder-bound via the existing `slots` param), wears GitHub's own language
+colour in the viewer and the GLB, and the split comes from one GraphQL sum of
+per-repo byte sizes (token) or the public repo census (no token), top six at
+4%+, renormalised. `/api/langs` serves the viewer; wave has no plate border,
+so the flag is honestly inert there.
+
 ## Not in this branch (candidates, in rough value order)
 
-Top-languages colour ring, wrapped year-review sequence, org aggregate mode.
+Wrapped year-review sequence, org aggregate mode.
 
 ## Gates
 
-`npm run typecheck` / `lint` / `test`: 114 tests green. New coverage: flags
+`npm run typecheck` / `lint` / `test`: 116 tests green. New coverage: flags
 round-trip + junk handling, sigil/peak geometry on single and multi builds,
-buildOptionsFrom sign precedence, deriveSign consistency, window-seeded
-sigils.
+buildOptionsFrom sign precedence + langs gating, deriveSign consistency,
+window-seeded sigils, language segment proportions/levels/part names on
+skyline + ring + multi, language fetcher normalisation and failure paths.

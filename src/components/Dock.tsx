@@ -583,6 +583,11 @@ export function Dock(props: DockProps) {
                         name: "Keyring",
                         hint: "Fuse a keyring loop to the plate corner; pairs with the 60mm Keyring size",
                       },
+                      {
+                        id: "langs",
+                        name: "Languages",
+                        hint: "Raise your top languages as a colour-coded bar on the plate (ring: around the plinth); one 3MF part per language",
+                      },
                     ] as { id: FlagId; name: string; hint: string }[]
                   ).map((f) => (
                     <Toggle

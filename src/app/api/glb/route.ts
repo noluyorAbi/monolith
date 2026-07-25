@@ -1,4 +1,4 @@
-import { resolveModelSource } from "@/lib/github";
+import { fetchModelLanguages, resolveModelSource } from "@/lib/github";
 import { LOGIN_RE, BadLoginError } from "@/lib/contributions";
 import { parseModelRequest } from "@/lib/request";
 import { buildOptionsFrom } from "@/lib/extras";
@@ -17,9 +17,12 @@ export async function GET(request: Request) {
   try {
     // Same resolver as every download: the GLB matches the viewer in every
     // mode (single year, lifetime stack, range, repo skyline).
-    const src = await resolveModelSource(req);
+    const [src, langs] = await Promise.all([
+      resolveModelSource(req),
+      req.flags.includes("langs") ? fetchModelLanguages(req) : null,
+    ]);
     const palette = paletteById(req.paletteId) ?? defaultPalette();
-    const build = buildOptionsFrom(req, src);
+    const build = buildOptionsFrom(req, src, langs);
     const mesh = src.vsData
       ? buildDuel(src.data, src.vsData, build)
       : src.multi
