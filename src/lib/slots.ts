@@ -15,6 +15,10 @@ export const SLOT_CHOICES: { slots: ColourSlots; name: string; note: string }[] 
 export function slotForLevel(level: number, slots: ColourSlots): number {
   if (slots === 1) return 1;
   if (level < 0) return 1;
+  // Language segments (levels 10+) are accents: cycle them through the
+  // non-base slots so each lands somewhere visible, ready to be re-assigned
+  // per filament in the slicer.
+  if (level >= 10) return 2 + ((level - 10) % (slots - 1));
   if (slots === 2) return 2;
   if (level <= 2) return 2;
   if (level === 3) return 3;

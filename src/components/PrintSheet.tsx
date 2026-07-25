@@ -18,7 +18,7 @@ import {
   printerById,
   qualityById,
 } from "@/lib/print";
-import { modelQuery, buildBambuLink, type ModelSpan, type ModelSubject } from "@/lib/request";
+import { modelQuery, buildBambuLink, type FlagId, type ModelSpan, type ModelSubject } from "@/lib/request";
 import { SLOT_CHOICES, type ColourSlots } from "@/lib/slots";
 import { printableParts } from "@/lib/parts";
 import { PROJECT } from "@/lib/project";
@@ -89,6 +89,11 @@ export interface PrintSheetProps {
   subject: ModelSubject;
   repoOwner: string;
   repoName: string;
+  /** Opt-in extras plus the sign on screen, so every export engraves what the page shows. */
+  flags: FlagId[];
+  sign: string;
+  /** The duel opponent on screen, or empty. */
+  vs: string;
 }
 
 export function PrintSheet(props: PrintSheetProps) {
@@ -185,6 +190,9 @@ export function PrintSheet(props: PrintSheetProps) {
     subject: props.subject,
     repoOwner: props.repoOwner,
     repoName: props.repoName,
+    flags: props.flags,
+    sign: props.sign,
+    vs: props.vs,
   });
 
   const fits = fitsBed(props.mesh.size, printer);

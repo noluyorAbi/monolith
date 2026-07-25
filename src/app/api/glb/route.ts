@@ -1,7 +1,8 @@
-import { resolveModelSource } from "@/lib/github";
+import { fetchModelLanguages, resolveModelSource } from "@/lib/github";
 import { LOGIN_RE, BadLoginError } from "@/lib/contributions";
 import { parseModelRequest } from "@/lib/request";
-import { buildMonolith, buildMultiYear } from "@/lib/build";
+import { buildOptionsFrom } from "@/lib/extras";
+import { buildDuel, buildMonolith, buildMultiYear } from "@/lib/build";
 import { modelErrorResponse } from "@/lib/responses";
 import { paletteById, defaultPalette } from "@/lib/palettes";
 import { writeGlb } from "@/lib/glb";
@@ -16,15 +17,17 @@ export async function GET(request: Request) {
   try {
     // Same resolver as every download: the GLB matches the viewer in every
     // mode (single year, lifetime stack, range, repo skyline).
-    const src = await resolveModelSource(req);
+    const [src, langs] = await Promise.all([
+      resolveModelSource(req),
+      req.flags.includes("langs") ? fetchModelLanguages(req) : null,
+    ]);
     const palette = paletteById(req.paletteId) ?? defaultPalette();
-    const build = {
-      variant: req.variant,
-      sizeMm: req.sizeMm,
-      label: true,
-      dampening: req.dampening,
-    };
-    const mesh = src.multi ? buildMultiYear(src.multi, build) : buildMonolith(src.data, build);
+    const build = buildOptionsFrom(req, src, langs);
+    const mesh = src.vsData
+      ? buildDuel(src.data, src.vsData, build)
+      : src.multi
+        ? buildMultiYear(src.multi, build)
+        : buildMonolith(src.data, build);
     const glb = writeGlb(mesh, palette);
     const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]+/g, "-");
     const file = `${safe(src.who)}-${safe(src.spanLabel)}-${req.variant}-${req.sizeMm}mm.glb`;

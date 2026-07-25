@@ -96,6 +96,70 @@ test("the full-state link round trips the viewer configuration", () => {
   assert.ok(query.includes("variant=spine"));
 });
 
+test("opt-in flags round trip in canonical order; unknown tokens are dropped", () => {
+  const query = modelQuery({
+    login: "octocat",
+    year: 2025,
+    variant: "skyline",
+    sizeMm: 180,
+    flags: ["peak", "sigil"],
+    sign: "comet",
+  });
+  assert.ok(query.includes("flags=sigil%2Cpeak") || query.includes("flags=sigil,peak"), query);
+  const parsed = parseModelRequest(new URL(`${BASE}/kit?${query}`));
+  assert.deepEqual(parsed.flags, ["sigil", "peak"]);
+  assert.equal(parsed.sign, "comet");
+
+  // Junk in, plain object out: unknown flags and a malformed sign vanish.
+  const junk = parseModelRequest(
+    new URL(`${BASE}/kit?login=octocat&flags=sigil,gold-plated,PEAK&sign=<script>`),
+  );
+  assert.deepEqual(junk.flags, ["sigil", "peak"], "known tokens survive, case-insensitively");
+  assert.equal(junk.sign, "");
+
+  // The languages ring travels as its own token, canonical position included.
+  const withLangs = parseModelRequest(new URL(`${BASE}/kit?login=octocat&flags=noog,langs,sigil`));
+  assert.deepEqual(withLangs.flags, ["sigil", "langs", "noog"]);
+
+  // No flags: the parameter never appears, so old links stay byte-identical.
+  const plain = modelQuery({ login: "octocat", year: 2025, variant: "skyline", sizeMm: 180 });
+  assert.ok(!plain.includes("flags="));
+  assert.ok(!plain.includes("sign="));
+  // The sign only travels alongside the sigil flag it serves.
+  const noSigil = modelQuery({
+    login: "octocat",
+    year: 2025,
+    variant: "skyline",
+    sizeMm: 180,
+    flags: ["peak"],
+    sign: "comet",
+  });
+  assert.ok(!noSigil.includes("sign="));
+});
+
+test("the duel opponent rides the link only in single-year user mode", () => {
+  const query = modelQuery({
+    login: "octocat",
+    year: 2025,
+    variant: "skyline",
+    sizeMm: 180,
+    vs: "torvalds",
+  });
+  assert.ok(query.includes("vs=torvalds"));
+  const parsed = parseModelRequest(new URL(`${BASE}/kit?${query}`));
+  assert.equal(parsed.vs, "torvalds");
+
+  // A lifetime, range or repo link never carries an opponent.
+  const lifetime = modelQuery({
+    login: "octocat", year: 2025, variant: "skyline", sizeMm: 180, span: "lifetime", vs: "torvalds",
+  });
+  assert.ok(!lifetime.includes("vs="));
+  const crossed = parseModelRequest(new URL(`${BASE}/kit?login=octocat&span=lifetime&vs=torvalds`));
+  assert.equal(crossed.vs, "", "a hand-edited lifetime link drops the opponent");
+  const badVs = parseModelRequest(new URL(`${BASE}/kit?login=octocat&vs=not%20a%20login`));
+  assert.equal(badVs.vs, "");
+});
+
 test("nonsense parameters fall back rather than reaching the generator", () => {
   const parsed = parseModelRequest(
     new URL(`${BASE}/kit?login=octocat&variant=teapot&mm=99999&printer=laser&material=steel&quality=perfect&slots=7`),

@@ -21,6 +21,16 @@ export const LEVEL_NAMES: Record<number, string> = {
   4: "Peak days",
 };
 
+/** Levels at and above this carry the languages ring; index = level - 10. */
+export const LANG_LEVEL = 10;
+
+function partName(mesh: BuiltMesh, level: number): string {
+  if (level >= LANG_LEVEL) {
+    return mesh.langs?.[level - LANG_LEVEL]?.name ?? `Language ${level - LANG_LEVEL + 1}`;
+  }
+  return LEVEL_NAMES[level] ?? `Level ${level}`;
+}
+
 /**
  * Scene space is Y-up; 3MF, STL and every slicer are Z-up. One conversion,
  * stated once, rather than a sign flip smeared across the exporters.
@@ -113,7 +123,7 @@ export function splitByLevel(mesh: BuiltMesh): Part[] {
     if (indices.length === 0) continue;
     parts.push({
       level,
-      name: LEVEL_NAMES[level] ?? `Level ${level}`,
+      name: partName(mesh, level),
       vertices,
       indices,
       triangles: indices.length / 3,

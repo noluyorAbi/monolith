@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { parseRepoInput } from "@/lib/request";
+import { parseRepoInput, type FlagId } from "@/lib/request";
+import { LOGIN_RE } from "@/lib/contributions";
 import { SIZES, VARIANTS, fitsBed, sizeById, type SizeId } from "@/lib/build";
 import { printerById } from "@/lib/print";
 import { PALETTES, type Palette } from "@/lib/palettes";
@@ -137,6 +138,12 @@ export interface DockProps {
   onPrinter: (id: string) => void;
   dampening: number;
   onDampening: (v: number) => void;
+  /** Opt-in extras; every flag defaults to off so the plain object stays the default. */
+  flags: FlagId[];
+  onFlags: (next: FlagId[]) => void;
+  /** The duel opponent's login, empty when none. Single-year user mode only. */
+  duelVs: string;
+  onDuelVs: (login: string) => void;
   total: number;
   onPrint: () => void;
   spin: boolean;
@@ -153,6 +160,7 @@ export interface DockProps {
     repoName?: string;
     rangeFrom?: string;
     rangeTo?: string;
+    vs?: string;
   }) => void;
   visible: boolean;
 }
@@ -169,6 +177,25 @@ export function Dock(props: DockProps) {
     props.repoOwner && props.repoName ? `${props.repoOwner}/${props.repoName}` : "",
   );
   const repoParsed = parseRepoInput(repoInput);
+  /** The duel opponent as typed; committed on Enter or the arrow. */
+  const [duelInput, setDuelInput] = useState(props.duelVs);
+  const duelValid = LOGIN_RE.test(duelInput.trim());
+
+  const commitDuel = () => {
+    const v = duelInput.trim();
+    if (!LOGIN_RE.test(v)) {
+      play("error");
+      return;
+    }
+    props.onDuelVs(v);
+    props.onRebuild({ vs: v });
+  };
+
+  const clearDuel = () => {
+    setDuelInput("");
+    props.onDuelVs("");
+    props.onRebuild({ vs: "" });
+  };
 
   const commitRepo = () => {
     if (!repoParsed) {
@@ -326,6 +353,46 @@ export function Dock(props: DockProps) {
                     </button>
                     </Hint>
                   </>
+                )}
+
+                {props.subject === "user" && props.span === "year" && (
+                  <Group label={props.duelVs ? `Duel · vs ${props.duelVs}` : "Duel · optional"}>
+                    <input
+                      type="text"
+                      value={duelInput}
+                      placeholder="opponent login"
+                      onChange={(e) => setDuelInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitDuel();
+                      }}
+                      className={`h-9 w-[16ch] rounded-[5px] border bg-transparent px-2 text-[0.68rem] text-fog outline-none placeholder:text-dim focus:border-edge sm:h-auto ${
+                        duelInput && !duelValid ? "border-danger/50" : "border-line"
+                      }`}
+                    />
+                    <Hint label="Render both years back to back on one plate">
+                      <button
+                        type="button"
+                        onClick={commitDuel}
+                        disabled={!duelValid}
+                        aria-label="Start duel"
+                        className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] disabled:opacity-40 sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                      >
+                        →
+                      </button>
+                    </Hint>
+                    {props.duelVs && (
+                      <Hint label="End the duel">
+                        <button
+                          type="button"
+                          onClick={clearDuel}
+                          aria-label="End duel"
+                          className="grid h-9 w-8 place-items-center rounded-[4px] border border-line text-mute transition-colors duration-150 hover:border-edge hover:text-fog active:scale-[0.97] sm:h-auto sm:w-auto sm:px-1.5 sm:py-1"
+                        >
+                          ✕
+                        </button>
+                      </Hint>
+                    )}
+                  </Group>
                 )}
 
                 {props.subject === "user" && props.span === "range" && (
@@ -496,6 +563,49 @@ export function Dock(props: DockProps) {
                     title="Flatten the busiest days so one spike does not tower over the year"
                     className="h-1 w-full cursor-pointer appearance-none rounded-full bg-edge accent-fog"
                   />
+                </Group>
+
+                <Group label="Extras">
+                  {(
+                    [
+                      {
+                        id: "sigil",
+                        name: "Starsign",
+                        hint: "Engrave your starsign constellation and name on the plate (back wall; ring: plate centre)",
+                      },
+                      {
+                        id: "peak",
+                        name: "Peak day",
+                        hint: "Engrave your busiest day (count and date) on the plate (front wall; ring: plate centre)",
+                      },
+                      {
+                        id: "loop",
+                        name: "Keyring",
+                        hint: "Fuse a keyring loop to the plate corner; pairs with the 60mm Keyring size",
+                      },
+                      {
+                        id: "langs",
+                        name: "Languages",
+                        hint: "Raise your top languages as a colour-coded bar on the plate (ring: around the plinth); one 3MF part per language",
+                      },
+                    ] as { id: FlagId; name: string; hint: string }[]
+                  ).map((f) => (
+                    <Toggle
+                      key={f.id}
+                      active={props.flags.includes(f.id)}
+                      title={f.hint}
+                      onClick={() => {
+                        play("tick");
+                        props.onFlags(
+                          props.flags.includes(f.id)
+                            ? props.flags.filter((x) => x !== f.id)
+                            : [...props.flags, f.id],
+                        );
+                      }}
+                    >
+                      {f.name}
+                    </Toggle>
+                  ))}
                 </Group>
 
                 <Group label="Studio">

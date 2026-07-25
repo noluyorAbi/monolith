@@ -27,6 +27,35 @@ export const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * Opt-in extras, carried as one comma-separated `flags` parameter so a new
+ * toggle never adds a new query key. Unknown tokens are dropped in the
+ * parser, so an old link with a retired flag still resolves.
+ *
+ *  - sigil: engrave the starsign constellation + name on the base plate
+ *  - peak: engrave the best day's count and date on the plate's front wall
+ *  - loop: fuse a keyring loop to the plate corner (any size; pairs with 60mm)
+ *  - langs: the top-languages ring, raised segments on the plate top sized by
+ *    each language's share, one 3MF object per language
+ *  - noog: share page opts out of the OG preview image
+ *
+ * Multi-colour is NOT a flag: the 3MF has always shipped one object per
+ * intensity level, bound to filament slots via the existing `slots` param.
+ */
+export const FLAG_IDS = ["sigil", "peak", "loop", "langs", "noog"] as const;
+export type FlagId = (typeof FLAG_IDS)[number];
+
+export function parseFlags(raw: string | null): FlagId[] {
+  if (!raw) return [];
+  const seen = new Set<FlagId>();
+  for (const token of raw.split(",")) {
+    const t = token.trim().toLowerCase() as FlagId;
+    if ((FLAG_IDS as readonly string[]).includes(t)) seen.add(t);
+  }
+  // Emitted in canonical order so the same choices always build the same URL.
+  return FLAG_IDS.filter((f) => seen.has(f));
+}
+
+/**
  * Accepts what people actually paste for a repository: the full GitHub URL
  * (with or without https, www, a trailing path like /tree/main, or .git),
  * an SSH remote, or a bare owner/repo. Returns null for anything else.
@@ -70,6 +99,20 @@ export interface ModelRequest {
   /** Only meaningful when subject is "repo"; empty strings otherwise. */
   repoOwner: string;
   repoName: string;
+  /** Opt-in extras; empty means the plain object every link built before. */
+  flags: FlagId[];
+  /**
+   * The starsign id the page showed, so the sigil engraving matches it even
+   * when the server cannot re-derive an hour-refined sign. Lowercase word;
+   * only meaningful alongside the sigil flag. Empty when absent.
+   */
+  sign: string;
+  /**
+   * The duel opponent: a second login rendered back to back with the first
+   * on one plate. Only meaningful for a single-year user object; empty
+   * otherwise.
+   */
+  vs: string;
 }
 
 /** Bump this if the query shape changes, so a link built before the change still parses. */
@@ -121,6 +164,14 @@ export function parseModelRequest(url: URL): ModelRequest {
     subject,
     repoOwner: subject === "repo" ? repoOwner : "",
     repoName: subject === "repo" ? repoName : "",
+    flags: parseFlags(url.searchParams.get("flags")),
+    sign: /^[a-z]{2,24}$/.test(url.searchParams.get("sign") ?? "")
+      ? (url.searchParams.get("sign") as string)
+      : "",
+    vs:
+      subject === "user" && span === "year" && LOGIN_RE.test(url.searchParams.get("vs") ?? "")
+        ? (url.searchParams.get("vs") as string)
+        : "",
   };
 }
 
@@ -141,6 +192,9 @@ export interface ModelQuery {
   subject?: ModelSubject;
   repoOwner?: string;
   repoName?: string;
+  flags?: FlagId[];
+  sign?: string;
+  vs?: string;
 }
 
 /** The other half of the contract, so the browser cannot invent a parameter. */
@@ -169,6 +223,13 @@ export function modelQuery(input: ModelQuery): string {
     params.set("span", "range");
     params.set("from", input.from);
     params.set("to", input.to);
+  } else if (input.subject !== "repo" && input.vs) {
+    // The duel exists only in the plain single-year mode.
+    params.set("vs", input.vs);
+  }
+  if (input.flags && input.flags.length) {
+    params.set("flags", parseFlags(input.flags.join(",")).join(","));
+    if (input.flags.includes("sigil") && input.sign) params.set("sign", input.sign);
   }
   return params.toString();
 }

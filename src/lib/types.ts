@@ -106,6 +106,17 @@ export interface Stats {
 
 export type Variant = "skyline" | "ring" | "wave" | "spine";
 
+/**
+ * One language's slice of an account or repository, for the languages ring.
+ * Shares are normalised to sum to 1 across the kept set; `color` is GitHub's
+ * own language colour (or a close stand-in on the token-less path).
+ */
+export interface LangShare {
+  name: string;
+  color: string;
+  share: number;
+}
+
 export interface BuildOptions {
   variant: Variant;
   /** Target size of the longest footprint edge, in millimetres. */
@@ -117,6 +128,30 @@ export interface BuildOptions {
    * spike does not tower over the year. F7.
    */
   dampening?: number;
+  /**
+   * Opt-in: engrave the starsign on the plate. The constellation is raised
+   * out of the front wall beside the signature and the sign name joins it,
+   * so the persona is part of the print, not just the page.
+   */
+  sigil?: { points: [number, number][]; edges: [number, number][]; name: string } | null;
+  /**
+   * Opt-in: engrave the best day's date (e.g. "9 FEB") on top of the
+   * tallest tower, when that tower is wide enough to carry legible text.
+   */
+  peak?: boolean;
+  /**
+   * Opt-in: fuse a keyring loop to the plate's back-left corner (ring: the
+   * band's back-left edge), sized in physical millimetres so the hole fits a
+   * split ring at any object size.
+   */
+  loop?: boolean;
+  /**
+   * Opt-in: the top-languages ring. Raised segments on the plate top whose
+   * length is each language's share, one 3MF object per language so a
+   * multi-material printer can colour them. Up to six; wave has no plate
+   * border, so it is the one form the ring is inert on.
+   */
+  langs?: LangShare[] | null;
 }
 
 export interface BuiltMesh {
@@ -143,6 +178,12 @@ export interface BuiltMesh {
     /** Narrowest air gap between neighbouring towers, if the form has any. */
     gapMm: number | null;
   };
+  /**
+   * When the languages ring was built in: index i names and colours the
+   * geometry carrying level 10+i, so the viewer, the GLB's vertex colours and
+   * the 3MF part names all read the same list.
+   */
+  langs?: LangShare[];
 }
 
 /**

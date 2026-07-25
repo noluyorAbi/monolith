@@ -1,7 +1,8 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { computePersonaMetrics, derivePersona } from "@/lib/persona";
+import { computePersonaMetrics, derivePersona, deriveSign } from "@/lib/persona";
+import { buildOptionsFrom } from "@/lib/extras";
 import { parseRepoInput } from "@/lib/request";
 import { computeStats, yearFromDays } from "@/lib/contributions";
 import type { CommitHoursData, Day } from "@/lib/types";
@@ -140,6 +141,57 @@ test("every shape of year gets a sign, and the sigil is stable and in bounds", (
     assert.deepEqual(again.sigil, p.sigil, "the sigil must be deterministic");
     assert.equal(again.id, p.id, "the sign must be deterministic");
   }
+});
+
+test("the same sign wears a different constellation for a different window", () => {
+  const data = year(() => 3);
+  const stats = computeStats(data);
+  const y2026 = derivePersona(data, stats, null, "2026");
+  const range = derivePersona(data, stats, null, "2023-2026");
+  assert.equal(y2026.id, range.id, "same shape, same sign");
+  assert.notDeepEqual(
+    y2026.sigil.points,
+    range.sigil.points,
+    "the reading belongs to the window, so the stars must differ",
+  );
+  // Still deterministic per window.
+  assert.deepEqual(derivePersona(data, stats, null, "2026").sigil, y2026.sigil);
+});
+
+test("deriveSign agrees with the full persona for the same calendar", () => {
+  for (const data of [year(() => 3), year((i) => (i === 100 ? 100 : i % 4 === 0 ? 1 : 0))]) {
+    const stats = computeStats(data);
+    assert.equal(deriveSign(data, stats).id, derivePersona(data, stats).id);
+  }
+});
+
+test("buildOptionsFrom honours the carried sign and derives one when absent", () => {
+  const data = year(() => 3);
+  const src = { data, multi: null, spanLabel: "2025", who: "octocat" };
+  const base = { variant: "skyline" as const, sizeMm: 180, dampening: 0 };
+
+  const carried = buildOptionsFrom({ ...base, flags: ["sigil", "peak"], sign: "comet" }, src);
+  assert.equal(carried.sigil?.name, "The Comet", "the page's sign wins");
+  assert.equal(carried.peak, true);
+
+  const derived = buildOptionsFrom({ ...base, flags: ["sigil"], sign: "" }, src);
+  assert.equal(derived.sigil?.name, "The Perennial", "no sign carried: derive from the calendar");
+  assert.ok(derived.peak === undefined || derived.peak === false);
+
+  const off = buildOptionsFrom({ ...base, flags: [], sign: "comet" }, src);
+  assert.ok(!off.sigil && !off.peak, "no flags, no extras");
+
+  const junk = buildOptionsFrom({ ...base, flags: ["sigil"], sign: "notasign" }, src);
+  assert.equal(junk.sigil?.name, "The Perennial", "an unknown sign id falls back to deriving");
+
+  // The languages ring: only the flag AND a non-empty split dress the object.
+  const split = [{ name: "TypeScript", color: "#3178c6", share: 1 }];
+  const langsOn = buildOptionsFrom({ ...base, flags: ["langs"], sign: "" }, src, split);
+  assert.deepEqual(langsOn.langs, split);
+  const langsOff = buildOptionsFrom({ ...base, flags: [], sign: "" }, src, split);
+  assert.ok(!langsOff.langs, "no flag, no ring, whatever was fetched");
+  const langsEmpty = buildOptionsFrom({ ...base, flags: ["langs"], sign: "" }, src, []);
+  assert.ok(!langsEmpty.langs, "an empty split leaves the object plain");
 });
 
 test("parseRepoInput accepts what people actually paste", () => {

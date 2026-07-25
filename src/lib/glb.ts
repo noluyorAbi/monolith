@@ -38,8 +38,14 @@ export function packMesh(mesh: BuiltMesh, palette: Palette): Packed {
     // inline, so apply the same mapping here. Level -1 / 0 is structural
     // (the base plate / supports) and takes the palette base.
     const level = mesh.levels[i];
+    // Language segments (levels 10+) carry GitHub's own language colours.
+    const lang = level >= 10 ? mesh.langs?.[Math.round(level) - 10] : undefined;
     const rampIndex = level < 1 ? 0 : level > palette.ramp.length - 1 ? palette.ramp.length - 1 : level;
-    const hex = rampIndex === 0 && level < 1 ? palette.base : palette.ramp[rampIndex] ?? palette.ramp[0];
+    const hex = lang
+      ? lang.color
+      : rampIndex === 0 && level < 1
+        ? palette.base
+        : palette.ramp[rampIndex] ?? palette.ramp[0];
     const c = hexToRgb(hex);
     colors[i * 4] = c.r;
     colors[i * 4 + 1] = c.g;

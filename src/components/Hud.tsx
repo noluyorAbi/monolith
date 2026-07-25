@@ -105,7 +105,17 @@ const TIER_COLOR: Record<Persona["tier"], string> = {
   common: "var(--color-dim)",
 };
 
-function PersonaCard({ persona }: { persona: Persona }) {
+function PersonaCard({
+  persona,
+  yearLabel,
+  signCardUrl,
+  signHistory,
+}: {
+  persona: Persona;
+  yearLabel: string;
+  signCardUrl?: string | null;
+  signHistory?: { year: number; name: string }[] | null;
+}) {
   const px = (v: number) => v * 100;
   const [bx, by] = persona.sigil.points[persona.sigil.brightest];
   return (
@@ -208,7 +218,9 @@ function PersonaCard({ persona }: { persona: Persona }) {
         </svg>
         <div className="min-w-0">
           <div className="flex items-baseline gap-2">
-            <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">starsign</span>
+            <span className="text-[0.55rem] tracking-[0.22em] uppercase text-dim">
+              starsign · {yearLabel}
+            </span>
             <span
               className="text-[0.55rem] tracking-[0.18em] uppercase"
               style={{ color: TIER_COLOR[persona.tier] }}
@@ -227,7 +239,7 @@ function PersonaCard({ persona }: { persona: Persona }) {
         </div>
       </div>
       <p className="max-w-[19rem] text-[0.64rem] leading-relaxed text-mute">{persona.line}</p>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         {persona.traits.map((t) => (
           <span
             key={t}
@@ -236,7 +248,34 @@ function PersonaCard({ persona }: { persona: Persona }) {
             {t}
           </span>
         ))}
+        {signCardUrl && (
+          <a
+            href={signCardUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="pointer-events-auto rounded-full px-2 py-[3px] text-[0.55rem] tracking-[0.12em] uppercase text-dim underline decoration-line underline-offset-2 transition-colors hover:text-fog"
+          >
+            card ↗
+          </a>
+        )}
       </div>
+      {signHistory && signHistory.length >= 2 && (
+        <motion.div
+          className="flex max-w-[19rem] flex-wrap items-baseline gap-x-2 gap-y-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, ease: EASE, delay: 0.9 }}
+        >
+          <span className="text-[0.5rem] tracking-[0.2em] uppercase text-dim">readings</span>
+          {signHistory.map((h, i) => (
+            <span key={h.year} className="text-[0.55rem] tracking-[0.08em] uppercase">
+              <span className="text-dim">{h.year} </span>
+              <span className="text-mute">{h.name.replace(/^The /, "")}</span>
+              {i < signHistory.length - 1 && <span className="text-dim"> ·</span>}
+            </span>
+          ))}
+        </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -249,6 +288,8 @@ export function Hud({
   yearLabel,
   commitHours,
   persona,
+  signCardUrl,
+  signHistory,
 }: {
   data: ContributionYear;
   stats: Stats;
@@ -260,6 +301,10 @@ export function Hud({
   commitHours?: CommitHoursData | null;
   /** The developer starsign, when the subject is a person rather than a repo. */
   persona?: Persona | null;
+  /** Link to the square sign-card image for this reading. */
+  signCardUrl?: string | null;
+  /** One sign per rendered year, when a lifetime or range is on screen. */
+  signHistory?: { year: number; name: string }[] | null;
 }) {
   /**
    * The full readout is seven lines tall. It needs a screen with the height to
@@ -349,7 +394,14 @@ export function Hud({
           )}
         </motion.div>
         {commitHours && <HourHistogram hours={commitHours} />}
-        {persona && <PersonaCard persona={persona} />}
+        {persona && (
+          <PersonaCard
+            persona={persona}
+            yearLabel={yearLabel ?? String(data.year)}
+            signCardUrl={signCardUrl}
+            signHistory={signHistory}
+          />
+        )}
       </div>
       )}
 

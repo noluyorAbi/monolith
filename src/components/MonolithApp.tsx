@@ -18,7 +18,7 @@ import { PrintSheet } from "./PrintSheet";
 import { CursorField } from "./CursorField";
 import { Story } from "./Story";
 import { PROJECT } from "@/lib/project";
-import { SIZES, VARIANTS, buildMonolith, buildMultiYear, sizeById } from "@/lib/build";
+import { SIZES, VARIANTS, buildDuel, buildMonolith, buildMultiYear, sizeById } from "@/lib/build";
 import { DEFAULT_PRINTER_ID } from "@/lib/print";
 import { SELECTABLE_YEARS, availableYears, availableYearsFor, computeStats, splitRangeByYear, yearFromDays } from "@/lib/contributions";
 import { AMBIENT_PALETTE, DEFAULT_PALETTE_ID, PALETTES, paletteById } from "@/lib/palettes";
@@ -30,14 +30,15 @@ import {
   subscribeSound,
 } from "@/lib/sound";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { modelQuery, type ModelSpan, type ModelSubject } from "@/lib/request";
-import { derivePersona } from "@/lib/persona";
+import { modelQuery, type FlagId, type ModelSpan, type ModelSubject } from "@/lib/request";
+import { deriveSign, derivePersona } from "@/lib/persona";
 import type { SizeId } from "@/lib/build";
 import type {
   BuiltMesh,
   CommitHoursData,
   ContributionYear,
   Day,
+  LangShare,
   MultiYearData,
   Stats,
   StudioLights,
@@ -74,6 +75,8 @@ export function MonolithApp({
   initialSubject,
   initialRepoOwner,
   initialRepoName,
+  initialFlags,
+  initialVs,
 }: {
   initialLogin?: string;
   initialYear?: number;
@@ -87,6 +90,8 @@ export function MonolithApp({
   initialSubject?: ModelSubject;
   initialRepoOwner?: string;
   initialRepoName?: string;
+  initialFlags?: FlagId[];
+  initialVs?: string;
 }) {
   const years = useMemo(() => availableYears(SELECTABLE_YEARS), []);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -118,6 +123,15 @@ export function MonolithApp({
   const [sizeId, setSizeId] = useState<SizeId>(nearestSizeId(initialSizeMm));
   const [printerId, setPrinterId] = useState(DEFAULT_PRINTER_ID);
   const [dampening, setDampening] = useState(initialDampening ?? 0);
+  /** Opt-in extras (sigil engraving, peak-day text, keyring loop, ...). */
+  const [flags, setFlags] = useState<FlagId[]>(initialFlags ?? []);
+  /** The duel opponent's login; empty means a normal single object. */
+  const [duelVs, setDuelVs] = useState(initialVs ?? "");
+  /** The opponent's fetched year, present while a duel is on screen. */
+  const [duelData, setDuelData] = useState<ContributionYear | null>(null);
+  /** The top-languages split, fetched once the langs flag asks for it,
+   * remembered with whose split it is so a subject switch cannot wear it. */
+  const [langsData, setLangsData] = useState<{ who: string; langs: LangShare[] } | null>(null);
   const [data, setData] = useState<ContributionYear | null>(null);
   /** A multi-year roll-up (lifetime / several years). Set alongside `data` so
    * the viewer can render it with buildMultiYear. M1 / marktanalyse 5.4. */
@@ -178,6 +192,8 @@ export function MonolithApp({
     variant: Variant;
     sizeMm: number;
     dampening: number;
+    /** Which opt-in engravings the mesh was built with; "|" means none. */
+    extrasKey: string;
     mesh: BuiltMesh;
   } | null>(null);
   const runId = useRef(0);
@@ -220,6 +236,107 @@ export function MonolithApp({
     if (next.paletteId) setStoryPaletteId(next.paletteId);
   }, []);
 
+  /** The histogram, only when it describes exactly the object on screen. */
+  const hoursForHud =
+    commitHours &&
+    subject === "user" &&
+    span === "year" &&
+    commitHours.year === year &&
+    commitHours.login.toLowerCase() === login.toLowerCase()
+      ? commitHours
+      : null;
+
+  // The developer starsign: cast from the calendar on screen, refined by the
+  // hour histogram once it lands. A repository has working hours but not a
+  // temperament, so the sign is a user-only reading. For a multi-year object
+  // the reading spans every rendered year: mixing one year's days with the
+  // roll-up's stats once produced "active 525% of days".
+  const persona = useMemo(() => {
+    if (!data || !stats || subject !== "user") return null;
+    if (multi) {
+      const days = multi.years.flatMap((y) => y.days);
+      const merged = { ...data, days, total: multi.totalCommits };
+      return derivePersona(merged, computeStats(merged), null, yearLabel);
+    }
+    return derivePersona(data, stats, hoursForHud, yearLabel);
+  }, [data, stats, multi, subject, hoursForHud, yearLabel]);
+
+  // The opt-in engravings the mesh should wear right now. The sigil follows
+  // the persona on screen (hour-refined included), so toggling the flag or a
+  // late histogram both rebuild the object; the key makes that comparable
+  // against what the forge built.
+  // The sign per rendered year, when several are on screen: how the shape of
+  // a person's work drifted. Reads each terrace's own calendar.
+  const signHistory = useMemo(() => {
+    if (!multi || subject !== "user" || multi.years.length < 2) return null;
+    return multi.years.map((y) => ({
+      year: y.year,
+      name: deriveSign(y, computeStats(y)).name,
+    }));
+  }, [multi, subject]);
+
+  // The shareable sign-card image for the reading on screen.
+  const signCardUrl = useMemo(() => {
+    if (!persona) return null;
+    const p = new URLSearchParams({ login, year: String(year), sign: persona.id });
+    if (span === "lifetime") p.set("span", "lifetime");
+    else if (span === "range" && rangeFrom && rangeTo) {
+      p.set("span", "range");
+      p.set("from", rangeFrom);
+      p.set("to", rangeTo);
+    }
+    return `/api/sign?${p}`;
+  }, [persona, login, year, span, rangeFrom, rangeTo]);
+
+  const sigilOpt = useMemo(
+    () =>
+      flags.includes("sigil") && persona
+        ? { points: persona.sigil.points, edges: persona.sigil.edges, name: persona.name }
+        : null,
+    [flags, persona],
+  );
+  // The language split the mesh should wear right now: fetched lazily when
+  // the flag first asks for it, keyed to the subject on screen so a stale
+  // answer for someone else never dresses the current object. An empty
+  // answer (GitHub silent, brand-new account) leaves the object plain.
+  const langsWho =
+    subject === "repo" && repoOwner && repoName
+      ? `${repoOwner}/${repoName}`.toLowerCase()
+      : login.toLowerCase();
+  const langsOpt =
+    flags.includes("langs") && langsData?.who === langsWho && langsData.langs.length
+      ? langsData.langs
+      : null;
+  useEffect(() => {
+    if (!flags.includes("langs") || !login) return;
+    let dead = false;
+    const who =
+      subject === "repo" && repoOwner && repoName
+        ? `${repoOwner}/${repoName}`.toLowerCase()
+        : login.toLowerCase();
+    const q =
+      subject === "repo" && repoOwner && repoName
+        ? `owner=${encodeURIComponent(repoOwner)}&repo=${encodeURIComponent(repoName)}`
+        : `login=${encodeURIComponent(login)}`;
+    fetch(`/api/langs?${q}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { langs?: LangShare[] } | null) => {
+        if (!dead && json?.langs) setLangsData({ who, langs: json.langs });
+      })
+      .catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, [flags, login, subject, repoOwner, repoName]);
+
+  const extrasKey = [
+    sigilOpt && persona ? persona.id : "",
+    flags.includes("peak") ? "p" : "",
+    flags.includes("loop") ? "l" : "",
+    duelData?.login ?? "",
+    langsOpt ? langsOpt.map((l) => l.name).join(",") : "",
+  ].join("|");
+
   const mesh = useMemo(() => {
     if (!data) return null;
     // The forge already built this mesh to report its triangle count. Reuse it
@@ -227,13 +344,29 @@ export function MonolithApp({
     // exactly this data and configuration: a control touched during the forge's
     // scripted pauses would otherwise leave the readout describing an object
     // that never gets rendered.
-    if (built && built.data === data && built.variant === variant && built.sizeMm === sizeMm && built.dampening === dampening) {
+    if (
+      built &&
+      built.data === data &&
+      built.variant === variant &&
+      built.sizeMm === sizeMm &&
+      built.dampening === dampening &&
+      built.extrasKey === extrasKey
+    ) {
       return built.mesh;
     }
-    return multi
-      ? buildMultiYear(multi, { variant, sizeMm, label: true, dampening })
-      : buildMonolith(data, { variant, sizeMm, label: true, dampening });
-  }, [data, multi, built, variant, sizeMm, dampening]);
+    const o = {
+      variant,
+      sizeMm,
+      label: true,
+      dampening,
+      sigil: sigilOpt,
+      peak: flags.includes("peak"),
+      loop: flags.includes("loop"),
+      langs: langsOpt,
+    };
+    if (duelData) return buildDuel(data, duelData, o);
+    return multi ? buildMultiYear(multi, o) : buildMonolith(data, o);
+  }, [data, multi, duelData, built, variant, sizeMm, dampening, sigilOpt, langsOpt, extrasKey, flags]);
 
   const forge = useCallback(
     async (
@@ -254,6 +387,8 @@ export function MonolithApp({
           repoName?: string;
           rangeFrom?: string;
           rangeTo?: string;
+          /** The duel opponent; an empty string ends the duel. */
+          vs?: string;
         };
       },
     ) => {
@@ -265,6 +400,9 @@ export function MonolithApp({
       const effRepoName = opts?.over?.repoName ?? repoName;
       const effRangeFrom = opts?.over?.rangeFrom ?? rangeFrom;
       const effRangeTo = opts?.over?.rangeTo ?? rangeTo;
+      // The duel exists only in the plain single-year user mode.
+      const effVs =
+        effSubject === "user" && effSpan === "year" ? (opts?.over?.vs ?? duelVs) : "";
       const fail = (message: string) => {
         setError(message);
         setSteps([]);
@@ -332,6 +470,30 @@ export function MonolithApp({
       }
       if (!alive()) return;
 
+      // The duel opponent's year, fetched after the challenger's so a bad
+      // opponent handle fails with its own message rather than a mixed one.
+      let vsYear: ContributionYear | null = null;
+      if (effVs) {
+        try {
+          const res = await fetch(
+            `/api/contributions?login=${encodeURIComponent(effVs)}&year=${forYear}`,
+          );
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.message ?? `GitHub would not answer for ${effVs}.`);
+          }
+          const opp: { data?: ContributionYear } = await res.json();
+          if (!opp.data) throw new Error(`No calendar for ${effVs}.`);
+          vsYear = opp.data;
+        } catch (err) {
+          if (!alive()) return;
+          fail(err instanceof Error ? err.message : "Something broke.");
+          return;
+        }
+        if (!alive()) return;
+        push({ label: "challenger", value: `${vsYear.total.toLocaleString("en-GB")} from ${vsYear.login}` }, 0.44);
+      }
+
       // A range that crosses calendar years renders as the same depth-wise
       // terrace stack a lifetime object uses; one plate 150 weeks long is not
       // an object, it is a ruler. User subject only: a repo's 52-week window
@@ -382,10 +544,21 @@ export function MonolithApp({
       // Same arguments the memo will use, kept so the readout describes the
       // object that actually gets rendered.
       const yearData = payload.data;
-      const forged = payload.multi
-        ? buildMultiYear(payload.multi, { variant, sizeMm, label: true, dampening })
-        : buildMonolith(yearData!, { variant, sizeMm, label: true, dampening });
-      setBuilt({ data: yearData!, variant, sizeMm, dampening, mesh: forged });
+      const forged = vsYear
+        ? buildDuel(yearData!, vsYear, { variant, sizeMm, label: true, dampening })
+        : payload.multi
+          ? buildMultiYear(payload.multi, { variant, sizeMm, label: true, dampening })
+          : buildMonolith(yearData!, { variant, sizeMm, label: true, dampening });
+      // The forge builds the plain object; when extras are toggled on, the
+      // mesh memo rebuilds once with the engravings after the persona lands.
+      setBuilt({
+        data: yearData!,
+        variant,
+        sizeMm,
+        dampening,
+        extrasKey: `|||${vsYear?.login ?? ""}|`,
+        mesh: forged,
+      });
       push(
         {
           label: "extruding",
@@ -411,6 +584,8 @@ export function MonolithApp({
       if (!alive()) return;
       setData(payload.multi ? payload.multi.years[payload.multi.years.length - 1] : yearData!);
       setMulti(payload.multi ?? null);
+      setDuelData(vsYear);
+      setDuelVs(vsYear ? effVs : "");
       setStats(payload.stats);
       setLogin(payload.multi?.login ?? yearData!.login);
       setYearLabel(yearLabel);
@@ -448,11 +623,25 @@ export function MonolithApp({
           subject: effSubject,
           repoOwner: effRepoOwner,
           repoName: effRepoName,
+          vs: effVs,
         })}`,
       );
     },
-    [variant, sizeMm, reduceMotion, paletteId, dampening, subject, span, repoOwner, repoName, rangeFrom, rangeTo],
+    [variant, sizeMm, reduceMotion, paletteId, dampening, subject, span, repoOwner, repoName, rangeFrom, rangeTo, duelVs],
   );
+
+  // Keep the address bar honest about the extras: toggling a flag (or the
+  // hour histogram refining the sign) after the forge must land in the URL,
+  // or a copied link would drop the engravings the object on screen wears.
+  useEffect(() => {
+    if (phase !== "live") return;
+    const url = new URL(window.location.href);
+    if (flags.length) url.searchParams.set("flags", flags.join(","));
+    else url.searchParams.delete("flags");
+    if (flags.includes("sigil") && persona) url.searchParams.set("sign", persona.id);
+    else url.searchParams.delete("sign");
+    window.history.replaceState(null, "", url);
+  }, [phase, flags, persona]);
 
   // Deep-link boot. The guard is what makes this run once, rather than an
   // rebuilt whenever the form or size changes, and without the ref a shared
@@ -501,31 +690,6 @@ export function MonolithApp({
     };
   }, [phase, subject, span, login, year]);
 
-  /** The histogram, only when it describes exactly the object on screen. */
-  const hoursForHud =
-    commitHours &&
-    subject === "user" &&
-    span === "year" &&
-    commitHours.year === year &&
-    commitHours.login.toLowerCase() === login.toLowerCase()
-      ? commitHours
-      : null;
-
-  // The developer starsign: cast from the calendar on screen, refined by the
-  // hour histogram once it lands. A repository has working hours but not a
-  // temperament, so the sign is a user-only reading. For a multi-year object
-  // the reading spans every rendered year: mixing one year's days with the
-  // roll-up's stats once produced "active 525% of days".
-  const persona = useMemo(() => {
-    if (!data || !stats || subject !== "user") return null;
-    if (multi) {
-      const days = multi.years.flatMap((y) => y.days);
-      const merged = { ...data, days, total: multi.totalCommits };
-      return derivePersona(merged, computeStats(merged), null);
-    }
-    return derivePersona(data, stats, hoursForHud);
-  }, [data, stats, multi, subject, hoursForHud]);
-
   const reset = useCallback(() => {
     runId.current++;
     setPhase("idle");
@@ -536,6 +700,8 @@ export function MonolithApp({
     setProgress(0);
     setError(null);
     setCommitHours(null);
+    setDuelData(null);
+    setDuelVs("");
     window.history.replaceState(null, "", "/");
   }, []);
 
@@ -598,6 +764,9 @@ export function MonolithApp({
       subject,
       repoOwner,
       repoName,
+      vs: duelData ? duelVs : "",
+      flags,
+      sign: persona?.id,
     })}`;
     // On touch devices the native share sheet reaches the places a copied
     // link is actually headed; everywhere else the clipboard stays quickest.
@@ -972,7 +1141,7 @@ export function MonolithApp({
 
         {phase === "live" && data && stats && mesh && (
           <div className="pointer-events-none absolute inset-0 z-20">
-            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} commitHours={hoursForHud} persona={persona} />
+            <Hud data={data} stats={stats} mesh={mesh} variant={variant} yearLabel={yearLabel} commitHours={hoursForHud} persona={persona} signCardUrl={signCardUrl} signHistory={signHistory} />
           </div>
         )}
 
@@ -1019,6 +1188,10 @@ export function MonolithApp({
           onPrinter={setPrinterId}
           dampening={dampening}
           onDampening={setDampening}
+          flags={flags}
+          onFlags={setFlags}
+          duelVs={duelVs}
+          onDuelVs={setDuelVs}
           total={stats?.total ?? 0}
           onPrint={() => setPrinting(true)}
           spin={spin && !reduceMotion}
@@ -1053,6 +1226,9 @@ export function MonolithApp({
               subject={subject}
               repoOwner={repoOwner}
               repoName={repoName}
+              flags={flags}
+              sign={persona?.id ?? ""}
+              vs={duelData ? duelVs : ""}
             />
           </>
         )}

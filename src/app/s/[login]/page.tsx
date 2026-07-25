@@ -11,26 +11,42 @@ interface Props {
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { login } = await params;
-  const { year } = await searchParams;
-  const chosen = clampSelectableYear(typeof year === "string" ? year : undefined);
+  const sp = await searchParams;
+  const chosen = clampSelectableYear(typeof sp.year === "string" ? sp.year : undefined);
   const description = `${login}'s ${chosen} GitHub contributions as a 3D printable object. Free 3MF, STL and a slicer preset.`;
+  // The OG image speaks the whole share contract, so a lifetime or range
+  // link unfurls as the window it shows. `noog` opts the page out.
+  const req = parseModelRequest(
+    new URL(`http://localhost/?${new URLSearchParams(sp as Record<string, string>)}`),
+  );
+  const ogParams = new URLSearchParams({ login, year: String(chosen) });
+  if (req.subject === "repo") {
+    ogParams.set("subject", "repo");
+    ogParams.set("owner", req.repoOwner);
+    ogParams.set("repo", req.repoName);
+  } else if (req.span !== "year") {
+    ogParams.set("span", req.span);
+    if (req.from) ogParams.set("from", req.from);
+    if (req.to) ogParams.set("to", req.to);
+  }
+  if (req.flags.includes("sigil") && req.sign) ogParams.set("sign", req.sign);
+  const image = req.flags.includes("noog") ? undefined : [`/api/og?${ogParams}`];
   return {
     title: login,
     description,
     alternates: { canonical: `/s/${login}?year=${chosen}` },
-    // The share card is generated from a route that only receives the path
-    // segment, so it can never honour ?year=. Neither promises a year the
-    // other cannot show.
     openGraph: {
       type: "profile",
       title: login,
       description: `${login}'s GitHub contributions as a 3D printable object. Free 3MF, STL and a slicer preset.`,
       url: `/s/${login}?year=${chosen}`,
+      images: image,
     },
     twitter: {
       card: "summary_large_image",
       title: login,
       description: `${login}'s GitHub contributions as a 3D printable object.`,
+      images: image,
     },
   };
 }
@@ -59,6 +75,8 @@ export default async function SharePage({ params, searchParams }: Props) {
       initialSubject={req.subject}
       initialRepoOwner={req.repoOwner}
       initialRepoName={req.repoName}
+      initialFlags={req.flags}
+      initialVs={req.vs}
     />
   );
 }
