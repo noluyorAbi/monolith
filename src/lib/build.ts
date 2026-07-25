@@ -226,17 +226,31 @@ function engraveSigilTop(
   }
 }
 
-/** Keyring loop, physical millimetres (applied via the builder's own scale). */
-const LOOP_OUT_MM = 5.0;
-const LOOP_IN_MM = 2.2;
+/**
+ * Keyring loop, physical millimetres (applied via the builder's own scale).
+ *
+ * The hole is the one dimension that cannot scale: 4.4mm across takes any
+ * split ring, and a proportional hole would stop accepting one below the
+ * default size. Everything else is derived from it, so the loop is as small as
+ * a usable hole allows rather than as large as it used to be.
+ *
+ * The previous 5.0mm outer radius made a 10.0mm loop, and at the 60mm size,
+ * the one actually called Keyring, the plate is 9.6mm deep. The loop was wider
+ * than the object was deep, which is why it read as a washer glued to a card.
+ */
+const LOOP_HOLE_R_MM = 2.2;
+/** Material around the hole. 1.6mm at the plate's own thickness carries keys. */
+const LOOP_WALL_MM = 1.6;
+const LOOP_OUT_MM = LOOP_HOLE_R_MM + LOOP_WALL_MM;
+const LOOP_IN_MM = LOOP_HOLE_R_MM;
+/** How wide the tab is where it leaves the plate wall. Must exceed the loop. */
+const LOOP_NECK_MM = 8.0;
 
 /**
  * A flat annulus fused to the plate so the object hangs off a keyring.
  * Positions are raw units; the caller passes radii and thickness already
  * divided by its own eventual scale factor, so the printed loop is always
- * ~10mm across with a ~4.4mm hole and at least ~3.2mm thick regardless of
- * object size. A loop thinner than that (the plate itself at keyring sizes)
- * snaps on the first pocket.
+ * ~7.6mm across with a ~4.4mm hole, flush with the plate it grows out of.
  */
 function loopAt(
   mb: MeshBuilder,
@@ -262,22 +276,112 @@ function loopAt(
   }
 }
 
-/** At least this thick in print millimetres, whatever the plate height is. */
-function loopHeight(k: number): number {
-  return Math.max(BASE_H, 3.2 / k);
+/**
+ * Extrude a plan polygon from y0 to y1 as a closed prism. Points are (x, z).
+ *
+ * Winding is normalised here rather than demanded of the caller: a top cap
+ * wound counter-clockwise seen from above has a negative shoelace in (x, z),
+ * which is the same sense `mesh.ts` documents for its own wedges. The caps are
+ * fanned from the first point, so the polygon has to be star-shaped from it.
+ */
+function prism(mb: MeshBuilder, pts: [number, number][], y0: number, y1: number): void {
+  if (pts.length < 3 || y1 <= y0) return;
+  let shoelace = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [ax, az] = pts[i];
+    const [bx, bz] = pts[(i + 1) % pts.length];
+    shoelace += ax * bz - bx * az;
+  }
+  const p = shoelace > 0 ? [...pts].reverse() : pts;
+  const top = (i: number): [number, number, number] => [p[i][0], y1, p[i][1]];
+  const bot = (i: number): [number, number, number] => [p[i][0], y0, p[i][1]];
+  for (let i = 1; i + 1 < p.length; i++) {
+    mb.tri(top(0), top(i), top(i + 1));
+    mb.tri(bot(0), bot(i + 1), bot(i));
+  }
+  for (let i = 0; i < p.length; i++) {
+    const j = (i + 1) % p.length;
+    mb.quad(bot(i), bot(j), top(j), top(i));
+  }
 }
 
 /**
- * The loop for a rectangular plate: tangent to the LEFT wall, centred on it.
- * A wall weld gives the joint an ~8.7mm chord of fused material; the first
- * version kissed the plate corner diagonally with ~1.5mm of contact, which
- * is a snap waiting to happen. The hole stays 0.3mm clear of the wall.
+ * The loop for a rectangular plate: a tab growing out of the LEFT wall,
+ * centred on it, flush with the plate top and bottom.
+ *
+ * Two things were wrong with the annulus this replaces. It was 3.2mm thick
+ * whatever the plate was, so at the 60mm size, the one actually called
+ * Keyring, it stood 1.83mm proud of a 1.37mm plate and read as a washer glued
+ * to a card. And that extra thickness was protecting the wrong link: at that
+ * size the plate itself is 1.37mm, so a loop 2.3 times stronger than the
+ * object hanging off it only moves the break one step along. Flush is both
+ * better looking and the honest answer.
+ *
+ * The outline is the convex hull of the hole's boss and the neck where it
+ * leaves the wall, so the two sides run in on straight tangents instead of
+ * meeting the wall in a pair of re-entrant notches. Those notches were the
+ * ugly part, and a notch at a joint is also where a tab tears.
  */
-function loopAtLeftWall(mb: MeshBuilder, x0: number, zCenter: number, k: number): void {
+function loopAtLeftWall(
+  mb: MeshBuilder,
+  x0: number,
+  zCenter: number,
+  k: number,
+  plateD: number,
+): void {
   const R = LOOP_OUT_MM / k;
   const r = LOOP_IN_MM / k;
+  // Hole kept clear of the wall, and the tab buried into the plate so the
+  // joint is fused material rather than two faces sharing a plane.
   const c = r + 0.3 / k;
-  loopAt(mb, x0 - c, zCenter, R, r, loopHeight(k));
+  const bury = 0.4 / k;
+  const cx = x0 - c;
+  const cw = c + bury;
+  const xEdge = cx + cw;
+  // The neck is capped against the plate it leaves, so the tab never swallows
+  // the whole end of a small object. At 60mm the plate is 8.9mm deep and a
+  // flat 8mm neck left 0.4mm of shoulder on each side, which reads as the
+  // plate having been cut off rather than the tab having grown out of it.
+  const half = Math.min(LOOP_NECK_MM / k, plateD * 0.72) / 2;
+
+  loopAt(mb, cx, zCenter, R, r, BASE_H);
+
+  // Where the boss crosses the buried edge, and whether a tangent exists at
+  // all. Both are guaranteed by the constants above; the guard is here so a
+  // future change to them fails visibly instead of emitting a folded face.
+  if (R <= cw || half <= Math.sqrt(R * R - cw * cw)) return;
+  const q = Math.sqrt(R * R - cw * cw);
+
+  for (const s of [1, -1]) {
+    const pz = zCenter + s * half;
+    const dlen = Math.hypot(cw, s * half);
+    if (dlen <= R) continue;
+    const ux = cw / dlen;
+    const uz = (s * half) / dlen;
+    const a = (R * R) / dlen;
+    const h = (R * Math.sqrt(dlen * dlen - R * R)) / dlen;
+    const bx = cx + ux * a;
+    const bz = zCenter + uz * a;
+    // Two tangent points; the one further from the wall is the outer one. The
+    // other lies back under the plate and would fold the tab through itself.
+    const t1: [number, number] = [bx - uz * h, bz + ux * h];
+    const t2: [number, number] = [bx + uz * h, bz - ux * h];
+    const t = t1[0] < t2[0] ? t1 : t2;
+
+    const angQ = Math.atan2(s * q, cw);
+    const angT = Math.atan2(t[1] - zCenter, t[0] - cx);
+    let sweep = angT - angQ;
+    while (sweep > Math.PI) sweep -= Math.PI * 2;
+    while (sweep < -Math.PI) sweep += Math.PI * 2;
+
+    const arc: [number, number][] = [];
+    const steps = 8;
+    for (let i = 0; i <= steps; i++) {
+      const ang = angQ + (sweep * i) / steps;
+      arc.push([cx + Math.cos(ang) * R, zCenter + Math.sin(ang) * R]);
+    }
+    prism(mb, [[xEdge, pz], ...arc], 0, BASE_H);
+  }
 }
 
 /**
@@ -403,7 +507,7 @@ function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): Me
 
   // Opt-in extras live on the plate walls, so they need the plate. All are
   // independent of the signature label.
-  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW);
+  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW, plateD);
   if (plate && o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: z0 });
   if (plate && o.langs?.length) {
     langBarTop(mb, o.langs, x0 + PLATE_PAD, x0 + plateW - PLATE_PAD, z0 + plateD);
@@ -520,7 +624,10 @@ function buildRing(data: ContributionYear, o: BuildOptions, plate = true): MeshB
   if (plate && o.loop) {
     const k = o.sizeMm / (2 * plateR);
     const dist = plateR + LOOP_IN_MM / k + 0.2 / k;
-    loopAt(mb, -dist * Math.SQRT1_2, -dist * Math.SQRT1_2, LOOP_OUT_MM / k, LOOP_IN_MM / k, loopHeight(k));
+    // Flush with the plinth, like the rectangular tab. The plinth's edge is
+    // curved, so the joint is a circle-circle lens rather than a chord against
+    // a flat wall: ~5.9mm of fused material at the shipping constants.
+    loopAt(mb, -dist * Math.SQRT1_2, -dist * Math.SQRT1_2, LOOP_OUT_MM / k, LOOP_IN_MM / k, BASE_H);
   }
   if (plate && o.sigil) {
     engraveSigilTop(mb, o.sigil, { cx: 0, cz: -15, y: BASE_H, w: 13.5, h: 9 });
@@ -624,7 +731,7 @@ function buildWave(data: ContributionYear, o: BuildOptions): MeshBuilder {
   }
   mb.quad([px(0), 0, pz(0)], [px(cols), 0, pz(0)], [px(cols), 0, pz(7)], [px(0), 0, pz(7)]);
 
-  if (o.loop) loopAtLeftWall(mb, px(0), 0, o.sizeMm / gridW);
+  if (o.loop) loopAtLeftWall(mb, px(0), 0, o.sizeMm / gridW, gridD);
   if (o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: pz(0) });
   if (o.peak) {
     const t = peakText(data.days);
@@ -676,7 +783,7 @@ function buildSpine(data: ContributionYear, o: BuildOptions, plate = true): Mesh
   const z0 = -plateD / 2;
 
   if (plate) mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
-  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW);
+  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW, plateD);
   if (plate && o.langs?.length) {
     langBarTop(mb, o.langs, x0 + PLATE_PAD, x0 + plateW - PLATE_PAD, z0 + plateD);
   }
@@ -895,7 +1002,7 @@ export function buildMultiYear(
   // the sigil in the centre of the back wall (milestones keep the corners),
   // the peak day in the centre of the front wall (login and span keep those
   // corners). The peak reads across every rendered year.
-  if (options.loop) loopAtLeftWall(mb, px0, (pz0 + pz1) / 2, options.sizeMm / (px1 - px0));
+  if (options.loop) loopAtLeftWall(mb, px0, (pz0 + pz1) / 2, options.sizeMm / (px1 - px0), pz1 - pz0);
   if (options.sigil) {
     engraveSigilBack(mb, options.sigil, { cx: (px0 + px1) / 2, z: pz0 });
   }
@@ -1018,7 +1125,7 @@ export function buildDuel(
   mb.box(px0, 0, pz0, px1, BASE_H, pz1);
 
   const k = options.sizeMm / (px1 - px0);
-  if (options.loop) loopAtLeftWall(mb, px0, 0, k);
+  if (options.loop) loopAtLeftWall(mb, px0, 0, k, pz1 - pz0);
   // The two grids leave a clear spine of shared plate between them; the
   // languages bar runs along it, readable from A's side.
   if (options.langs?.length) {

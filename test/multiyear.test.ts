@@ -2,7 +2,7 @@ import { afterEach, test, vi } from "vitest";
 import assert from "node:assert";
 
 import { fetchContributionYears, fetchContributionRange, fetchLifetime, fetchRepoActivity, repoActivityToYear, fetchCommitHours, fetchTopLanguages, fetchRepoLanguages, StatsPendingError, type RepoActivity } from "@/lib/github";
-import { splitByLevel } from "@/lib/parts";
+import { splitByLevel, printableParts, wholeObject } from "@/lib/parts";
 import { slotForLevel } from "@/lib/slots";
 import { pack, splitRangeByYear, syntheticYear, computeStats, BadLoginError } from "@/lib/contributions";
 import { buildDuel, buildMultiYear, buildMonolith, fitsBed } from "@/lib/build";
@@ -529,6 +529,62 @@ test("the keyring loop fuses to the plate and keeps its physical size", () => {
   assert.ok(p180 > 3 && p180 < 10, `loop protrusion at 180mm: ${p180.toFixed(1)}mm`);
   assert.ok(p60 > 3 && p60 < 10, `loop protrusion at 60mm: ${p60.toFixed(1)}mm`);
   assert.ok(Math.abs(p60 - p180) < 3, `physical size holds (${p60.toFixed(1)} vs ${p180.toFixed(1)})`);
+});
+
+/**
+ * The tab has to stay inside the object's own silhouette. It used to be 3.2mm
+ * thick whatever the plate was, which at the 60mm size stood 1.83mm proud of a
+ * 1.37mm plate, and 10.0mm across on a plate only 9.6mm deep. Both are pinned
+ * here because both are invisible to a triangle count.
+ */
+test("the keyring loop is flush with the plate and never wider than it", () => {
+  const year = fakeMulti("octocat", [2025])[0];
+  for (const sizeMm of [60, 120, 180, 260, 400]) {
+    const m = buildMonolith(year, { variant: "skyline", sizeMm, label: true, loop: true });
+    const plain = buildMonolith(year, { variant: "skyline", sizeMm, label: true });
+    // The plate is seven cells plus two pads deep and BASE_H tall, so its
+    // thickness is exactly a seventh of its depth at every scale.
+    const plateTop = m.size.z / 7;
+    const plateLeft = plain.bounds.min[0];
+
+    let highest = -Infinity;
+    let zMin = Infinity;
+    let zMax = -Infinity;
+    for (let i = 0; i < m.positions.length; i += 3) {
+      // Only geometry the plate does not already cover, which is the tab.
+      if (m.positions[i] >= plateLeft) continue;
+      highest = Math.max(highest, m.positions[i + 1]);
+      zMin = Math.min(zMin, m.positions[i + 2]);
+      zMax = Math.max(zMax, m.positions[i + 2]);
+    }
+
+    assert.ok(highest > 0, `${sizeMm}mm: expected tab geometry left of the plate`);
+    assert.ok(
+      highest <= plateTop + 1e-6,
+      `${sizeMm}mm: tab rises ${(highest - plateTop).toFixed(2)}mm above the plate top`,
+    );
+    assert.ok(
+      zMax - zMin <= m.size.z + 1e-6,
+      `${sizeMm}mm: tab is ${(zMax - zMin).toFixed(1)}mm across a plate ${m.size.z.toFixed(1)}mm deep`,
+    );
+  }
+});
+
+test("the keyring loop still splits into closed solids", () => {
+  const year = fakeMulti("octocat", [2025])[0];
+  for (const sizeMm of [60, 180]) {
+    const m = buildMonolith(year, { variant: "skyline", sizeMm, label: true, loop: true });
+    const plain = buildMonolith(year, { variant: "skyline", sizeMm, label: true });
+    // printableParts falls back to one whole object as soon as any group is
+    // open, so asserting on its output alone would pass through the fallback.
+    // Assert the surface itself closes, and that the split did not degrade.
+    assert.ok(wholeObject(m).closed, `${sizeMm}mm: the loop leaves an open surface`);
+    assert.equal(
+      printableParts(m).length,
+      printableParts(plain).length,
+      `${sizeMm}mm: the loop dropped the model back to a single part`,
+    );
+  }
 });
 
 test("commit time-of-day is bucketed into 24 local hours (M16)", async () => {
