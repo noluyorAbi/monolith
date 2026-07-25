@@ -48,14 +48,27 @@ card names the window it reads.
 object per intensity level with per-object extruder bindings (M6) via the
 existing `slots` parameter.
 
+**Duel object.** A `vs` parameter renders two logins back to back on one
+shared plate: A's skyline reads from the front, B's is turned 180 degrees to
+read from the back, each wall carrying its own name. Single-year user mode
+only; the Dock grows a Duel field, and every export builds the same object.
+
+**Keyring loop (flag `loop`) + Keyring size.** A flat annulus fused to the
+plate's back-left corner (ring: the band's edge), sized in physical
+millimetres so the hole fits a split ring at any object size, plus a 60mm
+"Keyring" entry in the size picker.
+
+**Ring variant extras.** The ring has no flat wall, so its sigil and peak-day
+engravings lay flat on the clear centre of the plate top, every row inside
+the band's inner circle.
+
 ## Not in this branch (candidates, in rough value order)
 
-Duel object (two logins back to back), keychain/display-wedge base variants,
-top-languages colour ring, wrapped year-review sequence, org aggregate mode.
+Top-languages colour ring, wrapped year-review sequence, org aggregate mode.
 
 ## Gates
 
-`npm run typecheck` / `lint` / `test`: 111 tests green. New coverage: flags
+`npm run typecheck` / `lint` / `test`: 114 tests green. New coverage: flags
 round-trip + junk handling, sigil/peak geometry on single and multi builds,
 buildOptionsFrom sign precedence, deriveSign consistency, window-seeded
 sigils.
