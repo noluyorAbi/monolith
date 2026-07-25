@@ -42,5 +42,5 @@ deterministic synthetic year and labels it as sample data.
 
 ## Licence
 
-Contributions are accepted under the same PolyForm Noncommercial 1.0.0 licence
+Contributions are accepted under the same MIT licence
 as the rest of the project.

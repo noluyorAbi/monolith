@@ -6,7 +6,7 @@ export const PROJECT = {
   name: "MONOLITH",
   repo: "noluyorAbi/monolith",
   url: process.env.NEXT_PUBLIC_PROJECT_URL || "https://github.com/noluyorAbi/monolith",
-  licence: "PolyForm Noncommercial 1.0.0",
+  licence: "MIT",
   /** The generated objects, as opposed to the code that generates them. */
   modelLicence: "CC BY 4.0",
   /** Where this is deployed. Drives canonicals, sitemap, robots and OG urls. */

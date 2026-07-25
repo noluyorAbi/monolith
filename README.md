@@ -15,7 +15,7 @@
 <br>
 
 <a href="https://github.com/noluyorAbi/monolith/stargazers"><img src="https://img.shields.io/github/stars/noluyorAbi/monolith?style=for-the-badge&logo=github&logoColor=white&label=stars&labelColor=0b0b0b&color=d7ff45" alt="stars"></a>
-<a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm_Noncommercial-3a3a3a?style=for-the-badge&labelColor=0b0b0b" alt="PolyForm Noncommercial 1.0.0"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3a3a3a?style=for-the-badge&labelColor=0b0b0b" alt="MIT"></a>
 <a href="#verified-against-a-real-slicer-not-a-spec-from-memory"><img src="https://img.shields.io/badge/slicer_verified-Bambu_Studio-d7ff45?style=for-the-badge&labelColor=0b0b0b" alt="verified against Bambu Studio"></a>
 
 <br>
@@ -133,6 +133,8 @@ That is the whole setup. Every environment variable is optional:
 | `GITHUB_TOKEN` | The public contributions calendar is parsed instead of the GraphQL API. Same numbers, GitHub's own rate limits. |
 | `NEXT_PUBLIC_SITE_URL` | Canonicals, the sitemap and OG image urls fall back to the deployed domain. |
 | `NEXT_PUBLIC_PROJECT_URL` | Links point at this repository. |
+| `ADMIN_PASSWORD` | `/admin`, a private launch board, answers 404. That is the default, including on this deployment's forks. |
+| `BLOB_READ_WRITE_TOKEN` | The board saves to `.data/` instead of a private Vercel Blob. |
 
 If GitHub cannot be reached at all, the app falls back to a deterministic synthetic year and labels it `sample data` rather than quietly faking someone's history.
 
@@ -178,7 +180,7 @@ Ordered by how much it costs you today.
 
 ## <img src="assets/icons/scale.svg" width="16" align="center"> Licence
 
-[PolyForm Noncommercial 1.0.0](LICENSE). Use it, change it, share it, run it yourself, for any purpose that is not commercial. Selling it, or selling a service built on it, needs a licence from me: open an issue.
+[MIT](LICENSE). Use it, change it, host it, sell what you build with it. No permission needed, no strings.
 
 The objects it generates are yours, under CC BY 4.0. It is your year.
 
