@@ -19,3 +19,6 @@ tsconfig.tsbuildinfo
 
 # bundled CLI output
 dist
+
+# npm pack output
+*.tgz

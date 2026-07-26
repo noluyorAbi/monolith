@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/banner.png?v=2" width="100%" alt="MONOLITH, your commit year cast as an object">
+<img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/banner.png?v=2" width="100%" alt="MONOLITH, your commit year cast as an object">
 
 <b>Turn any GitHub contribution year into a thing you can hold. Type a handle, watch it build, download a 3MF, an STL and a slicer preset that is already dialled in.</b>
 
@@ -15,20 +15,20 @@
 <br>
 
 <a href="https://github.com/noluyorAbi/monolith/stargazers"><img src="https://img.shields.io/github/stars/noluyorAbi/monolith?style=for-the-badge&logo=github&logoColor=white&label=stars&labelColor=0b0b0b&color=d7ff45" alt="stars"></a>
-<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3a3a3a?style=for-the-badge&labelColor=0b0b0b" alt="MIT"></a>
+<a href="https://github.com/noluyorAbi/monolith/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-3a3a3a?style=for-the-badge&labelColor=0b0b0b" alt="MIT"></a>
 <a href="#verified-against-a-real-slicer-not-a-spec-from-memory"><img src="https://img.shields.io/badge/slicer_verified-Bambu_Studio-d7ff45?style=for-the-badge&labelColor=0b0b0b" alt="verified against Bambu Studio"></a>
 
 <br>
 
-<a href="assets/demo.mp4"><img src="assets/demo.gif?v=2" alt="Typing a GitHub handle, the build log counting up, the object rising out of its base plate, the four forms, the three sizes, the finishes, the print estimate and the kit" width="100%"></a>
+<a href="https://github.com/noluyorAbi/monolith/blob/main/assets/demo.mp4"><img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/demo.gif?v=2" alt="Typing a GitHub handle, the build log counting up, the object rising out of its base plate, the four forms, the three sizes, the finishes, the print estimate and the kit" width="100%"></a>
 
-<sub>The GIF is a downsampled loop. Full quality: <a href="assets/demo.mp4"><code>assets/demo.mp4</code></a>.</sub>
+<sub>The GIF is a downsampled loop. Full quality: <a href="https://github.com/noluyorAbi/monolith/blob/main/assets/demo.mp4"><code>assets/demo.mp4</code></a>.</sub>
 
 </div>
 
 <br>
 
-## <img src="assets/icons/cube.svg" width="16" align="center"> Why
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/cube.svg" width="16" align="center"> Why
 
 Every December someone posts a screenshot of their contribution graph. It is a picture of a year of work that lives for one scroll and then is gone.
 
@@ -36,7 +36,7 @@ This makes the same year into an object. Not a render, not a wallpaper: a watert
 
 The files are free. They stay free. If you own a printer you never need anything else on this page.
 
-## <img src="assets/icons/download.svg" width="16" align="center"> What you get
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/download.svg" width="16" align="center"> What you get
 
 A print kit, one ZIP, generated from your year:
 
@@ -49,21 +49,21 @@ A print kit, one ZIP, generated from your year:
 
 There is also **Open in Bambu Studio**, which hands the model straight to the app if you have it installed.
 
-## <img src="assets/icons/code.svg" width="16" align="center"> Without a browser
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/code.svg" width="16" align="center"> Without a browser
 
 The site is the product, but the people most likely to own a printer already live in a terminal.
 
 ```bash
-npm install && npm run build:cli
-node dist/monolith.mjs octocat
-node dist/monolith.mjs octocat --variant ring --mm 260 --flags sigil,langs
+npx monolith-3d octocat
+npx monolith-3d octocat --variant ring --mm 260 --flags sigil,langs
+npx monolith-3d --help
 ```
 
 That writes the 3MF, the STL, the preset and `PRINT-ME.txt` straight into a directory. `--zip` gives you the single archive the website hands out instead. No account, no token, no upload: without a `GITHUB_TOKEN` it reads the same public calendar the site does. `--help` lists every option, and `--json` prints the parsed year and its statistics without building anything.
 
 It is a thin wrapper on purpose. Arguments are folded into the same query string the download routes parse, so one parser applies one set of defaults and clamps to both surfaces rather than two implementations drifting apart.
 
-## <img src="assets/icons/layers.svg" width="16" align="center"> Four forms
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/layers.svg" width="16" align="center"> Four forms
 
 The same year, read four ways.
 
@@ -76,7 +76,7 @@ The same year, read four ways.
 
 Sizes run from 60 to 400 mm. On a 0.4 mm nozzle, 180 mm and up keeps the engraved handle readable and the towers separated; the interface tells you when your chosen size falls under that.
 
-## <img src="assets/icons/sliders.svg" width="16" align="center"> The print profile, and why each setting is there
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/sliders.svg" width="16" align="center"> The print profile, and why each setting is there
 
 Nothing else is touched, so your own defaults carry through.
 
@@ -93,7 +93,7 @@ Nothing else is touched, so your own defaults carry through.
 
 Multi-colour: the 3MF arrives as separate parts, one per intensity, and you assign a filament to each in the object list. Two clicks per part, not automatic, because a plain 3MF does not carry filament assignments and pretending otherwise would only break in your slicer.
 
-## <img src="assets/icons/check.svg" width="16" align="center"> Verified against a real slicer, not a spec from memory
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/check.svg" width="16" align="center"> Verified against a real slicer, not a spec from memory
 
 ```bash
 npm run dev &
@@ -119,7 +119,7 @@ Raising the text is what fixed it. The widely repeated claim that this needs the
 
 The filament and time estimates are fitted the same way, against three real slices of the same year at 0.12, 0.16 and 0.20 mm, on a P1S with the stock 0.4 mm nozzle. The site quotes an A1 by default, which is the machine most people printing one of these own; only the time band is scaled for it, from Bambu's own published acceleration figures, and the filament is identical on every machine. At 0.16 mm that object is 4h00 and 17.7 cm3 of PLA, about 22 g, and the estimator puts it at 17.8 cm3. The landing therefore quotes the spread rather than one machine's midpoint: two to six hours depending on the printer, the nozzle and the layer height. The fit reproduces all three slices to within 0.3%, and `test/calib.test.ts` fails if it ever drifts. The year those slices used is committed at `data/contributions-2025.json`, and it is the same year the banner, the share card and the demo draw, so no image here shows a denser object than the one that was measured.
 
-## <img src="assets/icons/code.svg" width="16" align="center"> How the geometry works
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/code.svg" width="16" align="center"> How the geometry works
 
 `src/lib/` is pure TypeScript with no three.js dependency, which is what lets the browser, the STL endpoint, the 3MF endpoint and the README's own artwork share one definition of the object.
 
@@ -133,7 +133,7 @@ The filament and time estimates are fitted the same way, against three real slic
 
 Alongside positions, the builder emits a contribution level, a chronological order and a base height per vertex. The viewer's material reads all three: level picks the colour, order and base height drive the reveal, so the object grows out of its plate in the order the commits happened without a single per-bar scene object. The exporters read the same level attribute to split it into printable parts, and the Remotion compositions read it again to draw the banner and the demo above. Change the geometry and every image in this README updates on the next render.
 
-## <img src="assets/icons/search.svg" width="16" align="center"> Running it
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/search.svg" width="16" align="center"> Running it
 
 ```bash
 npm install
@@ -164,15 +164,15 @@ If GitHub cannot be reached at all, the app falls back to a deterministic synthe
 | `/api/contributions?login=&year=` | The parsed year plus derived statistics, as JSON. |
 | `/llms.txt` | Generated from the code, so an assistant reads the real forms, sizes and profile. |
 
-## <img src="assets/icons/layers.svg" width="16" align="center"> The viewer
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/layers.svg" width="16" align="center"> The viewer
 
 The object on the page is the STL you download, engraved handle included, not a lightweight stand-in. It turns under a drag and carries the throw when you let go, and the days under your pointer light up from within. The studio it stands in is yours too: key, fill, rim, a flat front lamp and the emissive glow each have their own switch in the dock, dimmed in and out rather than cut, and the shadow on the floor is cast by the real geometry, so it answers every switch. A year with no contributions refuses to build an empty plate and says so, and the current year is labelled `year to date` instead of posing as a weak one.
 
-## <img src="assets/icons/printer.svg" width="16" align="center"> Legibility
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/printer.svg" width="16" align="center"> Legibility
 
 A page this dark fails quietly, so the values are measured rather than eyeballed. Every text colour clears WCAG AA against the page: the token carrying the smallest uppercase labels sits at 6.3:1, body copy at 8.3:1, and anything bounding a control at 3.4:1, above the 3:1 WCAG 1.4.11 asks for. Readouts sit over a live 3D canvas, so they carry their own gradient scrim; measured against a bright tower directly behind them, the worst row still reads at 7.2:1. The object is nearly as dark as the page, so a Fresnel term traces its silhouette and a pool of light on the floor gives the shape something to sit against. Portrait screens swing the camera down the object's long axis, so a phone gets the same object at usable size.
 
-## <img src="assets/icons/sliders.svg" width="16" align="center"> Roadmap, and what is honestly still broken
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/sliders.svg" width="16" align="center"> Roadmap, and what is honestly still broken
 
 Ordered by how much it costs you today.
 
@@ -192,9 +192,9 @@ Ordered by how much it costs you today.
 
 **There is no end to end test.** Geometry, exporters and estimates are covered; the flow from typing a handle to a downloaded zip is not.
 
-## <img src="assets/icons/scale.svg" width="16" align="center"> Licence
+## <img src="https://raw.githubusercontent.com/noluyorAbi/monolith/main/assets/icons/scale.svg" width="16" align="center"> Licence
 
-[MIT](LICENSE). Use it, change it, host it, sell what you build with it. No permission needed, no strings.
+[MIT](https://github.com/noluyorAbi/monolith/blob/main/LICENSE). Use it, change it, host it, sell what you build with it. No permission needed, no strings.
 
 The objects it generates are yours, under CC BY 4.0. It is your year.
 

@@ -1,7 +1,6 @@
 {
-  "name": "monolith",
+  "name": "monolith-3d",
   "version": "0.1.0",
-  "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -15,7 +14,8 @@
     "banner": "remotion still remotion/index.ts Banner assets/banner.png --overwrite",
     "demo": "remotion render remotion/index.ts Demo assets/demo.mp4 --overwrite",
     "assets": "npm run og && npm run banner && npm run demo",
-    "build:cli": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/monolith.mjs --alias:server-only=./src/cli/noop.ts"
+    "build:cli": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/monolith.mjs --alias:server-only=./src/cli/noop.ts",
+    "prepack": "npm run build:cli"
   },
   "dependencies": {
     "@react-three/drei": "10.7.7",
@@ -49,5 +49,16 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/noluyorAbi/monolith.git"
-  }
+  },
+  "bin": {
+    "monolith-3d": "dist/monolith.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
 }
