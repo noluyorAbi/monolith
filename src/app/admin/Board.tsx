@@ -53,7 +53,9 @@ export default function Board({
 }) {
   const [state, setState] = useState<LaunchState>(initial);
   const [save, setSave] = useState<SaveState>("idle");
-  const [tab, setTab] = useState<"channels" | "tasks" | "metrics" | "data">("channels");
+  // Brief first, and the default: the board is the thing you open to find out
+  // where this stands, not only to tick something off.
+  const [tab, setTab] = useState<"brief" | "channels" | "tasks" | "metrics" | "data">("brief");
 
   // The first render must not write. Without this the panel saves the state it
   // just loaded, which rewrites `updatedAt` every time the page is opened.
@@ -90,7 +92,7 @@ export default function Board({
             LAUNCH
           </span>
           <nav className="flex gap-1">
-            {(["channels", "tasks", "metrics", "data"] as const).map((id) => (
+            {(["brief", "channels", "tasks", "metrics", "data"] as const).map((id) => (
               <button
                 key={id}
                 type="button"
@@ -127,6 +129,7 @@ export default function Board({
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-6">
+        {tab === "brief" ? <Brief state={state} edit={edit} /> : null}
         {tab === "channels" ? <Channels state={state} edit={edit} /> : null}
         {tab === "tasks" ? <Tasks state={state} edit={edit} /> : null}
         {tab === "metrics" ? <Metrics state={state} edit={edit} /> : null}
@@ -137,6 +140,23 @@ export default function Board({
 }
 
 type Edit = (next: (previous: LaunchState) => LaunchState) => void;
+
+/**
+ * Where the project stands, in prose. One textarea on purpose: the moment this
+ * grows fields it becomes a form to satisfy rather than a thing you write in,
+ * and the reasoning it has to hold does not have a schema.
+ */
+function Brief({ state, edit }: { state: LaunchState; edit: Edit }) {
+  return (
+    <Area
+      label="where this stands"
+      value={state.brief}
+      onChange={(brief) => edit((previous) => ({ ...previous, brief }))}
+      rows={24}
+      placeholder="decisions and why, what is deployed, what is still open"
+    />
+  );
+}
 
 function Channels({ state, edit }: { state: LaunchState; edit: Edit }) {
   const [open, setOpen] = useState<string | null>(null);

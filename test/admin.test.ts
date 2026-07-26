@@ -139,6 +139,15 @@ test("state arriving from the browser is rebuilt rather than trusted", () => {
   assert.equal(parsed.metrics[0].visitors, 400);
 });
 
+test("the brief survives a round trip and is bounded", () => {
+  const text = "Decided MIT because PolyForm closed three channels.\n\nStill open: the hero figures.";
+  assert.equal(parseState({ brief: text }).brief, text, "newlines and prose must survive");
+  assert.equal(parseState({}).brief, "", "an absent brief is empty, not undefined");
+  assert.equal(parseState({ brief: 42 }).brief, "", "a non-string brief becomes empty");
+  // Bounded, so a paste accident cannot make the document unwritable.
+  assert.equal(parseState({ brief: "x".repeat(300000) }).brief.length, 200000);
+});
+
 test("oversized fields are cut rather than stored whole", () => {
   const parsed = parseState({ channels: [{ name: "x".repeat(5000) }] });
   assert.equal(parsed.channels[0].name.length, 200);

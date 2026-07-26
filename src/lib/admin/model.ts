@@ -71,6 +71,16 @@ export interface LaunchState {
   version: 1;
   /** ISO timestamp of the last successful write. Set by the server, not the client. */
   updatedAt: string;
+  /**
+   * Free text: where the project stands, which decisions are settled and why,
+   * what is deployed, and which questions are still the owner's to answer.
+   *
+   * A board of channels, tasks and numbers answers "what is left" but not "why
+   * is it like this", so anything not yet done ended up explained somewhere
+   * else. This is the one surface that makes the panel the place you open
+   * first rather than the fourth thing you check.
+   */
+  brief: string;
   channels: Channel[];
   tasks: Task[];
   metrics: Metric[];
@@ -79,6 +89,7 @@ export interface LaunchState {
 export const EMPTY_STATE: LaunchState = {
   version: 1,
   updatedAt: "",
+  brief: "",
   channels: [],
   tasks: [],
   metrics: [],
@@ -101,6 +112,9 @@ export function parseState(raw: unknown): LaunchState {
   return {
     version: 1,
     updatedAt: str(o.updatedAt, 40),
+    // Generous, because this is where the reasoning lives, but still bounded so
+    // a paste accident cannot make the document unwritable.
+    brief: str(o.brief, 200000),
     channels: channels.slice(0, 500).map((c) => {
       const r = (c ?? {}) as Record<string, unknown>;
       const wave = num(r.wave);
