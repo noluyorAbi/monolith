@@ -49,6 +49,20 @@ A print kit, one ZIP, generated from your year:
 
 There is also **Open in Bambu Studio**, which hands the model straight to the app if you have it installed.
 
+## <img src="assets/icons/code.svg" width="16" align="center"> Without a browser
+
+The site is the product, but the people most likely to own a printer already live in a terminal.
+
+```bash
+npm install && npm run build:cli
+node dist/monolith.mjs octocat
+node dist/monolith.mjs octocat --variant ring --mm 260 --flags sigil,langs
+```
+
+That writes the 3MF, the STL, the preset and `PRINT-ME.txt` straight into a directory. `--zip` gives you the single archive the website hands out instead. No account, no token, no upload: without a `GITHUB_TOKEN` it reads the same public calendar the site does. `--help` lists every option, and `--json` prints the parsed year and its statistics without building anything.
+
+It is a thin wrapper on purpose. Arguments are folded into the same query string the download routes parse, so one parser applies one set of defaults and clamps to both surfaces rather than two implementations drifting apart.
+
 ## <img src="assets/icons/layers.svg" width="16" align="center"> Four forms
 
 The same year, read four ways.

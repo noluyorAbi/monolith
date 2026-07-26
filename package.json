@@ -14,7 +14,8 @@
     "og": "remotion still remotion/index.ts OgCard public/og.png --overwrite",
     "banner": "remotion still remotion/index.ts Banner assets/banner.png --overwrite",
     "demo": "remotion render remotion/index.ts Demo assets/demo.mp4 --overwrite",
-    "assets": "npm run og && npm run banner && npm run demo"
+    "assets": "npm run og && npm run banner && npm run demo",
+    "build:cli": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/monolith.mjs --alias:server-only=./src/cli/noop.ts"
   },
   "dependencies": {
     "@react-three/drei": "10.7.7",
@@ -35,6 +36,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.185.1",
+    "esbuild": "^0.28.1",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.11",
     "remotion": "^4.0.496",

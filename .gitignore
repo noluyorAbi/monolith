@@ -16,3 +16,6 @@ tsconfig.tsbuildinfo
 
 # launch skill run state
 .launch
+
+# bundled CLI output
+dist

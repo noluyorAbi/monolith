@@ -39,6 +39,12 @@ export function yearRange(year: number): { from: string; to: string } {
  */
 export function parseYear(raw: string | null): number {
   const current = availableYears(1)[0];
+  // Absence is checked before conversion, because `Number(null)` and
+  // `Number("")` are both 0, and 0 is an integer. The guard below therefore
+  // never fired for a missing parameter, and the clamp turned it into 2008:
+  // every caller that omitted `year` got an empty 2008 object. The browser
+  // always sends an explicit year, which is why only the CLI surfaced it.
+  if (raw === null || raw.trim() === "") return current;
   const value = Number(raw);
   if (!Number.isInteger(value)) return current;
   return Math.min(Math.max(value, 2008), current);

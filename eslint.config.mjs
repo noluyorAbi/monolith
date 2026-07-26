@@ -13,6 +13,9 @@ const config = [
       "public/**",
       "assets/**",
       "next-env.d.ts",
+      // Bundled CLI output. It is generated, it is gitignored, and linting a
+      // bundle reports dead code that only exists because of tree shaking.
+      "dist/**",
       "*.tsbuildinfo",
       // Git-ignored scratch space written by local session tooling; its
       // contents are not source and must not gate a push.
