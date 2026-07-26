@@ -398,6 +398,123 @@ const LANG_DEPTH = 2.2;
 const LANG_INSET = 0.6;
 const LANG_GAP = 0.8;
 
+/**
+ * Short codes for the legend, because the band itself cannot carry a label.
+ *
+ * Measured: at the default 180mm the band is 1.81mm deep and a seven-row glyph
+ * needs 3.29mm, and text squeezed to fit the band would print at a 0.258mm
+ * pixel, well under the 0.42mm line a 0.4mm nozzle lays down. The two smallest
+ * segments are also narrower than two letters. So the key goes on a wall, and
+ * the colours stay the thing that distinguishes the segments.
+ *
+ * Logos were the other option and are deliberately not here. A recognisable
+ * mark needs roughly 16 by 16 cells, which is 7.5mm square at the proven
+ * pixel, and the plinth wall is 4.11mm tall. Beyond that, the marks of Python,
+ * Rust, Go, Java and Docker all carry usage policies, and this generator is
+ * MIT, so it would be stamping third-party marks onto objects other people are
+ * free to sell.
+ */
+const LANG_ABBR: Record<string, string> = {
+  "TypeScript": "TS",
+  "JavaScript": "JS",
+  "Python": "PY",
+  "Java": "JAVA",
+  "C": "C",
+  "C++": "CPP",
+  "C#": "CS",
+  "Go": "GO",
+  "Rust": "RS",
+  "Ruby": "RB",
+  "PHP": "PHP",
+  "Swift": "SWIFT",
+  "Kotlin": "KT",
+  "Scala": "SCALA",
+  "Objective-C": "OBJC",
+  "Shell": "SH",
+  "PowerShell": "PS",
+  "HTML": "HTML",
+  "CSS": "CSS",
+  "SCSS": "SCSS",
+  "Sass": "SASS",
+  "Less": "LESS",
+  "Vue": "VUE",
+  "Svelte": "SVELTE",
+  "Astro": "ASTRO",
+  "Dart": "DART",
+  "Elixir": "EX",
+  "Erlang": "ERL",
+  "Haskell": "HS",
+  "Clojure": "CLJ",
+  "Lua": "LUA",
+  "Perl": "PL",
+  "Julia": "JL",
+  "Nim": "NIM",
+  "Zig": "ZIG",
+  "Nix": "NIX",
+  "Solidity": "SOL",
+  "Assembly": "ASM",
+  "Dockerfile": "DOCKER",
+  "Makefile": "MAKE",
+  "CMake": "CMAKE",
+  "Jupyter Notebook": "IPYNB",
+  "Vim Script": "VIM",
+  "Emacs Lisp": "ELISP",
+  "TeX": "TEX",
+  "Markdown": "MD",
+  "SQL": "SQL",
+  "YAML": "YAML",
+  "Batchfile": "BAT",
+  "MATLAB": "MATLAB",
+  "R": "R",
+  "F#": "FS",
+  "OCaml": "OCAML",
+  "Groovy": "GROOVY",
+  "CoffeeScript": "COFFEE",
+  "Handlebars": "HBS",
+  "Blade": "BLADE",
+  "Twig": "TWIG",
+  "Pug": "PUG",
+  "Crystal": "CR",
+};
+
+/**
+ * The code a language is engraved under. Unknown languages fall back to the
+ * first four characters the bitmap font actually has a glyph for, which keeps
+ * a new GitHub language readable rather than blank.
+ */
+export function langAbbr(name: string): string {
+  const known = LANG_ABBR[name];
+  if (known) return known;
+  const stripped = name.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return stripped.slice(0, 4) || "ETC";
+}
+
+/**
+ * "TS 62  JS 19  CSS 9", the top `count` languages with their whole-number
+ * share. Three is the shipping default: it measures 53.1mm at 180mm, which
+ * fits beside the peak-day text on the front wall and beside the starsign on
+ * the back one, so the legend needs no collision rules against either.
+ */
+export function langLegend(langs: LangShare[], count = 3): string {
+  return keptLangs(langs)
+    .slice(0, count)
+    .map((l) => `${langAbbr(l.name)} ${Math.round(l.share * 100)}`)
+    .join("  ");
+}
+
+/**
+ * The longest legend that fits `roomMm`, shortening rather than overflowing.
+ * A 39-character handle leaves less front wall than a short one, and running
+ * the legend into the year would be worse than naming two languages.
+ */
+function fitLegend(langs: LangShare[], roomMm: number, px: number): string {
+  for (let count = 3; count >= 1; count--) {
+    const text = langLegend(langs, count);
+    if (text && measureText(text) * px <= roomMm) return text;
+  }
+  return "";
+}
+
 /** Defensive re-normalisation; the data layer already keeps top six at 4%+. */
 function keptLangs(langs: LangShare[] | null | undefined): LangShare[] {
   const kept = (langs ?? []).filter((l) => l.share > 0).slice(0, 6);
@@ -512,17 +629,38 @@ function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): Me
   if (plate && o.langs?.length) {
     langBarTop(mb, o.langs, x0 + PLATE_PAD, x0 + plateW - PLATE_PAD, z0 + plateD);
   }
+  // Everything on this wall shares one run of millimetres: the handle from the
+  // left, the year from the right, and the peak day and the languages key in
+  // between. `peakRight` carries the peak's real right edge to the legend
+  // below, so the two are placed against each other rather than each assuming
+  // the other is not there.
+  const wallPx = ENGRAVE_TEXT_MM / GLYPH_H;
+  const WALL_GAP = 4;
+  const handleRight =
+    -plateW / 2 + PLATE_PAD + (label ? measureText(signature(data)) * wallPx : 0);
+  const yearLeft =
+    plateW / 2 - PLATE_PAD - (label ? measureText(String(data.year)) * wallPx : 0);
+  let peakRight = handleRight;
+
   if (plate && o.peak) {
     const t = peakText(data.days);
     if (t) {
-      const peakPx = (ENGRAVE_TEXT_MM / GLYPH_H) * 0.8;
-      engraveWall(mb, t, {
-        x: -(measureText(t) * peakPx) / 2,
-        y: (BASE_H - GLYPH_H * peakPx) / 2,
-        px: peakPx,
-        z: z0 + plateD,
-        align: "left",
-      });
+      const peakPx = wallPx * 0.8;
+      const w = measureText(t) * peakPx;
+      // Centred when there is room, pushed right by a long handle rather than
+      // drawn straight through it. A 39 character login, which GitHub allows,
+      // used to overprint this text.
+      const x = Math.max(-w / 2, handleRight + WALL_GAP);
+      if (x + w <= yearLeft - WALL_GAP) {
+        engraveWall(mb, t, {
+          x,
+          y: (BASE_H - GLYPH_H * peakPx) / 2,
+          px: peakPx,
+          z: z0 + plateD,
+          align: "left",
+        });
+        peakRight = x + w;
+      }
     }
   }
 
@@ -543,6 +681,17 @@ function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): Me
     z: z0 + plateD,
     align: "right",
   });
+  // The languages key. The band is colour only, and colour says nothing once
+  // the object is printed in one filament or sitting on someone else's desk.
+  // Right-aligned against the year rather than centred, because the centre of
+  // this wall already belongs to the peak-day text when that extra is on.
+  if (plate && o.langs?.length) {
+    const right = yearLeft - WALL_GAP;
+    const legend = fitLegend(o.langs, right - (peakRight + WALL_GAP), px);
+    if (legend) {
+      engraveWall(mb, legend, { x: right, y: textY, px, z: z0 + plateD, align: "right" });
+    }
+  }
   // M4 / marktanalyse 5.4: engrave the account's real milestones on the base
   // plate so the object carries its own origin story. Only when the data has
   // them (the GraphQL path; the HTML fallback does not). They live on the
@@ -814,14 +963,31 @@ function buildSpine(data: ContributionYear, o: BuildOptions, plate = true): Mesh
   if (!label) return mb;
   const px = ENGRAVE_TEXT_MM / GLYPH_H;
   const text = `${signature(data)} ${data.year}`;
+  const textW = measureText(text) * px;
   engraveWall(mb, text, {
-    x: x0 + plateW / 2 - (measureText(text) * px) / 2,
+    x: x0 + plateW / 2 - textW / 2,
     y: (BASE_H - ENGRAVE_TEXT_MM) / 2,
     px,
     z: z0,
     align: "left",
     face: "back",
   });
+  // The spine's front wall belongs to the twelve month names, so the languages
+  // key goes on the back one beside the signature, in the corner the skyline
+  // gives its milestones.
+  if (plate && o.langs?.length) {
+    const legend = fitLegend(o.langs, plateW / 2 - PLATE_PAD - textW / 2 - 4, px);
+    if (legend) {
+      engraveWall(mb, legend, {
+        x: x0 + plateW - PLATE_PAD,
+        y: (BASE_H - ENGRAVE_TEXT_MM) / 2,
+        px,
+        z: z0,
+        align: "right",
+        face: "back",
+      });
+    }
+  }
   return mb;
 }
 
