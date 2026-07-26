@@ -1,0 +1,79 @@
+name: publish
+
+# Publishing is triggered by a GitHub release rather than by a push, so the
+# irreversible step is always a deliberate human act with a changelog attached.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The whole point: npm authenticates this workflow through OIDC, so there
+      # is no long-lived publish token anywhere, not on a laptop and not in
+      # repository secrets. It also produces the provenance attestation, which
+      # is what links the tarball on npm back to this commit and this workflow.
+      id-token: write
+    steps:
+      # Pinned to a commit sha, not a tag: a tag is mutable, so `@v7` means
+      # whatever that owner points it at on the day the job runs.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Caching is off explicitly. setup-node v7 caches by DEFAULT, so omitting
+      # the input does not disable it, and a restored cache is a write path from
+      # any other workflow run into this one. This is the job that signs a
+      # provenance attestation, so nothing it builds may come from a cache it
+      # did not produce. npm's own trusted-publishing example disables it too.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Trusted publishing needs npm 11.5.1 or newer
+        # Node 24 currently ships a new enough npm, but that is an assumption
+        # about the runner image rather than a guarantee. Assert it, so this
+        # fails with the reason instead of with an opaque 403 at publish time.
+        run: |
+          have="$(npm --version)"
+          need=11.5.1
+          echo "npm $have"
+          if [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -1)" != "$need" ]; then
+            echo "npm $have is older than $need, which trusted publishing requires"
+            exit 1
+          fi
+
+      - name: The release tag and package.json must agree
+        if: github.event_name == 'release'
+        # Read through the environment, never through ${{ }} interpolation into
+        # a shell: a tag name is attacker-controlled text and interpolating it
+        # here would be a script injection.
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          echo "tag $tag, package.json $pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "the release tag and package.json disagree; bump one of them"
+            exit 1
+          fi
+
+      - run: npm ci
+
+      # The same gates the push review runs. A release is the worst moment to
+      # discover that the bundle does not build, and `prepack` builds it.
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+      - name: Publish with provenance
+        # No NODE_AUTH_TOKEN. If this step asks for a token, trusted publishing
+        # is not configured for this package on npmjs.com yet.
+        run: npm publish --provenance --access public
