@@ -1,9 +1,14 @@
 version: 2
 updates:
+  # A cooldown is the cheap defence against a compromised release: the window
+  # between a malicious version being published and being yanked is usually
+  # hours, and without this Dependabot would open the PR inside that window.
   - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       all:
         patterns: ["*"]
@@ -11,3 +16,5 @@ updates:
     directory: "/"
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7

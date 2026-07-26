@@ -226,17 +226,31 @@ function engraveSigilTop(
   }
 }
 
-/** Keyring loop, physical millimetres (applied via the builder's own scale). */
-const LOOP_OUT_MM = 5.0;
-const LOOP_IN_MM = 2.2;
+/**
+ * Keyring loop, physical millimetres (applied via the builder's own scale).
+ *
+ * The hole is the one dimension that cannot scale: 4.4mm across takes any
+ * split ring, and a proportional hole would stop accepting one below the
+ * default size. Everything else is derived from it, so the loop is as small as
+ * a usable hole allows rather than as large as it used to be.
+ *
+ * The previous 5.0mm outer radius made a 10.0mm loop, and at the 60mm size,
+ * the one actually called Keyring, the plate is 9.6mm deep. The loop was wider
+ * than the object was deep, which is why it read as a washer glued to a card.
+ */
+const LOOP_HOLE_R_MM = 2.2;
+/** Material around the hole. 1.6mm at the plate's own thickness carries keys. */
+const LOOP_WALL_MM = 1.6;
+const LOOP_OUT_MM = LOOP_HOLE_R_MM + LOOP_WALL_MM;
+const LOOP_IN_MM = LOOP_HOLE_R_MM;
+/** How wide the tab is where it leaves the plate wall. Must exceed the loop. */
+const LOOP_NECK_MM = 8.0;
 
 /**
  * A flat annulus fused to the plate so the object hangs off a keyring.
  * Positions are raw units; the caller passes radii and thickness already
  * divided by its own eventual scale factor, so the printed loop is always
- * ~10mm across with a ~4.4mm hole and at least ~3.2mm thick regardless of
- * object size. A loop thinner than that (the plate itself at keyring sizes)
- * snaps on the first pocket.
+ * ~7.6mm across with a ~4.4mm hole, flush with the plate it grows out of.
  */
 function loopAt(
   mb: MeshBuilder,
@@ -262,22 +276,112 @@ function loopAt(
   }
 }
 
-/** At least this thick in print millimetres, whatever the plate height is. */
-function loopHeight(k: number): number {
-  return Math.max(BASE_H, 3.2 / k);
+/**
+ * Extrude a plan polygon from y0 to y1 as a closed prism. Points are (x, z).
+ *
+ * Winding is normalised here rather than demanded of the caller: a top cap
+ * wound counter-clockwise seen from above has a negative shoelace in (x, z),
+ * which is the same sense `mesh.ts` documents for its own wedges. The caps are
+ * fanned from the first point, so the polygon has to be star-shaped from it.
+ */
+function prism(mb: MeshBuilder, pts: [number, number][], y0: number, y1: number): void {
+  if (pts.length < 3 || y1 <= y0) return;
+  let shoelace = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [ax, az] = pts[i];
+    const [bx, bz] = pts[(i + 1) % pts.length];
+    shoelace += ax * bz - bx * az;
+  }
+  const p = shoelace > 0 ? [...pts].reverse() : pts;
+  const top = (i: number): [number, number, number] => [p[i][0], y1, p[i][1]];
+  const bot = (i: number): [number, number, number] => [p[i][0], y0, p[i][1]];
+  for (let i = 1; i + 1 < p.length; i++) {
+    mb.tri(top(0), top(i), top(i + 1));
+    mb.tri(bot(0), bot(i + 1), bot(i));
+  }
+  for (let i = 0; i < p.length; i++) {
+    const j = (i + 1) % p.length;
+    mb.quad(bot(i), bot(j), top(j), top(i));
+  }
 }
 
 /**
- * The loop for a rectangular plate: tangent to the LEFT wall, centred on it.
- * A wall weld gives the joint an ~8.7mm chord of fused material; the first
- * version kissed the plate corner diagonally with ~1.5mm of contact, which
- * is a snap waiting to happen. The hole stays 0.3mm clear of the wall.
+ * The loop for a rectangular plate: a tab growing out of the LEFT wall,
+ * centred on it, flush with the plate top and bottom.
+ *
+ * Two things were wrong with the annulus this replaces. It was 3.2mm thick
+ * whatever the plate was, so at the 60mm size, the one actually called
+ * Keyring, it stood 1.83mm proud of a 1.37mm plate and read as a washer glued
+ * to a card. And that extra thickness was protecting the wrong link: at that
+ * size the plate itself is 1.37mm, so a loop 2.3 times stronger than the
+ * object hanging off it only moves the break one step along. Flush is both
+ * better looking and the honest answer.
+ *
+ * The outline is the convex hull of the hole's boss and the neck where it
+ * leaves the wall, so the two sides run in on straight tangents instead of
+ * meeting the wall in a pair of re-entrant notches. Those notches were the
+ * ugly part, and a notch at a joint is also where a tab tears.
  */
-function loopAtLeftWall(mb: MeshBuilder, x0: number, zCenter: number, k: number): void {
+function loopAtLeftWall(
+  mb: MeshBuilder,
+  x0: number,
+  zCenter: number,
+  k: number,
+  plateD: number,
+): void {
   const R = LOOP_OUT_MM / k;
   const r = LOOP_IN_MM / k;
+  // Hole kept clear of the wall, and the tab buried into the plate so the
+  // joint is fused material rather than two faces sharing a plane.
   const c = r + 0.3 / k;
-  loopAt(mb, x0 - c, zCenter, R, r, loopHeight(k));
+  const bury = 0.4 / k;
+  const cx = x0 - c;
+  const cw = c + bury;
+  const xEdge = cx + cw;
+  // The neck is capped against the plate it leaves, so the tab never swallows
+  // the whole end of a small object. At 60mm the plate is 8.9mm deep and a
+  // flat 8mm neck left 0.4mm of shoulder on each side, which reads as the
+  // plate having been cut off rather than the tab having grown out of it.
+  const half = Math.min(LOOP_NECK_MM / k, plateD * 0.72) / 2;
+
+  loopAt(mb, cx, zCenter, R, r, BASE_H);
+
+  // Where the boss crosses the buried edge, and whether a tangent exists at
+  // all. Both are guaranteed by the constants above; the guard is here so a
+  // future change to them fails visibly instead of emitting a folded face.
+  if (R <= cw || half <= Math.sqrt(R * R - cw * cw)) return;
+  const q = Math.sqrt(R * R - cw * cw);
+
+  for (const s of [1, -1]) {
+    const pz = zCenter + s * half;
+    const dlen = Math.hypot(cw, s * half);
+    if (dlen <= R) continue;
+    const ux = cw / dlen;
+    const uz = (s * half) / dlen;
+    const a = (R * R) / dlen;
+    const h = (R * Math.sqrt(dlen * dlen - R * R)) / dlen;
+    const bx = cx + ux * a;
+    const bz = zCenter + uz * a;
+    // Two tangent points; the one further from the wall is the outer one. The
+    // other lies back under the plate and would fold the tab through itself.
+    const t1: [number, number] = [bx - uz * h, bz + ux * h];
+    const t2: [number, number] = [bx + uz * h, bz - ux * h];
+    const t = t1[0] < t2[0] ? t1 : t2;
+
+    const angQ = Math.atan2(s * q, cw);
+    const angT = Math.atan2(t[1] - zCenter, t[0] - cx);
+    let sweep = angT - angQ;
+    while (sweep > Math.PI) sweep -= Math.PI * 2;
+    while (sweep < -Math.PI) sweep += Math.PI * 2;
+
+    const arc: [number, number][] = [];
+    const steps = 8;
+    for (let i = 0; i <= steps; i++) {
+      const ang = angQ + (sweep * i) / steps;
+      arc.push([cx + Math.cos(ang) * R, zCenter + Math.sin(ang) * R]);
+    }
+    prism(mb, [[xEdge, pz], ...arc], 0, BASE_H);
+  }
 }
 
 /**
@@ -293,6 +397,123 @@ const LANG_H = 0.8;
 const LANG_DEPTH = 2.2;
 const LANG_INSET = 0.6;
 const LANG_GAP = 0.8;
+
+/**
+ * Short codes for the legend, because the band itself cannot carry a label.
+ *
+ * Measured: at the default 180mm the band is 1.81mm deep and a seven-row glyph
+ * needs 3.29mm, and text squeezed to fit the band would print at a 0.258mm
+ * pixel, well under the 0.42mm line a 0.4mm nozzle lays down. The two smallest
+ * segments are also narrower than two letters. So the key goes on a wall, and
+ * the colours stay the thing that distinguishes the segments.
+ *
+ * Logos were the other option and are deliberately not here. A recognisable
+ * mark needs roughly 16 by 16 cells, which is 7.5mm square at the proven
+ * pixel, and the plinth wall is 4.11mm tall. Beyond that, the marks of Python,
+ * Rust, Go, Java and Docker all carry usage policies, and this generator is
+ * MIT, so it would be stamping third-party marks onto objects other people are
+ * free to sell.
+ */
+const LANG_ABBR: Record<string, string> = {
+  "TypeScript": "TS",
+  "JavaScript": "JS",
+  "Python": "PY",
+  "Java": "JAVA",
+  "C": "C",
+  "C++": "CPP",
+  "C#": "CS",
+  "Go": "GO",
+  "Rust": "RS",
+  "Ruby": "RB",
+  "PHP": "PHP",
+  "Swift": "SWIFT",
+  "Kotlin": "KT",
+  "Scala": "SCALA",
+  "Objective-C": "OBJC",
+  "Shell": "SH",
+  "PowerShell": "PS",
+  "HTML": "HTML",
+  "CSS": "CSS",
+  "SCSS": "SCSS",
+  "Sass": "SASS",
+  "Less": "LESS",
+  "Vue": "VUE",
+  "Svelte": "SVELTE",
+  "Astro": "ASTRO",
+  "Dart": "DART",
+  "Elixir": "EX",
+  "Erlang": "ERL",
+  "Haskell": "HS",
+  "Clojure": "CLJ",
+  "Lua": "LUA",
+  "Perl": "PL",
+  "Julia": "JL",
+  "Nim": "NIM",
+  "Zig": "ZIG",
+  "Nix": "NIX",
+  "Solidity": "SOL",
+  "Assembly": "ASM",
+  "Dockerfile": "DOCKER",
+  "Makefile": "MAKE",
+  "CMake": "CMAKE",
+  "Jupyter Notebook": "IPYNB",
+  "Vim Script": "VIM",
+  "Emacs Lisp": "ELISP",
+  "TeX": "TEX",
+  "Markdown": "MD",
+  "SQL": "SQL",
+  "YAML": "YAML",
+  "Batchfile": "BAT",
+  "MATLAB": "MATLAB",
+  "R": "R",
+  "F#": "FS",
+  "OCaml": "OCAML",
+  "Groovy": "GROOVY",
+  "CoffeeScript": "COFFEE",
+  "Handlebars": "HBS",
+  "Blade": "BLADE",
+  "Twig": "TWIG",
+  "Pug": "PUG",
+  "Crystal": "CR",
+};
+
+/**
+ * The code a language is engraved under. Unknown languages fall back to the
+ * first four characters the bitmap font actually has a glyph for, which keeps
+ * a new GitHub language readable rather than blank.
+ */
+export function langAbbr(name: string): string {
+  const known = LANG_ABBR[name];
+  if (known) return known;
+  const stripped = name.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return stripped.slice(0, 4) || "ETC";
+}
+
+/**
+ * "TS 62  JS 19  CSS 9", the top `count` languages with their whole-number
+ * share. Three is the shipping default: it measures 53.1mm at 180mm, which
+ * fits beside the peak-day text on the front wall and beside the starsign on
+ * the back one, so the legend needs no collision rules against either.
+ */
+export function langLegend(langs: LangShare[], count = 3): string {
+  return keptLangs(langs)
+    .slice(0, count)
+    .map((l) => `${langAbbr(l.name)} ${Math.round(l.share * 100)}`)
+    .join("  ");
+}
+
+/**
+ * The longest legend that fits `roomMm`, shortening rather than overflowing.
+ * A 39-character handle leaves less front wall than a short one, and running
+ * the legend into the year would be worse than naming two languages.
+ */
+function fitLegend(langs: LangShare[], roomMm: number, px: number): string {
+  for (let count = 3; count >= 1; count--) {
+    const text = langLegend(langs, count);
+    if (text && measureText(text) * px <= roomMm) return text;
+  }
+  return "";
+}
 
 /** Defensive re-normalisation; the data layer already keeps top six at 4%+. */
 function keptLangs(langs: LangShare[] | null | undefined): LangShare[] {
@@ -403,22 +624,43 @@ function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): Me
 
   // Opt-in extras live on the plate walls, so they need the plate. All are
   // independent of the signature label.
-  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW);
+  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW, plateD);
   if (plate && o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: z0 });
   if (plate && o.langs?.length) {
     langBarTop(mb, o.langs, x0 + PLATE_PAD, x0 + plateW - PLATE_PAD, z0 + plateD);
   }
+  // Everything on this wall shares one run of millimetres: the handle from the
+  // left, the year from the right, and the peak day and the languages key in
+  // between. `peakRight` carries the peak's real right edge to the legend
+  // below, so the two are placed against each other rather than each assuming
+  // the other is not there.
+  const wallPx = ENGRAVE_TEXT_MM / GLYPH_H;
+  const WALL_GAP = 4;
+  const handleRight =
+    -plateW / 2 + PLATE_PAD + (label ? measureText(signature(data)) * wallPx : 0);
+  const yearLeft =
+    plateW / 2 - PLATE_PAD - (label ? measureText(String(data.year)) * wallPx : 0);
+  let peakRight = handleRight;
+
   if (plate && o.peak) {
     const t = peakText(data.days);
     if (t) {
-      const peakPx = (ENGRAVE_TEXT_MM / GLYPH_H) * 0.8;
-      engraveWall(mb, t, {
-        x: -(measureText(t) * peakPx) / 2,
-        y: (BASE_H - GLYPH_H * peakPx) / 2,
-        px: peakPx,
-        z: z0 + plateD,
-        align: "left",
-      });
+      const peakPx = wallPx * 0.8;
+      const w = measureText(t) * peakPx;
+      // Centred when there is room, pushed right by a long handle rather than
+      // drawn straight through it. A 39 character login, which GitHub allows,
+      // used to overprint this text.
+      const x = Math.max(-w / 2, handleRight + WALL_GAP);
+      if (x + w <= yearLeft - WALL_GAP) {
+        engraveWall(mb, t, {
+          x,
+          y: (BASE_H - GLYPH_H * peakPx) / 2,
+          px: peakPx,
+          z: z0 + plateD,
+          align: "left",
+        });
+        peakRight = x + w;
+      }
     }
   }
 
@@ -439,6 +681,17 @@ function buildSkyline(data: ContributionYear, o: BuildOptions, plate = true): Me
     z: z0 + plateD,
     align: "right",
   });
+  // The languages key. The band is colour only, and colour says nothing once
+  // the object is printed in one filament or sitting on someone else's desk.
+  // Right-aligned against the year rather than centred, because the centre of
+  // this wall already belongs to the peak-day text when that extra is on.
+  if (plate && o.langs?.length) {
+    const right = yearLeft - WALL_GAP;
+    const legend = fitLegend(o.langs, right - (peakRight + WALL_GAP), px);
+    if (legend) {
+      engraveWall(mb, legend, { x: right, y: textY, px, z: z0 + plateD, align: "right" });
+    }
+  }
   // M4 / marktanalyse 5.4: engrave the account's real milestones on the base
   // plate so the object carries its own origin story. Only when the data has
   // them (the GraphQL path; the HTML fallback does not). They live on the
@@ -520,7 +773,10 @@ function buildRing(data: ContributionYear, o: BuildOptions, plate = true): MeshB
   if (plate && o.loop) {
     const k = o.sizeMm / (2 * plateR);
     const dist = plateR + LOOP_IN_MM / k + 0.2 / k;
-    loopAt(mb, -dist * Math.SQRT1_2, -dist * Math.SQRT1_2, LOOP_OUT_MM / k, LOOP_IN_MM / k, loopHeight(k));
+    // Flush with the plinth, like the rectangular tab. The plinth's edge is
+    // curved, so the joint is a circle-circle lens rather than a chord against
+    // a flat wall: ~5.9mm of fused material at the shipping constants.
+    loopAt(mb, -dist * Math.SQRT1_2, -dist * Math.SQRT1_2, LOOP_OUT_MM / k, LOOP_IN_MM / k, BASE_H);
   }
   if (plate && o.sigil) {
     engraveSigilTop(mb, o.sigil, { cx: 0, cz: -15, y: BASE_H, w: 13.5, h: 9 });
@@ -624,7 +880,7 @@ function buildWave(data: ContributionYear, o: BuildOptions): MeshBuilder {
   }
   mb.quad([px(0), 0, pz(0)], [px(cols), 0, pz(0)], [px(cols), 0, pz(7)], [px(0), 0, pz(7)]);
 
-  if (o.loop) loopAtLeftWall(mb, px(0), 0, o.sizeMm / gridW);
+  if (o.loop) loopAtLeftWall(mb, px(0), 0, o.sizeMm / gridW, gridD);
   if (o.sigil) engraveSigilBack(mb, o.sigil, { cx: 0, z: pz(0) });
   if (o.peak) {
     const t = peakText(data.days);
@@ -676,7 +932,7 @@ function buildSpine(data: ContributionYear, o: BuildOptions, plate = true): Mesh
   const z0 = -plateD / 2;
 
   if (plate) mb.box(x0, 0, z0, x0 + plateW, BASE_H, z0 + plateD);
-  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW);
+  if (plate && o.loop) loopAtLeftWall(mb, x0, 0, o.sizeMm / plateW, plateD);
   if (plate && o.langs?.length) {
     langBarTop(mb, o.langs, x0 + PLATE_PAD, x0 + plateW - PLATE_PAD, z0 + plateD);
   }
@@ -707,14 +963,31 @@ function buildSpine(data: ContributionYear, o: BuildOptions, plate = true): Mesh
   if (!label) return mb;
   const px = ENGRAVE_TEXT_MM / GLYPH_H;
   const text = `${signature(data)} ${data.year}`;
+  const textW = measureText(text) * px;
   engraveWall(mb, text, {
-    x: x0 + plateW / 2 - (measureText(text) * px) / 2,
+    x: x0 + plateW / 2 - textW / 2,
     y: (BASE_H - ENGRAVE_TEXT_MM) / 2,
     px,
     z: z0,
     align: "left",
     face: "back",
   });
+  // The spine's front wall belongs to the twelve month names, so the languages
+  // key goes on the back one beside the signature, in the corner the skyline
+  // gives its milestones.
+  if (plate && o.langs?.length) {
+    const legend = fitLegend(o.langs, plateW / 2 - PLATE_PAD - textW / 2 - 4, px);
+    if (legend) {
+      engraveWall(mb, legend, {
+        x: x0 + plateW - PLATE_PAD,
+        y: (BASE_H - ENGRAVE_TEXT_MM) / 2,
+        px,
+        z: z0,
+        align: "right",
+        face: "back",
+      });
+    }
+  }
   return mb;
 }
 
@@ -895,7 +1168,7 @@ export function buildMultiYear(
   // the sigil in the centre of the back wall (milestones keep the corners),
   // the peak day in the centre of the front wall (login and span keep those
   // corners). The peak reads across every rendered year.
-  if (options.loop) loopAtLeftWall(mb, px0, (pz0 + pz1) / 2, options.sizeMm / (px1 - px0));
+  if (options.loop) loopAtLeftWall(mb, px0, (pz0 + pz1) / 2, options.sizeMm / (px1 - px0), pz1 - pz0);
   if (options.sigil) {
     engraveSigilBack(mb, options.sigil, { cx: (px0 + px1) / 2, z: pz0 });
   }
@@ -1018,7 +1291,7 @@ export function buildDuel(
   mb.box(px0, 0, pz0, px1, BASE_H, pz1);
 
   const k = options.sizeMm / (px1 - px0);
-  if (options.loop) loopAtLeftWall(mb, px0, 0, k);
+  if (options.loop) loopAtLeftWall(mb, px0, 0, k, pz1 - pz0);
   // The two grids leave a clear spine of shared plate between them; the
   // languages bar runs along it, readable from A's side.
   if (options.langs?.length) {

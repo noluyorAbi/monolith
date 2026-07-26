@@ -6,6 +6,7 @@ import {
   LOGIN_RE,
   NotFoundError,
   availableYears,
+  parseYear,
   availableYearsFor,
   normaliseLogin,
   pack,
@@ -14,6 +15,30 @@ import {
 import { biggestSizeFor, buildMonolith, fitsBed, sizeById, sizesForPrinter } from "@/lib/build";
 import { printerById } from "@/lib/print";
 import type { ContributionYear } from "@/lib/types";
+
+/**
+ * The year parameter is optional on every documented route, so its absence is
+ * a real code path rather than an edge case. It was broken: `Number(null)` and
+ * `Number("")` are both 0, 0 is an integer, so the non-year guard never fired
+ * and the clamp handed back 2008. Every caller that omitted `year` built an
+ * empty 2008 object. The browser always sends one explicitly, which is why
+ * only the CLI ever saw it.
+ */
+test("an absent or empty year means the current year, not 2008", () => {
+  const current = availableYears(1)[0];
+  assert.equal(parseYear(null), current);
+  assert.equal(parseYear(""), current);
+  assert.equal(parseYear("   "), current);
+});
+
+test("a year is honoured, clamped at both ends, and a non-year falls back", () => {
+  const current = availableYears(1)[0];
+  assert.equal(parseYear("2025"), 2025);
+  assert.equal(parseYear("1999"), 2008, "below the range clamps to the first year GitHub had");
+  assert.equal(parseYear("3000"), current, "above the range clamps to now");
+  assert.equal(parseYear("abc"), current);
+  assert.equal(parseYear("2025.5"), current, "a non-integer is not a year");
+});
 
 /**
  * The handle is the only user input the whole app takes, and it reaches an

@@ -13,3 +13,12 @@ tsconfig.tsbuildinfo
 
 # local agent config
 .claude/
+
+# launch skill run state
+.launch
+
+# bundled CLI output
+dist
+
+# npm pack output
+*.tgz

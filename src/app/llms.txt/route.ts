@@ -19,7 +19,7 @@ export function GET() {
 
 > ${PROJECT.tagline} ${PROJECT.name} turns a public GitHub contribution year into a 3D-printable object and hands over the files for free. Type a handle, watch the object build in the browser, and download a print kit.
 
-${PROJECT.name} is source available under ${PROJECT.licence} at ${PROJECT.url}. That licence permits any noncommercial use; commercial use needs permission from the author. Generated models are licensed ${PROJECT.modelLicence}. No account, no sign-up, no upload: it reads the public contribution calendar GitHub already publishes.
+${PROJECT.name} is open source under the ${PROJECT.licence} licence at ${PROJECT.url}. Generated models are licensed ${PROJECT.modelLicence}. No account, no sign-up, no upload: it reads the public contribution calendar GitHub already publishes.
 
 ## What it produces
 
@@ -70,7 +70,7 @@ Nothing overhangs; the whole object grows straight up off a flat plinth, so supp
 
 ## Licence
 
-The code is licensed ${PROJECT.licence}: use, change and share it for any noncommercial purpose. Commercial use needs a licence from the author. The objects it generates are licensed ${PROJECT.modelLicence} and belong to the person whose year they describe.
+The code is licensed ${PROJECT.licence}: use, change, share and sell it. The objects it generates are licensed ${PROJECT.modelLicence} and belong to the person whose year they describe.
 
 ## When GitHub cannot be reached
 

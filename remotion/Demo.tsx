@@ -373,7 +373,7 @@ const Kit: React.FC = () => {
 const Close: React.FC = () => {
   const { width } = useVideoConfig();
   return (
-    <Frame step="09 · YOURS" caption="source available under PolyForm Noncommercial · models CC BY 4.0">
+    <Frame step="09 · YOURS" caption="MIT licensed · models CC BY 4.0">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
         <Monolith width={width - 320} height={300} />
       </div>
