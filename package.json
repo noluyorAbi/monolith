@@ -29,7 +29,7 @@
     "three": "0.185.1"
   },
   "devDependencies": {
-    "@remotion/cli": "^4.0.496",
+    "@remotion/cli": "^4.0.499",
     "@remotion/renderer": "^4.0.496",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "^26.1.1",
@@ -37,11 +37,11 @@
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.185.1",
     "esbuild": "^0.28.1",
-    "eslint": "^9.39.5",
+    "eslint": "^10.8.0",
     "eslint-config-next": "^16.2.11",
     "remotion": "^4.0.496",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
   "license": "MIT",
