@@ -42,7 +42,7 @@
     "remotion": "^4.0.496",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.3"
   },
   "license": "MIT",
   "description": "Turn any GitHub contribution year into a 3D printable object. Free 3MF, STL and a slicer preset, no account and no upload.",
